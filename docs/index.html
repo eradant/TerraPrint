@@ -245,6 +245,24 @@ input[type="range"] {
 #preview-canvas-wrap { width: 100%; height: calc(100% - 36px); }
 canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 
+#preview-panel.fullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+  z-index: 2000;
+}
+#preview-panel .btn-back-to-map {
+  display: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+#preview-panel.fullscreen .btn-back-to-map { display: block; }
+#preview-panel.fullscreen .btn-fullscreen { display: none; }
+
 /* ─── Progress Bar ─── */
 .progress-bar-wrap {
   height: 6px;
@@ -533,7 +551,11 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
     <div id="preview-panel">
       <div class="preview-header">
         3D Preview
-        <button onclick="Preview.close()">✕</button>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button class="btn-back-to-map" onclick="Preview.exitFullscreen()">← Map</button>
+          <button class="btn-fullscreen" onclick="Preview.toggleFullscreen()" title="Fullscreen">⛶</button>
+          <button onclick="Preview.close()">✕</button>
+        </div>
       </div>
       <div id="preview-canvas-wrap">
         <canvas id="preview-canvas"></canvas>
@@ -1507,6 +1529,7 @@ const Preview = {
   isDragging: false,
   prevMouse: { x: 0, y: 0 },
   spherical: { theta: Math.PI / 4, phi: Math.PI / 3, radius: 250 },
+  isFullscreen: false,
 
   init() {
     const canvas = document.getElementById('preview-canvas');
@@ -1713,7 +1736,20 @@ const Preview = {
     this.renderer.render(this.scene, this.camera);
   },
 
+  toggleFullscreen() {
+    this.isFullscreen = true;
+    document.getElementById('preview-panel').classList.add('fullscreen');
+    requestAnimationFrame(() => this.resize());
+  },
+
+  exitFullscreen() {
+    this.isFullscreen = false;
+    document.getElementById('preview-panel').classList.remove('fullscreen');
+    requestAnimationFrame(() => this.resize());
+  },
+
   close() {
+    if (this.isFullscreen) this.exitFullscreen();
     document.getElementById('preview-panel').style.display = 'none';
     if (this.frameId) {
       cancelAnimationFrame(this.frameId);
