@@ -1738,14 +1738,18 @@ const Preview = {
 
   toggleFullscreen() {
     this.isFullscreen = true;
-    document.getElementById('preview-panel').classList.add('fullscreen');
-    requestAnimationFrame(() => this.resize());
+    const panel = document.getElementById('preview-panel');
+    panel.classList.add('fullscreen');
+    void panel.offsetHeight; // force reflow so wrap reports new dimensions
+    this.resize();
   },
 
   exitFullscreen() {
     this.isFullscreen = false;
-    document.getElementById('preview-panel').classList.remove('fullscreen');
-    requestAnimationFrame(() => this.resize());
+    const panel = document.getElementById('preview-panel');
+    panel.classList.remove('fullscreen');
+    void panel.offsetHeight; // force reflow
+    this.resize();
   },
 
   close() {
