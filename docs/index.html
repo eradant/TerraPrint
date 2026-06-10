@@ -443,8 +443,8 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
         <div class="input-group">
           <label>Resolution (samples per side)</label>
           <div class="range-row">
-            <input type="range" id="mesh-res" min="64" max="512" step="64" value="256" oninput="document.getElementById('res-val').textContent=this.value">
-            <span class="range-val" id="res-val">256</span>
+            <input type="range" id="mesh-res" min="128" max="1024" step="64" value="512" oninput="document.getElementById('res-val').textContent=this.value">
+            <span class="range-val" id="res-val">512</span>
           </div>
         </div>
         <div class="input-group" style="display:flex;align-items:center;gap:8px;">
@@ -550,7 +550,18 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 // ═══════════════════════════════════════════════
 
 const TERRAIN_TILE_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
-const TERRAIN_ZOOM = 12; // zoom level for elevation tiles
+
+// Adaptive zoom: smaller selections get higher zoom for more detail
+function terrainZoomForBounds(bounds) {
+  const latSpan = bounds.getNorth() - bounds.getSouth();
+  const lngSpan = bounds.getEast() - bounds.getWest();
+  const maxSpan = Math.max(latSpan, lngSpan);
+  if (maxSpan < 0.15) return 14;     // very small area (~15km)
+  if (maxSpan < 0.4)  return 13;     // small area (~40km)
+  if (maxSpan < 1.0)  return 12;     // medium area (~100km)
+  if (maxSpan < 3.0)  return 11;     // large area (~300km)
+  return 10;                          // very large area
+}
 
 // Simplified Oregon boundary [lng, lat] pairs (GeoJSON winding)
 const OREGON_BOUNDARY = [
@@ -848,7 +859,8 @@ const Elevation = {
 
   // Fetch elevation data for bounds
   async fetchElevation(bounds, resolution) {
-    const zoom = TERRAIN_ZOOM;
+    const zoom = terrainZoomForBounds(bounds);
+    console.log(`Fetching elevation at zoom ${zoom} for ${resolution}×${resolution} grid`);
     const sw = this.latLonToTile(bounds.getSouth(), bounds.getWest(), zoom);
     const ne = this.latLonToTile(bounds.getNorth(), bounds.getEast(), zoom);
 
