@@ -451,6 +451,17 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
           <input type="checkbox" id="water-detect" checked style="accent-color:var(--accent);width:16px;height:16px;">
           <label for="water-detect" style="margin:0;cursor:pointer;">Detect water (lakes &amp; rivers via OSM)</label>
         </div>
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+          <input type="checkbox" id="step-mode" style="accent-color:var(--accent);width:16px;height:16px;" onchange="document.getElementById('step-interval-group').style.display=this.checked?'block':'none'">
+          <label for="step-mode" style="margin:0;cursor:pointer;">Contour steps (terraced layers)</label>
+        </div>
+        <div class="input-group" id="step-interval-group" style="margin-top:6px;display:none;">
+          <label>Step interval (meters)</label>
+          <div class="range-row">
+            <input type="range" id="step-interval" min="25" max="500" step="25" value="100" oninput="document.getElementById('step-val').textContent=this.value+'m'">
+            <span class="range-val" id="step-val">100m</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -952,35 +963,16 @@ const Elevation = {
 
 const WaterDetection = {
   /**
-   * Combined water detection: Overpass API + tile color sampling.
+   * Detect water bodies (lakes, ponds, reservoirs) via OpenStreetMap Overpass API.
    * Returns Uint8Array mask (1 = water) matching resolution × resolution grid.
    */
   async detect(bounds, resolution) {
-    showLoading('Detecting water features…');
-
-    const results = await Promise.allSettled([
-      this.overpassDetect(bounds, resolution),
-      this.colorDetect(bounds, resolution),
-    ]);
-
-    const overpassMask = results[0].status === 'fulfilled' ? results[0].value : null;
-    const colorMask = results[1].status === 'fulfilled' ? results[1].value : null;
-
-    if (overpassMask) console.log('Overpass water mask OK');
-    else console.warn('Overpass water detection failed:', results[0].reason);
-    if (colorMask) console.log('Color water mask OK');
-    else console.warn('Color water detection failed:', results[1].reason);
-
-    // Union both masks
-    const combined = new Uint8Array(resolution * resolution);
-    for (let i = 0; i < combined.length; i++) {
-      combined[i] = ((overpassMask && overpassMask[i]) || (colorMask && colorMask[i])) ? 1 : 0;
-    }
-    return combined;
+    showLoading('Detecting water bodies…');
+    return this.overpassDetect(bounds, resolution);
   },
 
   /**
-   * Query OpenStreetMap Overpass API for water polygons and waterways,
+   * Query OSM Overpass API for natural=water polygons (lakes, reservoirs, ponds),
    * rasterize them onto a canvas, and return a binary mask.
    */
   async overpassDetect(bounds, resolution) {
@@ -990,7 +982,6 @@ const WaterDetection = {
     const query = `[out:json][timeout:30];(
       way["natural"="water"](${s},${w},${n},${e});
       relation["natural"="water"](${s},${w},${n},${e});
-      way["waterway"](${s},${w},${n},${e});
     );out geom;`;
 
     const resp = await fetch('https://overpass-api.de/api/interpreter', {
@@ -1007,54 +998,39 @@ const WaterDetection = {
     canvas.height = resolution;
     const ctx = canvas.getContext('2d');
 
-    const metersPerPixel = (n - s) * 111320 / resolution;
-
     function lngToX(lng) { return (lng - w) / (e - w) * resolution; }
     function latToY(lat) { return (n - lat) / (n - s) * resolution; }
 
-    function drawGeometry(geom, fill, lineWidth) {
-      if (!geom || geom.length < 2) return;
+    function drawPoly(geom) {
+      if (!geom || geom.length < 3) return;
       ctx.beginPath();
       geom.forEach((p, i) => {
         const px = lngToX(p.lon), py = latToY(p.lat);
         if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
       });
-      if (fill) { ctx.closePath(); ctx.fill(); }
-      else { ctx.lineWidth = lineWidth; ctx.stroke(); }
+      ctx.closePath();
+      ctx.fill();
     }
 
     ctx.fillStyle = 'white';
-    ctx.strokeStyle = 'white';
-
     const elements = data.elements || [];
-    showLoading(`Processing ${elements.length} water features…`);
+    showLoading(`Rasterizing ${elements.length} water bodies…`);
 
     for (const el of elements) {
-      if (el.type === 'way') {
-        if (el.tags?.natural === 'water') {
-          // Lake / pond — filled polygon
-          drawGeometry(el.geometry, true);
-        } else if (el.tags?.waterway) {
-          // River / stream / canal — stroked line
-          const widthM = el.tags.waterway === 'river' ? 200 :
-                         el.tags.waterway === 'canal' ? 80 :
-                         el.tags.waterway === 'stream' ? 30 : 50;
-          const widthPx = Math.max(1, Math.round(widthM / metersPerPixel));
-          drawGeometry(el.geometry, false, widthPx);
-        }
+      if (el.type === 'way' && el.tags?.natural === 'water') {
+        drawPoly(el.geometry);
       }
 
       if (el.type === 'relation' && el.tags?.natural === 'water') {
-        // Multipolygon — draw outers filled, then cut inners
         const outers = (el.members || []).filter(m => m.role === 'outer' && m.geometry);
         const inners = (el.members || []).filter(m => m.role === 'inner' && m.geometry);
 
-        for (const m of outers) drawGeometry(m.geometry, true);
+        for (const m of outers) drawPoly(m.geometry);
 
         if (inners.length) {
           ctx.save();
           ctx.globalCompositeOperation = 'destination-out';
-          for (const m of inners) drawGeometry(m.geometry, true);
+          for (const m of inners) drawPoly(m.geometry);
           ctx.restore();
         }
       }
@@ -1065,77 +1041,6 @@ const WaterDetection = {
     const mask = new Uint8Array(resolution * resolution);
     for (let i = 0; i < mask.length; i++) {
       mask[i] = imageData.data[i * 4] > 128 ? 1 : 0;
-    }
-    return mask;
-  },
-
-  /**
-   * Fetch CartoDB Voyager (no labels) map tiles, sample pixel colors,
-   * and flag blue-ish pixels as water.
-   */
-  async colorDetect(bounds, resolution) {
-    const zoom = TERRAIN_ZOOM;
-    const sw = Elevation.latLonToTile(bounds.getSouth(), bounds.getWest(), zoom);
-    const ne = Elevation.latLonToTile(bounds.getNorth(), bounds.getEast(), zoom);
-
-    const minTX = Math.min(sw.x, ne.x), maxTX = Math.max(sw.x, ne.x);
-    const minTY = Math.min(sw.y, ne.y), maxTY = Math.max(sw.y, ne.y);
-
-    const tileSize = 256;
-    const canvas = document.createElement('canvas');
-    canvas.width = (maxTX - minTX + 1) * tileSize;
-    canvas.height = (maxTY - minTY + 1) * tileSize;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
-    // Fetch Voyager (nolabels) tiles — water is clearly blue
-    const VOYAGER_URL = 'https://basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png';
-
-    const loadTile = (tx, ty) => new Promise(resolve => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        ctx.drawImage(img, (tx - minTX) * tileSize, (ty - minTY) * tileSize);
-        resolve();
-      };
-      img.onerror = () => resolve();
-      img.src = VOYAGER_URL.replace('{z}', zoom).replace('{x}', tx).replace('{y}', ty);
-    });
-
-    const promises = [];
-    for (let ty = minTY; ty <= maxTY; ty++)
-      for (let tx = minTX; tx <= maxTX; tx++)
-        promises.push(loadTile(tx, ty));
-    await Promise.all(promises);
-
-    // Compute pixel region for our bounds (same math as Elevation module)
-    const topLeft = Elevation.tileToBounds(minTX, minTY, zoom);
-    const botRight = Elevation.tileToBounds(maxTX, maxTY, zoom);
-    const fullN = topLeft.north, fullS = botRight.south;
-    const fullW = topLeft.west,  fullE = botRight.east;
-
-    const pxL = Math.round((bounds.getWest() - fullW) / (fullE - fullW) * canvas.width);
-    const pxR = Math.round((bounds.getEast() - fullW) / (fullE - fullW) * canvas.width);
-    const pxT = Math.round((fullN - bounds.getNorth()) / (fullN - fullS) * canvas.height);
-    const pxB = Math.round((fullN - bounds.getSouth()) / (fullN - fullS) * canvas.height);
-
-    const cropW = Math.max(1, pxR - pxL);
-    const cropH = Math.max(1, pxB - pxT);
-    const imageData = ctx.getImageData(pxL, pxT, cropW, cropH);
-
-    // Resample and classify
-    const mask = new Uint8Array(resolution * resolution);
-    for (let y = 0; y < resolution; y++) {
-      for (let x = 0; x < resolution; x++) {
-        const sx = Math.min(Math.floor(x / resolution * cropW), cropW - 1);
-        const sy = Math.min(Math.floor(y / resolution * cropH), cropH - 1);
-        const idx = (sy * cropW + sx) * 4;
-        const r = imageData.data[idx];
-        const g = imageData.data[idx + 1];
-        const b = imageData.data[idx + 2];
-        // CartoDB Voyager water is ~#aad3df — distinctly blue-shifted
-        // Detect: blue dominates red, both blue & green are bright
-        mask[y * resolution + x] = (b > r + 15 && b > 140 && g > 140 && r < 210) ? 1 : 0;
-      }
     }
     return mask;
   },
@@ -1161,13 +1066,25 @@ const MeshGen = {
 
     const w = elevData.width;
     const h = elevData.height;
-    const data = elevData.data;
+    const origData = elevData.data; // original elevations for color classification
 
-    // Find elevation range
+    // Step mode: quantize elevations for terraced geometry
+    const stepMode = document.getElementById('step-mode').checked;
+    const stepInterval = parseFloat(document.getElementById('step-interval').value) || 100;
+    const data = new Float32Array(origData.length);
+    if (stepMode) {
+      for (let i = 0; i < origData.length; i++) {
+        data[i] = Math.floor(origData[i] / stepInterval) * stepInterval;
+      }
+    } else {
+      data.set(origData);
+    }
+
+    // Find elevation range (from ORIGINAL data for consistent coloring)
     let minElev = Infinity, maxElev = -Infinity;
-    for (let i = 0; i < data.length; i++) {
-      if (data[i] < minElev) minElev = data[i];
-      if (data[i] > maxElev) maxElev = data[i];
+    for (let i = 0; i < origData.length; i++) {
+      if (origData[i] < minElev) minElev = origData[i];
+      if (origData[i] > maxElev) maxElev = origData[i];
     }
 
     // Scale factor: map geographic extent to printSize mm
@@ -1227,11 +1144,11 @@ const MeshGen = {
         const br = (row + 1) * w + col + 1;
 
         triangles.push(tl, bl, tr);
-        const avgElev1 = (data[tl] + data[bl] + data[tr]) / 3;
+        const avgElev1 = (origData[tl] + origData[bl] + origData[tr]) / 3;
         triElevations.push(avgElev1);
 
         triangles.push(tr, bl, br);
-        const avgElev2 = (data[tr] + data[bl] + data[br]) / 3;
+        const avgElev2 = (origData[tr] + origData[bl] + origData[br]) / 3;
         triElevations.push(avgElev2);
       }
     }
@@ -1640,6 +1557,34 @@ const Preview = {
       [0.83, 0.83, 0.83],  // mountains
     ];
 
+    // Gradient color ramp: normalized elevation (0–1) → RGB
+    const gradientStops = [
+      { t: 0.00, r: 0.15, g: 0.50, b: 0.20 },  // dark green
+      { t: 0.15, r: 0.30, g: 0.62, b: 0.22 },  // green
+      { t: 0.30, r: 0.55, g: 0.72, b: 0.20 },  // yellow-green
+      { t: 0.45, r: 0.78, g: 0.72, b: 0.18 },  // yellow
+      { t: 0.60, r: 0.82, g: 0.55, b: 0.15 },  // orange
+      { t: 0.75, r: 0.72, g: 0.42, b: 0.28 },  // brown
+      { t: 0.88, r: 0.75, g: 0.70, b: 0.65 },  // tan/gray
+      { t: 1.00, r: 0.97, g: 0.97, b: 0.97 },  // near-white
+    ];
+    function gradientColor(t) {
+      t = Math.max(0, Math.min(1, t));
+      let i = 0;
+      while (i < gradientStops.length - 2 && gradientStops[i + 1].t < t) i++;
+      const s0 = gradientStops[i], s1 = gradientStops[i + 1];
+      const f = s1.t > s0.t ? (t - s0.t) / (s1.t - s0.t) : 0;
+      return [
+        s0.r + f * (s1.r - s0.r),
+        s0.g + f * (s1.g - s0.g),
+        s0.b + f * (s1.b - s0.b),
+      ];
+    }
+
+    const elevRange = meshData.maxElev - meshData.minElev || 1;
+    const waterColor = [0.18, 0.42, 0.75];
+    const baseColor = [0.25, 0.25, 0.25];
+
     for (let i = 0; i < numTris; i++) {
       const i0 = t[i * 3], i1 = t[i * 3 + 1], i2 = t[i * 3 + 2];
       posArray[i * 9] = v[i0 * 3];
@@ -1652,7 +1597,17 @@ const Preview = {
       posArray[i * 9 + 7] = v[i2 * 3 + 1];
       posArray[i * 9 + 8] = v[i2 * 3 + 2];
 
-      const c = palette[meshData.triColors[i]];
+      const elev = meshData.triElevations[i];
+      let c;
+      if (elev < 0) {
+        c = baseColor;                              // base / walls
+      } else if (meshData.triColors[i] === 0) {
+        c = waterColor;                              // water (mask or threshold)
+      } else {
+        const norm = (elev - meshData.minElev) / elevRange;
+        c = gradientColor(norm);                     // terrain gradient
+      }
+
       for (let j = 0; j < 3; j++) {
         colorArray[i * 9 + j * 3] = c[0];
         colorArray[i * 9 + j * 3 + 1] = c[1];
