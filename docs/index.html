@@ -1,0 +1,1992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TerraPrint — Oregon Terrain Model Generator</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-deep: #0d1117;
+  --bg-panel: #161b22;
+  --bg-surface: #21262d;
+  --bg-hover: #30363d;
+  --border: #30363d;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --text-muted: #6e7681;
+  --accent: #58a6ff;
+  --accent-hover: #79c0ff;
+  --topo-water: #2d6abf;
+  --topo-flat: #3d8c40;
+  --topo-hills: #c47f17;
+  --topo-mountain: #d4d4d4;
+  --status-none: rgba(255,255,255,0.05);
+  --status-exported: rgba(88,166,255,0.3);
+  --status-printed: rgba(61,140,64,0.4);
+  --danger: #f85149;
+  --success: #3fb950;
+  --radius: 8px;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── Header ─── */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  height: 48px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  z-index: 1000;
+}
+header .logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.5px;
+}
+header .logo svg { opacity: 0.85; }
+header .header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ─── Layout ─── */
+.app-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ─── Side Panel ─── */
+.panel {
+  width: 340px;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+.panel-section {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.panel-section h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+.panel-section.collapsible h3 {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.panel-section.collapsible h3::after {
+  content: '▾';
+  font-size: 10px;
+  transition: transform 0.2s;
+}
+.panel-section.collapsed h3::after { transform: rotate(-90deg); }
+.panel-section.collapsed .section-body { display: none; }
+
+/* ─── Form Controls ─── */
+label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+input[type="number"], input[type="text"], select {
+  width: 100%;
+  padding: 6px 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+input[type="number"]:focus, select:focus {
+  border-color: var(--accent);
+}
+.input-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.input-row > div { flex: 1; }
+.input-group { margin-bottom: 10px; }
+
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.range-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.range-row input[type="range"] { flex: 1; }
+.range-row .range-val {
+  min-width: 40px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Buttons ─── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--bg-hover); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn-block { width: 100%; }
+.btn-row { display: flex; gap: 8px; margin-top: 8px; }
+.btn-row .btn { flex: 1; }
+.btn-danger { border-color: var(--danger); color: var(--danger); }
+.btn-danger:hover { background: rgba(248,81,73,0.15); }
+.btn-success { border-color: var(--success); color: var(--success); }
+.btn-success:hover { background: rgba(63,185,80,0.15); }
+
+/* ─── Map ─── */
+#map-container {
+  flex: 1;
+  position: relative;
+}
+#map { height: 100%; width: 100%; }
+.leaflet-container { background: var(--bg-deep); }
+
+/* ─── 3D Preview ─── */
+#preview-panel {
+  display: none;
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  width: 400px;
+  height: 350px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  z-index: 800;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+#preview-panel .preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+#preview-panel .preview-header button {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px;
+}
+#preview-canvas-wrap { width: 100%; height: calc(100% - 36px); }
+canvas#preview-canvas { width: 100%; height: 100%; display: block; }
+
+/* ─── Progress Bar ─── */
+.progress-bar-wrap {
+  height: 6px;
+  background: var(--bg-surface);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: var(--success);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.progress-stats {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+/* ─── Legend ─── */
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(255,255,255,0.1);
+  flex-shrink: 0;
+}
+
+/* ─── Status Toast ─── */
+#toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 13px;
+  z-index: 9999;
+  opacity: 0;
+  transition: all 0.3s ease;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+}
+#toast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+
+/* ─── Loading overlay ─── */
+#loading-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: rgba(13,17,23,0.8);
+  z-index: 900;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  gap: 12px;
+}
+#loading-overlay.active { display: flex; }
+#loading-overlay .spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+#loading-text { font-size: 13px; color: var(--text-secondary); }
+
+/* ─── Grid cell overlay tooltip ─── */
+.grid-tooltip {
+  background: var(--bg-panel) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-primary) !important;
+  font-size: 12px !important;
+  border-radius: 6px !important;
+  padding: 6px 10px !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
+}
+.grid-tooltip::before { border-top-color: var(--border) !important; }
+
+/* Leaflet dark overrides */
+.leaflet-bar a {
+  background: var(--bg-panel) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border) !important;
+}
+.leaflet-bar a:hover { background: var(--bg-surface) !important; }
+.leaflet-draw-toolbar a { color: var(--text-primary) !important; }
+
+/* ─── Color threshold inputs ─── */
+.threshold-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.threshold-row .swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.threshold-row span {
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 60px;
+}
+.threshold-row input[type="number"] {
+  width: 80px;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+/* Hide panel on small viewports */
+@media (max-width: 768px) {
+  .panel { display: none; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M3 17l4-4 3 3 5-6 6 7"/>
+      <path d="M3 21h18"/>
+      <circle cx="18" cy="7" r="2"/>
+    </svg>
+    TerraPrint
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-sm" onclick="UI.importProgress()" title="Import progress">📂 Import</button>
+    <button class="btn btn-sm" onclick="UI.exportProgress()" title="Export progress">💾 Export</button>
+  </div>
+</header>
+
+<div class="app-body">
+  <!-- ─── Side Panel ─── -->
+  <div class="panel" id="side-panel">
+
+    <div class="panel-section">
+      <h3>Grid Configuration</h3>
+      <div class="section-body">
+        <div class="input-row">
+          <div>
+            <label>Columns</label>
+            <input type="number" id="grid-cols" value="8" min="2" max="30" onchange="Grid.rebuild()">
+          </div>
+          <div>
+            <label>Rows</label>
+            <input type="number" id="grid-rows" value="6" min="2" max="30" onchange="Grid.rebuild()">
+          </div>
+        </div>
+        <div class="input-group">
+          <label>Print Size (mm per tile)</label>
+          <input type="number" id="print-size" value="150" min="50" max="300" step="10">
+        </div>
+        <button class="btn btn-sm btn-block" onclick="Grid.fitToOregon()">Reset Grid to Oregon</button>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <h3>Model Settings</h3>
+      <div class="section-body">
+        <div class="input-group">
+          <label>Vertical Exaggeration</label>
+          <div class="range-row">
+            <input type="range" id="vert-exag" min="1" max="5" step="0.25" value="2" oninput="document.getElementById('vert-exag-val').textContent=this.value+'×'">
+            <span class="range-val" id="vert-exag-val">2×</span>
+          </div>
+        </div>
+        <div class="input-group">
+          <label>Base Thickness (mm)</label>
+          <div class="range-row">
+            <input type="range" id="base-height" min="1" max="15" step="0.5" value="4" oninput="document.getElementById('base-val').textContent=this.value+'mm'">
+            <span class="range-val" id="base-val">4mm</span>
+          </div>
+        </div>
+        <div class="input-group">
+          <label>Resolution (samples per side)</label>
+          <div class="range-row">
+            <input type="range" id="mesh-res" min="64" max="512" step="64" value="256" oninput="document.getElementById('res-val').textContent=this.value">
+            <span class="range-val" id="res-val">256</span>
+          </div>
+        </div>
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" id="water-detect" checked style="accent-color:var(--accent);width:16px;height:16px;">
+          <label for="water-detect" style="margin:0;cursor:pointer;">Detect water (lakes &amp; rivers via OSM)</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <h3>Terrain Colors (3MF)</h3>
+      <div class="section-body">
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Elevation thresholds in meters. When water detection is on, detected lakes &amp; rivers override the elevation threshold.</p>
+        <div class="threshold-row">
+          <span class="swatch" style="background:var(--topo-water)"></span>
+          <span>Water</span>
+          <span style="color:var(--text-muted)">below</span>
+          <input type="number" id="thresh-water" value="1" step="1"> <span style="color:var(--text-muted)">m</span>
+        </div>
+        <div class="threshold-row">
+          <span class="swatch" style="background:var(--topo-flat)"></span>
+          <span>Flatland</span>
+          <span style="color:var(--text-muted)">below</span>
+          <input type="number" id="thresh-flat" value="500" step="50"> <span style="color:var(--text-muted)">m</span>
+        </div>
+        <div class="threshold-row">
+          <span class="swatch" style="background:var(--topo-hills)"></span>
+          <span>Hills</span>
+          <span style="color:var(--text-muted)">below</span>
+          <input type="number" id="thresh-hills" value="1500" step="50"> <span style="color:var(--text-muted)">m</span>
+        </div>
+        <div class="threshold-row">
+          <span class="swatch" style="background:var(--topo-mountain)"></span>
+          <span>Mountains</span>
+          <span style="color:var(--text-muted);flex:1">above</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <h3>Selected Tile</h3>
+      <div class="section-body" id="selection-info">
+        <p style="font-size:12px;color:var(--text-muted);">Click a grid cell on the map to select it, or use the rectangle draw tool for a custom area.</p>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <h3>Oregon Progress</h3>
+      <div class="section-body">
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
+        </div>
+        <div class="progress-stats">
+          <span id="progress-printed">0 printed</span>
+          <span id="progress-exported">0 exported</span>
+          <span id="progress-total">0 / 0 tiles</span>
+        </div>
+        <div style="margin-top: 12px;">
+          <div class="legend-row"><span class="legend-swatch" style="background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.15)"></span> Not started</div>
+          <div class="legend-row"><span class="legend-swatch" style="background:rgba(88,166,255,0.35)"></span> Exported</div>
+          <div class="legend-row"><span class="legend-swatch" style="background:rgba(63,185,80,0.45)"></span> Printed</div>
+        </div>
+        <button class="btn btn-sm btn-danger btn-block" style="margin-top:10px" onclick="Progress.clearAll()">Clear All Progress</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Map Area ─── -->
+  <div id="map-container">
+    <div id="map"></div>
+    <div id="loading-overlay">
+      <div class="spinner"></div>
+      <div id="loading-text">Fetching elevation data…</div>
+    </div>
+    <div id="preview-panel">
+      <div class="preview-header">
+        3D Preview
+        <button onclick="Preview.close()">✕</button>
+      </div>
+      <div id="preview-canvas-wrap">
+        <canvas id="preview-canvas"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  CONSTANTS
+// ═══════════════════════════════════════════════
+
+const TERRAIN_TILE_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
+const TERRAIN_ZOOM = 12; // zoom level for elevation tiles
+
+// Simplified Oregon boundary [lng, lat] pairs (GeoJSON winding)
+const OREGON_BOUNDARY = [
+  [-124.567,42.000],[-124.548,42.092],[-124.473,42.434],[-124.418,42.663],
+  [-124.398,42.855],[-124.410,43.051],[-124.317,43.262],[-124.351,43.410],
+  [-124.407,43.535],[-124.356,43.695],[-124.233,43.926],[-124.164,44.130],
+  [-124.116,44.286],[-124.148,44.452],[-124.065,44.632],[-124.053,44.828],
+  [-124.020,45.019],[-124.076,45.173],[-124.041,45.390],[-124.075,45.555],
+  [-124.062,45.739],[-124.065,45.888],[-124.039,46.040],[-124.018,46.190],
+  [-123.960,46.259],[-123.703,46.265],[-123.479,46.269],[-123.262,46.184],
+  [-123.031,46.132],[-122.900,46.084],[-122.789,45.867],[-122.649,45.631],
+  [-122.403,45.580],[-122.241,45.548],[-121.924,45.657],[-121.736,45.694],
+  [-121.445,45.617],[-121.172,45.607],[-120.942,45.656],[-120.591,45.746],
+  [-120.249,45.726],[-119.870,45.836],[-119.490,45.906],[-119.125,45.933],
+  [-118.788,45.960],[-118.424,45.929],[-118.013,45.982],[-117.603,46.000],
+  [-117.420,46.122],[-117.241,46.283],[-117.044,46.388],[-116.918,46.000],
+  [-116.783,45.825],[-116.696,45.635],[-116.527,45.449],[-116.672,45.124],
+  [-116.784,44.996],[-116.898,44.849],[-117.061,44.657],[-117.169,44.428],
+  [-117.147,44.260],[-117.036,44.040],[-117.027,43.815],[-117.026,43.500],
+  [-117.026,43.000],[-117.026,42.500],[-117.026,42.000],[-124.567,42.000]
+];
+
+const OREGON_BOUNDS = {
+  north: 46.40, south: 41.99,
+  east: -116.45, west: -124.60
+};
+
+// ═══════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════
+
+const State = {
+  gridCols: 8,
+  gridRows: 6,
+  gridCells: [],          // [{id, bounds, layer, status}]
+  selectedCell: null,      // grid cell id or 'custom'
+  selectedBounds: null,    // L.LatLngBounds of current selection
+  customRect: null,        // Leaflet rectangle layer for custom draw
+  elevationData: null,     // {width, height, data: Float32Array, bounds}
+  meshData: null,          // generated mesh
+  tileProgress: {},        // { 'r-c': 'exported'|'printed' }
+};
+
+// ═══════════════════════════════════════════════
+//  UTILITY
+// ═══════════════════════════════════════════════
+
+function toast(msg, duration = 3000) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), duration);
+}
+
+function showLoading(msg) {
+  document.getElementById('loading-text').textContent = msg;
+  document.getElementById('loading-overlay').classList.add('active');
+}
+function hideLoading() {
+  document.getElementById('loading-overlay').classList.remove('active');
+}
+
+function downloadBlob(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function pointInPolygon(lat, lng, polygon) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i]; // [lng, lat]
+    const [xj, yj] = polygon[j];
+    if (((yi > lat) !== (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi)) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function cellOverlapsOregon(bounds) {
+  // Check if any corner is inside Oregon, or if Oregon boundary crosses the cell
+  const corners = [
+    [bounds.getSouth(), bounds.getWest()],
+    [bounds.getSouth(), bounds.getEast()],
+    [bounds.getNorth(), bounds.getWest()],
+    [bounds.getNorth(), bounds.getEast()],
+  ];
+  for (const [lat, lng] of corners) {
+    if (pointInPolygon(lat, lng, OREGON_BOUNDARY)) return true;
+  }
+  // Also check if some Oregon boundary points are inside the cell
+  for (const [lng, lat] of OREGON_BOUNDARY) {
+    if (lat >= bounds.getSouth() && lat <= bounds.getNorth() &&
+        lng >= bounds.getWest() && lng <= bounds.getEast()) return true;
+  }
+  return false;
+}
+
+// ═══════════════════════════════════════════════
+//  MAP MODULE
+// ═══════════════════════════════════════════════
+
+let map, oregonLayer, drawnItems, drawControl;
+
+const MapModule = {
+  init() {
+    map = L.map('map', {
+      center: [44.1, -120.5],
+      zoom: 7,
+      zoomControl: true,
+      preferCanvas: true,
+    });
+
+    // Base tile layer (dark)
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+      maxZoom: 18,
+    }).addTo(map);
+
+    // Oregon boundary
+    oregonLayer = L.polygon(
+      OREGON_BOUNDARY.map(([lng, lat]) => [lat, lng]),
+      { color: '#58a6ff', weight: 2, fillColor: 'transparent', fillOpacity: 0, dashArray: '6,4' }
+    ).addTo(map);
+
+    // Drawing support
+    drawnItems = L.featureGroup().addTo(map);
+    drawControl = new L.Control.Draw({
+      position: 'topright',
+      draw: {
+        rectangle: { shapeOptions: { color: '#f0b429', weight: 2, fillOpacity: 0.15 } },
+        polygon: false, polyline: false, circle: false, marker: false, circlemarker: false,
+      },
+      edit: { featureGroup: drawnItems, remove: true }
+    });
+    map.addControl(drawControl);
+
+    map.on(L.Draw.Event.CREATED, (e) => {
+      drawnItems.clearLayers();
+      drawnItems.addLayer(e.layer);
+      State.selectedCell = 'custom';
+      State.selectedBounds = e.layer.getBounds();
+      State.customRect = e.layer;
+      Grid.deselectAll();
+      UI.updateSelectionInfo();
+    });
+    map.on(L.Draw.Event.DELETED, () => {
+      State.selectedCell = null;
+      State.selectedBounds = null;
+      State.customRect = null;
+      UI.updateSelectionInfo();
+    });
+  }
+};
+
+// ═══════════════════════════════════════════════
+//  GRID MODULE
+// ═══════════════════════════════════════════════
+
+const Grid = {
+  layers: [],
+
+  rebuild() {
+    // Remove existing grid
+    this.layers.forEach(l => map.removeLayer(l));
+    this.layers = [];
+    State.gridCells = [];
+
+    State.gridCols = parseInt(document.getElementById('grid-cols').value) || 8;
+    State.gridRows = parseInt(document.getElementById('grid-rows').value) || 6;
+
+    const { north, south, east, west } = OREGON_BOUNDS;
+    const cellW = (east - west) / State.gridCols;
+    const cellH = (north - south) / State.gridRows;
+
+    for (let r = 0; r < State.gridRows; r++) {
+      for (let c = 0; c < State.gridCols; c++) {
+        const s = south + r * cellH;
+        const n = south + (r + 1) * cellH;
+        const w = west + c * cellW;
+        const e = west + (c + 1) * cellW;
+        const bounds = L.latLngBounds([s, w], [n, e]);
+
+        if (!cellOverlapsOregon(bounds)) continue;
+
+        const id = `${r}-${c}`;
+        const status = State.tileProgress[id] || 'none';
+        const fillColor = status === 'printed' ? 'rgba(63,185,80,0.35)' :
+                          status === 'exported' ? 'rgba(88,166,255,0.25)' :
+                          'rgba(255,255,255,0.04)';
+
+        const layer = L.rectangle(bounds, {
+          color: 'rgba(255,255,255,0.2)',
+          weight: 1,
+          fillColor,
+          fillOpacity: 1,
+          className: 'grid-cell',
+        });
+
+        layer.cellId = id;
+        layer.cellBounds = bounds;
+        layer.on('click', () => this.selectCell(id));
+
+        const centerLat = (s+n)/2, centerLng = (w+e)/2;
+        layer.bindTooltip(
+          `Tile ${c},${r}<br>Status: ${status}`,
+          { className: 'grid-tooltip', direction: 'top' }
+        );
+
+        layer.addTo(map);
+        this.layers.push(layer);
+        State.gridCells.push({ id, bounds, layer, status, row: r, col: c });
+      }
+    }
+    Progress.update();
+  },
+
+  fitToOregon() {
+    document.getElementById('grid-cols').value = 8;
+    document.getElementById('grid-rows').value = 6;
+    this.rebuild();
+    map.fitBounds(oregonLayer.getBounds().pad(0.05));
+  },
+
+  selectCell(id) {
+    // Clear custom rectangle
+    drawnItems.clearLayers();
+    State.customRect = null;
+
+    this.deselectAll();
+    const cell = State.gridCells.find(c => c.id === id);
+    if (!cell) return;
+
+    cell.layer.setStyle({ color: '#f0b429', weight: 3 });
+    State.selectedCell = id;
+    State.selectedBounds = cell.bounds;
+    UI.updateSelectionInfo();
+  },
+
+  deselectAll() {
+    State.gridCells.forEach(c => {
+      const status = State.tileProgress[c.id] || 'none';
+      const fillColor = status === 'printed' ? 'rgba(63,185,80,0.35)' :
+                        status === 'exported' ? 'rgba(88,166,255,0.25)' :
+                        'rgba(255,255,255,0.04)';
+      c.layer.setStyle({ color: 'rgba(255,255,255,0.2)', weight: 1, fillColor, fillOpacity: 1 });
+    });
+    State.selectedCell = null;
+    State.selectedBounds = null;
+  },
+
+  updateCellStyle(id) {
+    const cell = State.gridCells.find(c => c.id === id);
+    if (!cell) return;
+    const status = State.tileProgress[id] || 'none';
+    const fillColor = status === 'printed' ? 'rgba(63,185,80,0.35)' :
+                      status === 'exported' ? 'rgba(88,166,255,0.25)' :
+                      'rgba(255,255,255,0.04)';
+    cell.layer.setStyle({ fillColor, fillOpacity: 1 });
+    cell.layer.unbindTooltip();
+    cell.layer.bindTooltip(
+      `Tile ${cell.col},${cell.row}<br>Status: ${status}`,
+      { className: 'grid-tooltip', direction: 'top' }
+    );
+  }
+};
+
+// ═══════════════════════════════════════════════
+//  ELEVATION MODULE
+// ═══════════════════════════════════════════════
+
+const Elevation = {
+  // Convert lat/lon to tile x,y at given zoom
+  latLonToTile(lat, lon, zoom) {
+    const n = Math.pow(2, zoom);
+    const x = Math.floor((lon + 180) / 360 * n);
+    const latRad = lat * Math.PI / 180;
+    const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+    return { x, y };
+  },
+
+  // Get lat/lon of tile corner
+  tileToBounds(tx, ty, zoom) {
+    const n = Math.pow(2, zoom);
+    const lonLeft = tx / n * 360 - 180;
+    const lonRight = (tx + 1) / n * 360 - 180;
+    const latTop = Math.atan(Math.sinh(Math.PI * (1 - 2 * ty / n))) * 180 / Math.PI;
+    const latBottom = Math.atan(Math.sinh(Math.PI * (1 - 2 * (ty + 1) / n))) * 180 / Math.PI;
+    return { north: latTop, south: latBottom, west: lonLeft, east: lonRight };
+  },
+
+  // Fetch elevation data for bounds
+  async fetchElevation(bounds, resolution) {
+    const zoom = TERRAIN_ZOOM;
+    const sw = this.latLonToTile(bounds.getSouth(), bounds.getWest(), zoom);
+    const ne = this.latLonToTile(bounds.getNorth(), bounds.getEast(), zoom);
+
+    const minTX = Math.min(sw.x, ne.x);
+    const maxTX = Math.max(sw.x, ne.x);
+    const minTY = Math.min(sw.y, ne.y);
+    const maxTY = Math.max(sw.y, ne.y);
+
+    const tilesX = maxTX - minTX + 1;
+    const tilesY = maxTY - minTY + 1;
+
+    // Create a canvas to composite all tiles
+    const tileSize = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = tilesX * tileSize;
+    canvas.height = tilesY * tileSize;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+    // Fetch all tiles
+    const total = tilesX * tilesY;
+    let loaded = 0;
+
+    const loadTile = (tx, ty) => new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const px = (tx - minTX) * tileSize;
+        const py = (ty - minTY) * tileSize;
+        ctx.drawImage(img, px, py);
+        loaded++;
+        showLoading(`Fetching tiles… ${loaded}/${total}`);
+        resolve();
+      };
+      img.onerror = () => {
+        loaded++;
+        showLoading(`Fetching tiles… ${loaded}/${total} (${tx},${ty} failed)`);
+        resolve(); // Don't fail everything for one missing tile
+      };
+      img.src = TERRAIN_TILE_URL.replace('{z}', zoom).replace('{x}', tx).replace('{y}', ty);
+    });
+
+    const promises = [];
+    for (let ty = minTY; ty <= maxTY; ty++) {
+      for (let tx = minTX; tx <= maxTX; tx++) {
+        promises.push(loadTile(tx, ty));
+      }
+    }
+    await Promise.all(promises);
+
+    // Calculate the pixel region that corresponds to our bounds
+    const topLeftBounds = this.tileToBounds(minTX, minTY, zoom);
+    const bottomRightBounds = this.tileToBounds(maxTX, maxTY, zoom);
+
+    const fullW = topLeftBounds.east !== topLeftBounds.west
+      ? (bottomRightBounds.east !== undefined ? bottomRightBounds.east : topLeftBounds.east) : 1;
+
+    // Full geographic extent of all fetched tiles
+    const fullNorth = topLeftBounds.north;
+    const fullSouth = this.tileToBounds(minTX, maxTY, zoom).south;
+    const fullWest = topLeftBounds.west;
+    const fullEast = this.tileToBounds(maxTX, minTY, zoom).east;
+
+    // Map our desired bounds to pixel coordinates within the composited canvas
+    const pxLeft = Math.round((bounds.getWest() - fullWest) / (fullEast - fullWest) * canvas.width);
+    const pxRight = Math.round((bounds.getEast() - fullWest) / (fullEast - fullWest) * canvas.width);
+    const pxTop = Math.round((fullNorth - bounds.getNorth()) / (fullNorth - fullSouth) * canvas.height);
+    const pxBottom = Math.round((fullNorth - bounds.getSouth()) / (fullNorth - fullSouth) * canvas.height);
+
+    const cropW = Math.max(1, pxRight - pxLeft);
+    const cropH = Math.max(1, pxBottom - pxTop);
+
+    // Get pixel data for our region
+    const imageData = ctx.getImageData(pxLeft, pxTop, cropW, cropH);
+
+    // Resample to desired resolution
+    showLoading('Processing elevation data…');
+    const outW = resolution;
+    const outH = resolution;
+    const elevations = new Float32Array(outW * outH);
+
+    for (let y = 0; y < outH; y++) {
+      for (let x = 0; x < outW; x++) {
+        // Map output pixel to source pixel
+        const sx = Math.min(Math.floor(x / outW * cropW), cropW - 1);
+        const sy = Math.min(Math.floor(y / outH * cropH), cropH - 1);
+        const idx = (sy * cropW + sx) * 4;
+        const r = imageData.data[idx];
+        const g = imageData.data[idx + 1];
+        const b = imageData.data[idx + 2];
+        // Terrarium encoding
+        elevations[y * outW + x] = (r * 256 + g + b / 256) - 32768;
+      }
+    }
+
+    return {
+      width: outW,
+      height: outH,
+      data: elevations,
+      bounds: {
+        north: bounds.getNorth(),
+        south: bounds.getSouth(),
+        east: bounds.getEast(),
+        west: bounds.getWest(),
+      }
+    };
+  }
+};
+
+// ═══════════════════════════════════════════════
+//  WATER DETECTION
+// ═══════════════════════════════════════════════
+
+const WaterDetection = {
+  /**
+   * Combined water detection: Overpass API + tile color sampling.
+   * Returns Uint8Array mask (1 = water) matching resolution × resolution grid.
+   */
+  async detect(bounds, resolution) {
+    showLoading('Detecting water features…');
+
+    const results = await Promise.allSettled([
+      this.overpassDetect(bounds, resolution),
+      this.colorDetect(bounds, resolution),
+    ]);
+
+    const overpassMask = results[0].status === 'fulfilled' ? results[0].value : null;
+    const colorMask = results[1].status === 'fulfilled' ? results[1].value : null;
+
+    if (overpassMask) console.log('Overpass water mask OK');
+    else console.warn('Overpass water detection failed:', results[0].reason);
+    if (colorMask) console.log('Color water mask OK');
+    else console.warn('Color water detection failed:', results[1].reason);
+
+    // Union both masks
+    const combined = new Uint8Array(resolution * resolution);
+    for (let i = 0; i < combined.length; i++) {
+      combined[i] = ((overpassMask && overpassMask[i]) || (colorMask && colorMask[i])) ? 1 : 0;
+    }
+    return combined;
+  },
+
+  /**
+   * Query OpenStreetMap Overpass API for water polygons and waterways,
+   * rasterize them onto a canvas, and return a binary mask.
+   */
+  async overpassDetect(bounds, resolution) {
+    const s = bounds.getSouth(), w = bounds.getWest();
+    const n = bounds.getNorth(), e = bounds.getEast();
+
+    const query = `[out:json][timeout:30];(
+      way["natural"="water"](${s},${w},${n},${e});
+      relation["natural"="water"](${s},${w},${n},${e});
+      way["waterway"](${s},${w},${n},${e});
+    );out geom;`;
+
+    const resp = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'data=' + encodeURIComponent(query),
+    });
+    if (!resp.ok) throw new Error('Overpass HTTP ' + resp.status);
+    const data = await resp.json();
+
+    // Canvas-based rasterization
+    const canvas = document.createElement('canvas');
+    canvas.width = resolution;
+    canvas.height = resolution;
+    const ctx = canvas.getContext('2d');
+
+    const metersPerPixel = (n - s) * 111320 / resolution;
+
+    function lngToX(lng) { return (lng - w) / (e - w) * resolution; }
+    function latToY(lat) { return (n - lat) / (n - s) * resolution; }
+
+    function drawGeometry(geom, fill, lineWidth) {
+      if (!geom || geom.length < 2) return;
+      ctx.beginPath();
+      geom.forEach((p, i) => {
+        const px = lngToX(p.lon), py = latToY(p.lat);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      });
+      if (fill) { ctx.closePath(); ctx.fill(); }
+      else { ctx.lineWidth = lineWidth; ctx.stroke(); }
+    }
+
+    ctx.fillStyle = 'white';
+    ctx.strokeStyle = 'white';
+
+    const elements = data.elements || [];
+    showLoading(`Processing ${elements.length} water features…`);
+
+    for (const el of elements) {
+      if (el.type === 'way') {
+        if (el.tags?.natural === 'water') {
+          // Lake / pond — filled polygon
+          drawGeometry(el.geometry, true);
+        } else if (el.tags?.waterway) {
+          // River / stream / canal — stroked line
+          const widthM = el.tags.waterway === 'river' ? 200 :
+                         el.tags.waterway === 'canal' ? 80 :
+                         el.tags.waterway === 'stream' ? 30 : 50;
+          const widthPx = Math.max(1, Math.round(widthM / metersPerPixel));
+          drawGeometry(el.geometry, false, widthPx);
+        }
+      }
+
+      if (el.type === 'relation' && el.tags?.natural === 'water') {
+        // Multipolygon — draw outers filled, then cut inners
+        const outers = (el.members || []).filter(m => m.role === 'outer' && m.geometry);
+        const inners = (el.members || []).filter(m => m.role === 'inner' && m.geometry);
+
+        for (const m of outers) drawGeometry(m.geometry, true);
+
+        if (inners.length) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'destination-out';
+          for (const m of inners) drawGeometry(m.geometry, true);
+          ctx.restore();
+        }
+      }
+    }
+
+    // Read mask from canvas
+    const imageData = ctx.getImageData(0, 0, resolution, resolution);
+    const mask = new Uint8Array(resolution * resolution);
+    for (let i = 0; i < mask.length; i++) {
+      mask[i] = imageData.data[i * 4] > 128 ? 1 : 0;
+    }
+    return mask;
+  },
+
+  /**
+   * Fetch CartoDB Voyager (no labels) map tiles, sample pixel colors,
+   * and flag blue-ish pixels as water.
+   */
+  async colorDetect(bounds, resolution) {
+    const zoom = TERRAIN_ZOOM;
+    const sw = Elevation.latLonToTile(bounds.getSouth(), bounds.getWest(), zoom);
+    const ne = Elevation.latLonToTile(bounds.getNorth(), bounds.getEast(), zoom);
+
+    const minTX = Math.min(sw.x, ne.x), maxTX = Math.max(sw.x, ne.x);
+    const minTY = Math.min(sw.y, ne.y), maxTY = Math.max(sw.y, ne.y);
+
+    const tileSize = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = (maxTX - minTX + 1) * tileSize;
+    canvas.height = (maxTY - minTY + 1) * tileSize;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+    // Fetch Voyager (nolabels) tiles — water is clearly blue
+    const VOYAGER_URL = 'https://basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png';
+
+    const loadTile = (tx, ty) => new Promise(resolve => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        ctx.drawImage(img, (tx - minTX) * tileSize, (ty - minTY) * tileSize);
+        resolve();
+      };
+      img.onerror = () => resolve();
+      img.src = VOYAGER_URL.replace('{z}', zoom).replace('{x}', tx).replace('{y}', ty);
+    });
+
+    const promises = [];
+    for (let ty = minTY; ty <= maxTY; ty++)
+      for (let tx = minTX; tx <= maxTX; tx++)
+        promises.push(loadTile(tx, ty));
+    await Promise.all(promises);
+
+    // Compute pixel region for our bounds (same math as Elevation module)
+    const topLeft = Elevation.tileToBounds(minTX, minTY, zoom);
+    const botRight = Elevation.tileToBounds(maxTX, maxTY, zoom);
+    const fullN = topLeft.north, fullS = botRight.south;
+    const fullW = topLeft.west,  fullE = botRight.east;
+
+    const pxL = Math.round((bounds.getWest() - fullW) / (fullE - fullW) * canvas.width);
+    const pxR = Math.round((bounds.getEast() - fullW) / (fullE - fullW) * canvas.width);
+    const pxT = Math.round((fullN - bounds.getNorth()) / (fullN - fullS) * canvas.height);
+    const pxB = Math.round((fullN - bounds.getSouth()) / (fullN - fullS) * canvas.height);
+
+    const cropW = Math.max(1, pxR - pxL);
+    const cropH = Math.max(1, pxB - pxT);
+    const imageData = ctx.getImageData(pxL, pxT, cropW, cropH);
+
+    // Resample and classify
+    const mask = new Uint8Array(resolution * resolution);
+    for (let y = 0; y < resolution; y++) {
+      for (let x = 0; x < resolution; x++) {
+        const sx = Math.min(Math.floor(x / resolution * cropW), cropW - 1);
+        const sy = Math.min(Math.floor(y / resolution * cropH), cropH - 1);
+        const idx = (sy * cropW + sx) * 4;
+        const r = imageData.data[idx];
+        const g = imageData.data[idx + 1];
+        const b = imageData.data[idx + 2];
+        // CartoDB Voyager water is ~#aad3df — distinctly blue-shifted
+        // Detect: blue dominates red, both blue & green are bright
+        mask[y * resolution + x] = (b > r + 15 && b > 140 && g > 140 && r < 210) ? 1 : 0;
+      }
+    }
+    return mask;
+  },
+};
+
+// ═══════════════════════════════════════════════
+//  MESH GENERATION
+// ═══════════════════════════════════════════════
+
+const MeshGen = {
+  /**
+   * Generate mesh from elevation data.
+   * waterMask: optional Uint8Array where 1=water, matching elevData dimensions.
+   * Returns { vertices, triangles, triColors, ... }
+   */
+  generate(elevData, waterMask) {
+    const printSize = parseFloat(document.getElementById('print-size').value) || 150;
+    const vertExag = parseFloat(document.getElementById('vert-exag').value) || 2;
+    const baseHeight = parseFloat(document.getElementById('base-height').value) || 4;
+    const threshWater = parseFloat(document.getElementById('thresh-water').value) || 1;
+    const threshFlat = parseFloat(document.getElementById('thresh-flat').value) || 500;
+    const threshHills = parseFloat(document.getElementById('thresh-hills').value) || 1500;
+
+    const w = elevData.width;
+    const h = elevData.height;
+    const data = elevData.data;
+
+    // Find elevation range
+    let minElev = Infinity, maxElev = -Infinity;
+    for (let i = 0; i < data.length; i++) {
+      if (data[i] < minElev) minElev = data[i];
+      if (data[i] > maxElev) maxElev = data[i];
+    }
+
+    // Scale factor: map geographic extent to printSize mm
+    // Use the larger dimension to ensure it fits in printSize
+    const boundsW = elevData.bounds.east - elevData.bounds.west;
+    const boundsH = elevData.bounds.north - elevData.bounds.south;
+    // Approximate aspect ratio using cos(mid-latitude)
+    const midLat = (elevData.bounds.north + elevData.bounds.south) / 2;
+    const cosLat = Math.cos(midLat * Math.PI / 180);
+    const geoW = boundsW * cosLat; // normalized width
+    const geoH = boundsH;
+    const aspect = geoW / geoH;
+
+    let meshW, meshH;
+    if (aspect >= 1) {
+      meshW = printSize;
+      meshH = printSize / aspect;
+    } else {
+      meshH = printSize;
+      meshW = printSize * aspect;
+    }
+
+    // Elevation to mm: scale the elevation range to a reasonable height
+    const elevRange = maxElev - minElev;
+    // Target max terrain height: proportional to print size, scaled by exaggeration
+    // A 150mm tile of Oregon mountains (~3000m over ~100km) at 2× exag:
+    // real ratio = 3000/100000 = 0.03 → 150 * 0.03 * 2 = 9mm terrain height
+    const realWorldSpanM = Math.max(geoW, geoH) * 111320; // approximate meters of larger dimension
+    const elevScale = (printSize / realWorldSpanM) * vertExag; // mm per meter of elevation
+
+    // Generate vertices for the terrain surface
+    // vertex layout: (w * h) terrain vertices
+    const numVerts = w * h;
+    const positions = []; // flat array of x,y,z
+    const elevationsInMm = new Float32Array(numVerts); // for color classification
+
+    for (let row = 0; row < h; row++) {
+      for (let col = 0; col < w; col++) {
+        const x = (col / (w - 1)) * meshW;
+        const y = ((h - 1 - row) / (h - 1)) * meshH; // flip Y so north is up
+        const elev = data[row * w + col];
+        const z = (elev - minElev) * elevScale + baseHeight;
+        positions.push(x, y, z);
+        elevationsInMm[row * w + col] = elev; // keep real elevation for color
+      }
+    }
+
+    // Generate triangles for terrain surface
+    const triangles = [];
+    const triElevations = []; // average elevation per triangle (for coloring)
+
+    for (let row = 0; row < h - 1; row++) {
+      for (let col = 0; col < w - 1; col++) {
+        const tl = row * w + col;
+        const tr = row * w + col + 1;
+        const bl = (row + 1) * w + col;
+        const br = (row + 1) * w + col + 1;
+
+        triangles.push(tl, bl, tr);
+        const avgElev1 = (data[tl] + data[bl] + data[tr]) / 3;
+        triElevations.push(avgElev1);
+
+        triangles.push(tr, bl, br);
+        const avgElev2 = (data[tr] + data[bl] + data[br]) / 3;
+        triElevations.push(avgElev2);
+      }
+    }
+
+    // Add walls and base
+    const baseZ = 0;
+    const baseVStart = positions.length / 3;
+
+    // South wall (row = h-1)
+    for (let col = 0; col < w; col++) {
+      const topIdx = (h - 1) * w + col;
+      const x = (col / (w - 1)) * meshW;
+      // bottom vertex
+      positions.push(x, 0, baseZ);
+    }
+    for (let col = 0; col < w - 1; col++) {
+      const topL = (h - 1) * w + col;
+      const topR = (h - 1) * w + col + 1;
+      const botL = baseVStart + col;
+      const botR = baseVStart + col + 1;
+      triangles.push(topL, botL, topR);
+      triElevations.push(-1);
+      triangles.push(topR, botL, botR);
+      triElevations.push(-1);
+    }
+
+    // North wall (row = 0)
+    const northBaseStart = positions.length / 3;
+    for (let col = 0; col < w; col++) {
+      const x = (col / (w - 1)) * meshW;
+      positions.push(x, meshH, baseZ);
+    }
+    for (let col = 0; col < w - 1; col++) {
+      const topL = col;
+      const topR = col + 1;
+      const botL = northBaseStart + col;
+      const botR = northBaseStart + col + 1;
+      triangles.push(topL, topR, botL);
+      triElevations.push(-1);
+      triangles.push(topR, botR, botL);
+      triElevations.push(-1);
+    }
+
+    // West wall (col = 0)
+    const westBaseStart = positions.length / 3;
+    for (let row = 0; row < h; row++) {
+      const y = ((h - 1 - row) / (h - 1)) * meshH;
+      positions.push(0, y, baseZ);
+    }
+    for (let row = 0; row < h - 1; row++) {
+      const topT = row * w;
+      const topB = (row + 1) * w;
+      const botT = westBaseStart + row;
+      const botB = westBaseStart + row + 1;
+      triangles.push(topT, botT, topB);
+      triElevations.push(-1);
+      triangles.push(topB, botT, botB);
+      triElevations.push(-1);
+    }
+
+    // East wall (col = w-1)
+    const eastBaseStart = positions.length / 3;
+    for (let row = 0; row < h; row++) {
+      const y = ((h - 1 - row) / (h - 1)) * meshH;
+      positions.push(meshW, y, baseZ);
+    }
+    for (let row = 0; row < h - 1; row++) {
+      const topT = row * w + (w - 1);
+      const topB = (row + 1) * w + (w - 1);
+      const botT = eastBaseStart + row;
+      const botB = eastBaseStart + row + 1;
+      triangles.push(topT, topB, botT);
+      triElevations.push(-1);
+      triangles.push(topB, botB, botT);
+      triElevations.push(-1);
+    }
+
+    // Base (bottom face) — two big triangles
+    const b0 = positions.length / 3;
+    positions.push(0, 0, baseZ);
+    positions.push(meshW, 0, baseZ);
+    positions.push(meshW, meshH, baseZ);
+    positions.push(0, meshH, baseZ);
+    triangles.push(b0, b0 + 2, b0 + 1);
+    triElevations.push(-1);
+    triangles.push(b0, b0 + 3, b0 + 2);
+    triElevations.push(-1);
+
+    // Classify triangles by color
+    // 0=water, 1=flatland, 2=hills, 3=mountain
+    const triColors = new Uint8Array(triElevations.length);
+    const terrainVertCount = w * h; // only terrain surface verts have grid coords
+
+    for (let i = 0; i < triElevations.length; i++) {
+      const e = triElevations[i];
+
+      // Check water mask: if any vertex of this terrain triangle is in water, it's water
+      if (waterMask && e >= 0) {
+        const ti = i * 3;
+        const v0 = triangles[ti], v1 = triangles[ti + 1], v2 = triangles[ti + 2];
+        let isWater = false;
+        for (const vi of [v0, v1, v2]) {
+          if (vi < terrainVertCount) {
+            const row = Math.floor(vi / w);
+            const col = vi % w;
+            if (waterMask[row * w + col]) { isWater = true; break; }
+          }
+        }
+        if (isWater) { triColors[i] = 0; continue; }
+      }
+
+      if (e < 0) {
+        triColors[i] = 0; // base/walls
+      } else if (e < threshWater) {
+        triColors[i] = 0;
+      } else if (e < threshFlat) {
+        triColors[i] = 1;
+      } else if (e < threshHills) {
+        triColors[i] = 2;
+      } else {
+        triColors[i] = 3;
+      }
+    }
+
+    const vertexArray = new Float32Array(positions);
+    const triangleArray = new Uint32Array(triangles);
+
+    return {
+      vertices: vertexArray,
+      triangles: triangleArray,
+      triColors,
+      triElevations,
+      meshW,
+      meshH,
+      minElev,
+      maxElev,
+      elevScale,
+      baseHeight,
+    };
+  }
+};
+
+// ═══════════════════════════════════════════════
+//  STL EXPORT (binary)
+// ═══════════════════════════════════════════════
+
+const STLExport = {
+  generate(mesh) {
+    const numTriangles = mesh.triangles.length / 3;
+    const bufferSize = 80 + 4 + numTriangles * 50;
+    const buffer = new ArrayBuffer(bufferSize);
+    const view = new DataView(buffer);
+
+    // 80-byte header
+    const header = 'TerraPrint STL Export';
+    for (let i = 0; i < 80; i++) {
+      view.setUint8(i, i < header.length ? header.charCodeAt(i) : 0);
+    }
+    // Triangle count
+    view.setUint32(80, numTriangles, true);
+
+    let offset = 84;
+    const v = mesh.vertices;
+    const t = mesh.triangles;
+
+    for (let i = 0; i < numTriangles; i++) {
+      const i0 = t[i * 3] * 3;
+      const i1 = t[i * 3 + 1] * 3;
+      const i2 = t[i * 3 + 2] * 3;
+
+      // Compute normal
+      const ax = v[i1] - v[i0], ay = v[i1 + 1] - v[i0 + 1], az = v[i1 + 2] - v[i0 + 2];
+      const bx = v[i2] - v[i0], by = v[i2 + 1] - v[i0 + 1], bz = v[i2 + 2] - v[i0 + 2];
+      let nx = ay * bz - az * by;
+      let ny = az * bx - ax * bz;
+      let nz = ax * by - ay * bx;
+      const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+      nx /= len; ny /= len; nz /= len;
+
+      // Normal
+      view.setFloat32(offset, nx, true); offset += 4;
+      view.setFloat32(offset, ny, true); offset += 4;
+      view.setFloat32(offset, nz, true); offset += 4;
+      // Vertex 1
+      view.setFloat32(offset, v[i0], true); offset += 4;
+      view.setFloat32(offset, v[i0 + 1], true); offset += 4;
+      view.setFloat32(offset, v[i0 + 2], true); offset += 4;
+      // Vertex 2
+      view.setFloat32(offset, v[i1], true); offset += 4;
+      view.setFloat32(offset, v[i1 + 1], true); offset += 4;
+      view.setFloat32(offset, v[i1 + 2], true); offset += 4;
+      // Vertex 3
+      view.setFloat32(offset, v[i2], true); offset += 4;
+      view.setFloat32(offset, v[i2 + 1], true); offset += 4;
+      view.setFloat32(offset, v[i2 + 2], true); offset += 4;
+      // Attribute byte count
+      view.setUint16(offset, 0, true); offset += 2;
+    }
+
+    return new Blob([buffer], { type: 'application/octet-stream' });
+  }
+};
+
+// ═══════════════════════════════════════════════
+//  3MF EXPORT
+// ═══════════════════════════════════════════════
+
+const ThreeMFExport = {
+  COLORS: [
+    { name: 'Water', hex: '#2D6ABF' },
+    { name: 'Flatland', hex: '#3D8C40' },
+    { name: 'Hills', hex: '#C47F17' },
+    { name: 'Mountains', hex: '#D4D4D4' },
+  ],
+
+  async generate(mesh) {
+    const zip = new JSZip();
+
+    // [Content_Types].xml
+    zip.file('[Content_Types].xml',
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\n' +
+      '  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml" />\n' +
+      '  <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml" />\n' +
+      '</Types>'
+    );
+
+    // _rels/.rels
+    zip.file('_rels/.rels',
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n' +
+      '  <Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel" />\n' +
+      '</Relationships>'
+    );
+
+    // Build vertex and triangle XML
+    const v = mesh.vertices;
+    const t = mesh.triangles;
+    const numVerts = v.length / 3;
+    const numTris = t.length / 3;
+
+    let verticesXml = '';
+    for (let i = 0; i < numVerts; i++) {
+      verticesXml += `      <vertex x="${v[i*3].toFixed(4)}" y="${v[i*3+1].toFixed(4)}" z="${v[i*3+2].toFixed(4)}" />\n`;
+    }
+
+    let trianglesXml = '';
+    for (let i = 0; i < numTris; i++) {
+      const colorIdx = mesh.triColors[i];
+      trianglesXml += `      <triangle v1="${t[i*3]}" v2="${t[i*3+1]}" v3="${t[i*3+2]}" pid="1" p1="${colorIdx}" />\n`;
+    }
+
+    // Materials
+    let materialsXml = '';
+    this.COLORS.forEach((c, i) => {
+      materialsXml += `      <base name="${c.name}" displaycolor="${c.hex}" />\n`;
+    });
+
+    const modelXml =
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<model unit="millimeter" xml:lang="en-US"\n' +
+      '  xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"\n' +
+      '  xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02">\n' +
+      '  <resources>\n' +
+      '    <basematerials id="1">\n' +
+      materialsXml +
+      '    </basematerials>\n' +
+      '    <object id="2" type="model">\n' +
+      '      <mesh>\n' +
+      '        <vertices>\n' +
+      verticesXml +
+      '        </vertices>\n' +
+      '        <triangles>\n' +
+      trianglesXml +
+      '        </triangles>\n' +
+      '      </mesh>\n' +
+      '    </object>\n' +
+      '  </resources>\n' +
+      '  <build>\n' +
+      '    <item objectid="2" />\n' +
+      '  </build>\n' +
+      '</model>';
+
+    zip.file('3D/3dmodel.model', modelXml);
+
+    const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml' });
+    return blob;
+  }
+};
+
+// ═══════════════════════════════════════════════
+//  3D PREVIEW (Three.js with simple orbit)
+// ═══════════════════════════════════════════════
+
+const Preview = {
+  scene: null,
+  camera: null,
+  renderer: null,
+  terrainMesh: null,
+  frameId: null,
+  isDragging: false,
+  prevMouse: { x: 0, y: 0 },
+  spherical: { theta: Math.PI / 4, phi: Math.PI / 3, radius: 250 },
+
+  init() {
+    const canvas = document.getElementById('preview-canvas');
+    const wrap = document.getElementById('preview-canvas-wrap');
+
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x161b22);
+
+    this.camera = new THREE.PerspectiveCamera(45, wrap.clientWidth / wrap.clientHeight, 0.1, 5000);
+
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    // Lights
+    const amb = new THREE.AmbientLight(0xffffff, 0.4);
+    this.scene.add(amb);
+    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+    dir.position.set(100, 200, 150);
+    this.scene.add(dir);
+    const dir2 = new THREE.DirectionalLight(0x8899cc, 0.3);
+    dir2.position.set(-80, -100, 100);
+    this.scene.add(dir2);
+
+    // Mouse controls
+    canvas.addEventListener('mousedown', (e) => {
+      this.isDragging = true;
+      this.prevMouse = { x: e.clientX, y: e.clientY };
+    });
+    canvas.addEventListener('mousemove', (e) => {
+      if (!this.isDragging) return;
+      const dx = e.clientX - this.prevMouse.x;
+      const dy = e.clientY - this.prevMouse.y;
+      this.spherical.theta -= dx * 0.01;
+      this.spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, this.spherical.phi - dy * 0.01));
+      this.prevMouse = { x: e.clientX, y: e.clientY };
+    });
+    canvas.addEventListener('mouseup', () => this.isDragging = false);
+    canvas.addEventListener('mouseleave', () => this.isDragging = false);
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      this.spherical.radius = Math.max(20, Math.min(1000, this.spherical.radius + e.deltaY * 0.3));
+    }, { passive: false });
+
+    // Touch controls
+    canvas.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        this.isDragging = true;
+        this.prevMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      }
+    });
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      if (!this.isDragging || e.touches.length !== 1) return;
+      const dx = e.touches[0].clientX - this.prevMouse.x;
+      const dy = e.touches[0].clientY - this.prevMouse.y;
+      this.spherical.theta -= dx * 0.01;
+      this.spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, this.spherical.phi - dy * 0.01));
+      this.prevMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }, { passive: false });
+    canvas.addEventListener('touchend', () => this.isDragging = false);
+  },
+
+  updateCamera() {
+    const s = this.spherical;
+    this.camera.position.set(
+      s.radius * Math.sin(s.phi) * Math.cos(s.theta),
+      s.radius * Math.sin(s.phi) * Math.sin(s.theta),
+      s.radius * Math.cos(s.phi)
+    );
+    this.camera.lookAt(this.target || new THREE.Vector3(0, 0, 0));
+  },
+
+  showMesh(meshData) {
+    document.getElementById('preview-panel').style.display = 'block';
+
+    // Remove old mesh
+    if (this.terrainMesh) {
+      this.scene.remove(this.terrainMesh);
+      this.terrainMesh.geometry.dispose();
+      if (this.terrainMesh.material.length) {
+        this.terrainMesh.material.forEach(m => m.dispose());
+      } else {
+        this.terrainMesh.material.dispose();
+      }
+    }
+
+    const geom = new THREE.BufferGeometry();
+
+    // Build indexed geometry with vertex colors
+    const v = meshData.vertices;
+    const t = meshData.triangles;
+    const numTris = t.length / 3;
+
+    // We need per-face colors, so we'll use non-indexed geometry
+    const posArray = new Float32Array(numTris * 9);
+    const colorArray = new Float32Array(numTris * 9);
+
+    const palette = [
+      [0.18, 0.42, 0.75],  // water
+      [0.24, 0.55, 0.25],  // flatland
+      [0.77, 0.50, 0.09],  // hills
+      [0.83, 0.83, 0.83],  // mountains
+    ];
+
+    for (let i = 0; i < numTris; i++) {
+      const i0 = t[i * 3], i1 = t[i * 3 + 1], i2 = t[i * 3 + 2];
+      posArray[i * 9] = v[i0 * 3];
+      posArray[i * 9 + 1] = v[i0 * 3 + 1];
+      posArray[i * 9 + 2] = v[i0 * 3 + 2];
+      posArray[i * 9 + 3] = v[i1 * 3];
+      posArray[i * 9 + 4] = v[i1 * 3 + 1];
+      posArray[i * 9 + 5] = v[i1 * 3 + 2];
+      posArray[i * 9 + 6] = v[i2 * 3];
+      posArray[i * 9 + 7] = v[i2 * 3 + 1];
+      posArray[i * 9 + 8] = v[i2 * 3 + 2];
+
+      const c = palette[meshData.triColors[i]];
+      for (let j = 0; j < 3; j++) {
+        colorArray[i * 9 + j * 3] = c[0];
+        colorArray[i * 9 + j * 3 + 1] = c[1];
+        colorArray[i * 9 + j * 3 + 2] = c[2];
+      }
+    }
+
+    geom.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+    geom.setAttribute('color', new THREE.BufferAttribute(colorArray, 3));
+    geom.computeVertexNormals();
+
+    const mat = new THREE.MeshPhongMaterial({
+      vertexColors: true,
+      flatShading: false,
+      side: THREE.DoubleSide,
+    });
+
+    this.terrainMesh = new THREE.Mesh(geom, mat);
+
+    // Center the mesh
+    geom.computeBoundingBox();
+    const box = geom.boundingBox;
+    const cx = (box.max.x + box.min.x) / 2;
+    const cy = (box.max.y + box.min.y) / 2;
+    const cz = (box.max.z + box.min.z) / 2;
+    this.terrainMesh.position.set(-cx, -cy, -cz);
+    this.target = new THREE.Vector3(0, 0, 0);
+
+    this.scene.add(this.terrainMesh);
+
+    // Set camera distance based on model size
+    const maxDim = Math.max(box.max.x - box.min.x, box.max.y - box.min.y, box.max.z - box.min.z);
+    this.spherical.radius = maxDim * 1.5;
+
+    // Start render loop if not running
+    if (!this.frameId) this.animate();
+
+    // Resize
+    const wrap = document.getElementById('preview-canvas-wrap');
+    this.renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+    this.camera.aspect = wrap.clientWidth / wrap.clientHeight;
+    this.camera.updateProjectionMatrix();
+  },
+
+  animate() {
+    this.frameId = requestAnimationFrame(() => this.animate());
+    this.updateCamera();
+    this.renderer.render(this.scene, this.camera);
+  },
+
+  close() {
+    document.getElementById('preview-panel').style.display = 'none';
+    if (this.frameId) {
+      cancelAnimationFrame(this.frameId);
+      this.frameId = null;
+    }
+  }
+};
+
+// ═══════════════════════════════════════════════
+//  PROGRESS MODULE
+// ═══════════════════════════════════════════════
+
+const Progress = {
+  update() {
+    const oregonCells = State.gridCells.length;
+    let printed = 0, exported = 0;
+    for (const cell of State.gridCells) {
+      const status = State.tileProgress[cell.id];
+      if (status === 'printed') printed++;
+      else if (status === 'exported') exported++;
+    }
+    const pct = oregonCells > 0 ? Math.round((printed / oregonCells) * 100) : 0;
+    document.getElementById('progress-fill').style.width = pct + '%';
+    document.getElementById('progress-printed').textContent = printed + ' printed';
+    document.getElementById('progress-exported').textContent = exported + ' exported';
+    document.getElementById('progress-total').textContent = `${printed + exported} / ${oregonCells} tiles`;
+  },
+
+  markExported(id) {
+    if (State.tileProgress[id] !== 'printed') {
+      State.tileProgress[id] = 'exported';
+    }
+    Grid.updateCellStyle(id);
+    this.update();
+  },
+
+  markPrinted(id) {
+    State.tileProgress[id] = 'printed';
+    Grid.updateCellStyle(id);
+    this.update();
+  },
+
+  clearStatus(id) {
+    delete State.tileProgress[id];
+    Grid.updateCellStyle(id);
+    this.update();
+  },
+
+  clearAll() {
+    if (!confirm('Clear all progress? This cannot be undone.')) return;
+    State.tileProgress = {};
+    Grid.rebuild();
+    toast('All progress cleared');
+  },
+
+  exportJSON() {
+    return JSON.stringify({
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      gridConfig: {
+        cols: State.gridCols,
+        rows: State.gridRows,
+        bounds: OREGON_BOUNDS,
+      },
+      settings: {
+        printSizeMm: parseFloat(document.getElementById('print-size').value),
+        verticalExaggeration: parseFloat(document.getElementById('vert-exag').value),
+        baseHeightMm: parseFloat(document.getElementById('base-height').value),
+      },
+      tiles: State.tileProgress,
+    }, null, 2);
+  },
+
+  importJSON(json) {
+    try {
+      const data = JSON.parse(json);
+      if (data.version !== 1) throw new Error('Unknown version');
+
+      if (data.gridConfig) {
+        document.getElementById('grid-cols').value = data.gridConfig.cols || 8;
+        document.getElementById('grid-rows').value = data.gridConfig.rows || 6;
+      }
+      if (data.settings) {
+        if (data.settings.printSizeMm) document.getElementById('print-size').value = data.settings.printSizeMm;
+        if (data.settings.verticalExaggeration) {
+          document.getElementById('vert-exag').value = data.settings.verticalExaggeration;
+          document.getElementById('vert-exag-val').textContent = data.settings.verticalExaggeration + '×';
+        }
+        if (data.settings.baseHeightMm) {
+          document.getElementById('base-height').value = data.settings.baseHeightMm;
+          document.getElementById('base-val').textContent = data.settings.baseHeightMm + 'mm';
+        }
+      }
+      State.tileProgress = data.tiles || {};
+      Grid.rebuild();
+      toast('Progress imported successfully!');
+    } catch (e) {
+      toast('Failed to import: ' + e.message);
+    }
+  }
+};
+
+// ═══════════════════════════════════════════════
+//  UI MODULE
+// ═══════════════════════════════════════════════
+
+const UI = {
+  updateSelectionInfo() {
+    const el = document.getElementById('selection-info');
+    if (!State.selectedBounds) {
+      el.innerHTML = '<p style="font-size:12px;color:var(--text-muted);">Click a grid cell on the map to select it, or use the rectangle draw tool for a custom area.</p>';
+      return;
+    }
+
+    const b = State.selectedBounds;
+    const isGrid = State.selectedCell && State.selectedCell !== 'custom';
+    const cellId = State.selectedCell;
+    const status = isGrid ? (State.tileProgress[cellId] || 'none') : 'custom';
+
+    let html = '';
+    if (isGrid) {
+      const [r, c] = cellId.split('-').map(Number);
+      html += `<div style="font-size:13px;font-weight:600;margin-bottom:6px;">Tile ${c}, ${r}</div>`;
+      html += `<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Status: ${status}</div>`;
+    } else {
+      html += `<div style="font-size:13px;font-weight:600;margin-bottom:6px;">Custom Selection</div>`;
+    }
+
+    html += `<div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">
+      ${b.getSouth().toFixed(3)}°N — ${b.getNorth().toFixed(3)}°N<br>
+      ${b.getWest().toFixed(3)}°W — ${b.getEast().toFixed(3)}°W
+    </div>`;
+
+    html += `<button class="btn btn-primary btn-block" onclick="UI.generateModel()">Generate 3D Model</button>`;
+
+    if (State.meshData) {
+      html += `<div class="btn-row" style="margin-top:8px;">
+        <button class="btn" onclick="UI.exportSTL()">⬇ STL</button>
+        <button class="btn" onclick="UI.export3MF()">⬇ 3MF</button>
+      </div>`;
+    }
+
+    if (isGrid) {
+      html += `<div class="btn-row">`;
+      if (status !== 'printed') {
+        html += `<button class="btn btn-success btn-sm" onclick="Progress.markPrinted('${cellId}');UI.updateSelectionInfo();">✓ Mark Printed</button>`;
+      }
+      if (status !== 'none') {
+        html += `<button class="btn btn-danger btn-sm" onclick="Progress.clearStatus('${cellId}');UI.updateSelectionInfo();">✕ Clear</button>`;
+      }
+      html += `</div>`;
+    }
+
+    el.innerHTML = html;
+  },
+
+  async generateModel() {
+    if (!State.selectedBounds) {
+      toast('Select an area on the map first.');
+      return;
+    }
+
+    const resolution = parseInt(document.getElementById('mesh-res').value) || 256;
+    const useWaterDetect = document.getElementById('water-detect').checked;
+
+    try {
+      showLoading('Fetching elevation data…');
+      State.elevationData = await Elevation.fetchElevation(State.selectedBounds, resolution);
+
+      // Water detection (runs after elevation so loading overlay is already up)
+      let waterMask = null;
+      if (useWaterDetect) {
+        showLoading('Detecting water features…');
+        try {
+          waterMask = await WaterDetection.detect(State.selectedBounds, resolution);
+          const waterPct = Math.round(waterMask.reduce((a, b) => a + b, 0) / waterMask.length * 100);
+          console.log(`Water mask: ${waterPct}% water`);
+        } catch (wErr) {
+          console.warn('Water detection failed, continuing without it:', wErr);
+          toast('Water detection failed — using elevation only');
+        }
+      }
+
+      showLoading('Generating mesh…');
+      await new Promise(r => setTimeout(r, 50)); // Let UI update
+      State.meshData = MeshGen.generate(State.elevationData, waterMask);
+
+      showLoading('Building preview…');
+      await new Promise(r => setTimeout(r, 50));
+      Preview.showMesh(State.meshData);
+
+      hideLoading();
+
+      // Mark as exported if it's a grid cell
+      if (State.selectedCell && State.selectedCell !== 'custom') {
+        Progress.markExported(State.selectedCell);
+      }
+
+      this.updateSelectionInfo();
+      toast(`Model generated — ${(State.meshData.triangles.length / 3).toLocaleString()} triangles`);
+    } catch (e) {
+      hideLoading();
+      console.error(e);
+      toast('Error generating model: ' + e.message);
+    }
+  },
+
+  exportSTL() {
+    if (!State.meshData) { toast('Generate a model first.'); return; }
+    showLoading('Building STL…');
+    setTimeout(() => {
+      try {
+        const blob = STLExport.generate(State.meshData);
+        const name = State.selectedCell && State.selectedCell !== 'custom'
+          ? `oregon_tile_${State.selectedCell}.stl`
+          : 'terrain_model.stl';
+        downloadBlob(blob, name);
+        hideLoading();
+        toast('STL downloaded!');
+      } catch (e) {
+        hideLoading();
+        toast('STL export error: ' + e.message);
+      }
+    }, 50);
+  },
+
+  async export3MF() {
+    if (!State.meshData) { toast('Generate a model first.'); return; }
+    showLoading('Building 3MF…');
+    try {
+      const blob = await ThreeMFExport.generate(State.meshData);
+      const name = State.selectedCell && State.selectedCell !== 'custom'
+        ? `oregon_tile_${State.selectedCell}.3mf`
+        : 'terrain_model.3mf';
+      downloadBlob(blob, name);
+      hideLoading();
+      toast('3MF downloaded!');
+    } catch (e) {
+      hideLoading();
+      toast('3MF export error: ' + e.message);
+    }
+  },
+
+  exportProgress() {
+    const json = Progress.exportJSON();
+    downloadBlob(new Blob([json], { type: 'application/json' }), 'terraprint_progress.json');
+    toast('Progress exported!');
+  },
+
+  importProgress() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => Progress.importJSON(ev.target.result);
+      reader.readAsText(file);
+    };
+    input.click();
+  }
+};
+
+// ═══════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════
+
+function initApp() {
+  if (typeof L === 'undefined' || typeof THREE === 'undefined' || typeof JSZip === 'undefined') {
+    setTimeout(initApp, 100);
+    return;
+  }
+  MapModule.init();
+  Preview.init();
+  Grid.fitToOregon();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
+</script>
+</body>
+</html>
