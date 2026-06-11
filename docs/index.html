@@ -1835,8 +1835,9 @@ const Progress = {
   },
 
   exportJSON() {
+    const stepMode = document.getElementById('step-mode').checked;
     return JSON.stringify({
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
       gridConfig: {
         cols: State.gridCols,
@@ -1844,9 +1845,18 @@ const Progress = {
         bounds: OREGON_BOUNDS,
       },
       settings: {
-        printSizeMm: parseFloat(document.getElementById('print-size').value),
+        printSizeMm:          parseFloat(document.getElementById('print-size').value),
         verticalExaggeration: parseFloat(document.getElementById('vert-exag').value),
-        baseHeightMm: parseFloat(document.getElementById('base-height').value),
+        baseHeightMm:         parseFloat(document.getElementById('base-height').value),
+        resolution:           parseInt(document.getElementById('mesh-res').value),
+        waterDetect:          document.getElementById('water-detect').checked,
+        stepMode,
+        stepIntervalM:        stepMode ? parseFloat(document.getElementById('step-interval').value) : null,
+      },
+      terrainColors: {
+        threshWaterM:    parseFloat(document.getElementById('thresh-water').value),
+        threshFlatM:     parseFloat(document.getElementById('thresh-flat').value),
+        threshHillsM:    parseFloat(document.getElementById('thresh-hills').value),
       },
       tiles: State.tileProgress,
     }, null, 2);
@@ -1855,23 +1865,42 @@ const Progress = {
   importJSON(json) {
     try {
       const data = JSON.parse(json);
-      if (data.version !== 1) throw new Error('Unknown version');
+      if (!data.version || data.version > 2) throw new Error('Unknown version');
 
       if (data.gridConfig) {
         document.getElementById('grid-cols').value = data.gridConfig.cols || 8;
         document.getElementById('grid-rows').value = data.gridConfig.rows || 6;
       }
-      if (data.settings) {
-        if (data.settings.printSizeMm) document.getElementById('print-size').value = data.settings.printSizeMm;
-        if (data.settings.verticalExaggeration) {
-          document.getElementById('vert-exag').value = data.settings.verticalExaggeration;
-          document.getElementById('vert-exag-val').textContent = data.settings.verticalExaggeration + '×';
-        }
-        if (data.settings.baseHeightMm) {
-          document.getElementById('base-height').value = data.settings.baseHeightMm;
-          document.getElementById('base-val').textContent = data.settings.baseHeightMm + 'mm';
-        }
+
+      const s = data.settings || {};
+      if (s.printSizeMm)          document.getElementById('print-size').value = s.printSizeMm;
+      if (s.verticalExaggeration) {
+        document.getElementById('vert-exag').value = s.verticalExaggeration;
+        document.getElementById('vert-exag-val').textContent = s.verticalExaggeration + '×';
       }
+      if (s.baseHeightMm) {
+        document.getElementById('base-height').value = s.baseHeightMm;
+        document.getElementById('base-val').textContent = s.baseHeightMm + 'mm';
+      }
+      if (s.resolution) {
+        document.getElementById('mesh-res').value = s.resolution;
+        document.getElementById('res-val').textContent = s.resolution;
+      }
+      if (s.waterDetect != null)  document.getElementById('water-detect').checked = s.waterDetect;
+      if (s.stepMode != null) {
+        document.getElementById('step-mode').checked = s.stepMode;
+        document.getElementById('step-interval-group').style.display = s.stepMode ? 'block' : 'none';
+      }
+      if (s.stepIntervalM) {
+        document.getElementById('step-interval').value = s.stepIntervalM;
+        document.getElementById('step-val').textContent = s.stepIntervalM + 'm';
+      }
+
+      const tc = data.terrainColors || {};
+      if (tc.threshWaterM != null) document.getElementById('thresh-water').value = tc.threshWaterM;
+      if (tc.threshFlatM  != null) document.getElementById('thresh-flat').value  = tc.threshFlatM;
+      if (tc.threshHillsM != null) document.getElementById('thresh-hills').value = tc.threshHillsM;
+
       State.tileProgress = data.tiles || {};
       Grid.rebuild();
       toast('Progress imported successfully!');
