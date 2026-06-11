@@ -1188,89 +1188,56 @@ const MeshGen = {
       }
     }
 
-    // Add walls and base
+    // ── Walls + base using a shared w×h base grid ──────────────────────────
+    // Each terrain edge vertex has a matching base vertex directly below it,
+    // so every wall edge is shared by exactly 2 faces (manifold / watertight).
     const baseZ = 0;
-    const baseVStart = positions.length / 3;
+    const baseStart = positions.length / 3; // index of first base grid vertex
 
-    // South wall (row = h-1)
-    for (let col = 0; col < w; col++) {
-      const topIdx = (h - 1) * w + col;
-      const x = (col / (w - 1)) * meshW;
-      // bottom vertex
-      positions.push(x, 0, baseZ);
-    }
-    for (let col = 0; col < w - 1; col++) {
-      const topL = (h - 1) * w + col;
-      const topR = (h - 1) * w + col + 1;
-      const botL = baseVStart + col;
-      const botR = baseVStart + col + 1;
-      triangles.push(topL, botL, topR);
-      triElevations.push(-1);
-      triangles.push(topR, botL, botR);
-      triElevations.push(-1);
-    }
-
-    // North wall (row = 0)
-    const northBaseStart = positions.length / 3;
-    for (let col = 0; col < w; col++) {
-      const x = (col / (w - 1)) * meshW;
-      positions.push(x, meshH, baseZ);
-    }
-    for (let col = 0; col < w - 1; col++) {
-      const topL = col;
-      const topR = col + 1;
-      const botL = northBaseStart + col;
-      const botR = northBaseStart + col + 1;
-      triangles.push(topL, topR, botL);
-      triElevations.push(-1);
-      triangles.push(topR, botR, botL);
-      triElevations.push(-1);
-    }
-
-    // West wall (col = 0)
-    const westBaseStart = positions.length / 3;
     for (let row = 0; row < h; row++) {
-      const y = ((h - 1 - row) / (h - 1)) * meshH;
-      positions.push(0, y, baseZ);
-    }
-    for (let row = 0; row < h - 1; row++) {
-      const topT = row * w;
-      const topB = (row + 1) * w;
-      const botT = westBaseStart + row;
-      const botB = westBaseStart + row + 1;
-      triangles.push(topT, botT, topB);
-      triElevations.push(-1);
-      triangles.push(topB, botT, botB);
-      triElevations.push(-1);
+      for (let col = 0; col < w; col++) {
+        positions.push(
+          (col / (w - 1)) * meshW,
+          ((h - 1 - row) / (h - 1)) * meshH,
+          baseZ
+        );
+      }
     }
 
-    // East wall (col = w-1)
-    const eastBaseStart = positions.length / 3;
-    for (let row = 0; row < h; row++) {
-      const y = ((h - 1 - row) / (h - 1)) * meshH;
-      positions.push(meshW, y, baseZ);
-    }
-    for (let row = 0; row < h - 1; row++) {
-      const topT = row * w + (w - 1);
-      const topB = (row + 1) * w + (w - 1);
-      const botT = eastBaseStart + row;
-      const botB = eastBaseStart + row + 1;
-      triangles.push(topT, topB, botT);
-      triElevations.push(-1);
-      triangles.push(topB, botB, botT);
-      triElevations.push(-1);
+    const B = (row, col) => baseStart + row * w + col;
+    const T = (row, col) => row * w + col;
+
+    // South wall (terrain row h-1 → base row h-1, outward normal -Y)
+    for (let col = 0; col < w - 1; col++) {
+      triangles.push(T(h-1,col),   B(h-1,col),   T(h-1,col+1)); triElevations.push(-1);
+      triangles.push(T(h-1,col+1), B(h-1,col),   B(h-1,col+1)); triElevations.push(-1);
     }
 
-    // Base (bottom face) — two big triangles
-    const b0 = positions.length / 3;
-    positions.push(0, 0, baseZ);
-    positions.push(meshW, 0, baseZ);
-    positions.push(meshW, meshH, baseZ);
-    positions.push(0, meshH, baseZ);
-    triangles.push(b0, b0 + 2, b0 + 1);
-    triElevations.push(-1);
-    triangles.push(b0, b0 + 3, b0 + 2);
-    triElevations.push(-1);
+    // North wall (terrain row 0 → base row 0, outward normal +Y)
+    for (let col = 0; col < w - 1; col++) {
+      triangles.push(T(0,col),   T(0,col+1), B(0,col));   triElevations.push(-1);
+      triangles.push(T(0,col+1), B(0,col+1), B(0,col));   triElevations.push(-1);
+    }
+
+    // West wall (terrain col 0 → base col 0, outward normal -X)
+    for (let row = 0; row < h - 1; row++) {
+      triangles.push(T(row,0),   B(row,0),   T(row+1,0)); triElevations.push(-1);
+      triangles.push(T(row+1,0), B(row,0),   B(row+1,0)); triElevations.push(-1);
+    }
+
+    // East wall (terrain col w-1 → base col w-1, outward normal +X)
+    for (let row = 0; row < h - 1; row++) {
+      triangles.push(T(row,w-1),   T(row+1,w-1), B(row,w-1));   triElevations.push(-1);
+      triangles.push(T(row+1,w-1), B(row+1,w-1), B(row,w-1));   triElevations.push(-1);
+    }
+
+    // Base face (full w×h grid facing down, outward normal -Z)
+    for (let row = 0; row < h - 1; row++) {
+      for (let col = 0; col < w - 1; col++) {
+        triangles.push(B(row,col),   B(row,col+1),   B(row+1,col));   triElevations.push(-1);
+        triangles.push(B(row,col+1), B(row+1,col+1), B(row+1,col));   triElevations.push(-1);
+      }
+    }
 
     // Classify triangles by color
     // 0=water, 1=flatland, 2=hills, 3=mountain
@@ -1322,6 +1289,60 @@ const MeshGen = {
       maxElev,
       elevScale,
       baseHeight,
+    };
+  }
+};
+
+// ═══════════════════════════════════════════════
+//  MESH REPAIR
+// ═══════════════════════════════════════════════
+
+const MeshRepair = {
+  repair(meshData) {
+    const { vertices, triangles, triColors, triElevations } = meshData;
+    const numTris = triangles.length / 3;
+    const issues = [];
+
+    // ── Remove degenerate (zero-area) triangles ──
+    const keep = [];
+    for (let i = 0; i < numTris; i++) {
+      const i0 = triangles[i*3], i1 = triangles[i*3+1], i2 = triangles[i*3+2];
+      const ax = vertices[i0*3], ay = vertices[i0*3+1], az = vertices[i0*3+2];
+      const bx = vertices[i1*3], by = vertices[i1*3+1], bz = vertices[i1*3+2];
+      const cx = vertices[i2*3], cy = vertices[i2*3+1], cz = vertices[i2*3+2];
+      const ex = bx-ax, ey = by-ay, ez = bz-az;
+      const fx = cx-ax, fy = cy-ay, fz = cz-az;
+      const cross2 = (ey*fz-ez*fy)**2 + (ez*fx-ex*fz)**2 + (ex*fy-ey*fx)**2;
+      if (cross2 > 1e-12) keep.push(i);
+    }
+
+    let out = meshData;
+    const removed = numTris - keep.length;
+    if (removed > 0) {
+      const n = keep.length;
+      const newTri = new Uint32Array(n * 3);
+      const newCol = new Uint8Array(n);
+      const newElev = new Array(n);
+      for (let j = 0; j < n; j++) {
+        const i = keep[j];
+        newTri[j*3]   = triangles[i*3];
+        newTri[j*3+1] = triangles[i*3+1];
+        newTri[j*3+2] = triangles[i*3+2];
+        newCol[j]  = triColors[i];
+        newElev[j] = triElevations[i];
+      }
+      out = { ...out, triangles: newTri, triColors: newCol, triElevations: newElev };
+      issues.push(`${removed} degenerate face${removed !== 1 ? 's' : ''} removed`);
+    }
+
+    return {
+      ...out,
+      repairStats: {
+        ok: removed === 0,
+        triangles: out.triangles.length / 3,
+        vertices: out.vertices.length / 3,
+        issues,
+      }
     };
   }
 };
@@ -1898,6 +1919,18 @@ const UI = {
         <button class="btn" onclick="UI.exportSTL()">⬇ STL</button>
         <button class="btn" onclick="UI.export3MF()">⬇ 3MF</button>
       </div>`;
+      const s = State.meshData.repairStats;
+      if (s) {
+        const ok = s.ok && s.issues.length === 0;
+        const color = ok ? 'var(--success)' : '#f0a020';
+        const icon  = ok ? '✓' : '⚠';
+        const detail = s.issues.length ? s.issues.join(' · ') : 'No issues found';
+        html += `<div style="margin-top:10px;padding:9px 11px;background:var(--bg-surface);border:1px solid var(--border);border-radius:8px;">
+          <div style="font-size:11px;font-weight:700;color:${color};margin-bottom:5px;">${icon} Mesh Health</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:3px;">${s.triangles.toLocaleString()} triangles &nbsp;·&nbsp; ${s.vertices.toLocaleString()} vertices</div>
+          <div style="font-size:11px;color:var(--text-muted);">${detail}</div>
+        </div>`;
+      }
     }
 
     if (isGrid) {
@@ -1942,8 +1975,12 @@ const UI = {
       }
 
       showLoading('Generating mesh…');
-      await new Promise(r => setTimeout(r, 50)); // Let UI update
-      State.meshData = MeshGen.generate(State.elevationData, waterMask);
+      await new Promise(r => setTimeout(r, 50));
+      const rawMesh = MeshGen.generate(State.elevationData, waterMask);
+
+      showLoading('Checking mesh…');
+      await new Promise(r => setTimeout(r, 20));
+      State.meshData = MeshRepair.repair(rawMesh);
 
       showLoading('Building preview…');
       await new Promise(r => setTimeout(r, 50));
@@ -1957,7 +1994,9 @@ const UI = {
       }
 
       this.updateSelectionInfo();
-      toast(`Model generated — ${(State.meshData.triangles.length / 3).toLocaleString()} triangles`);
+      const s = State.meshData.repairStats;
+      const repairNote = s.issues.length ? ` · ${s.issues.join(', ')}` : '';
+      toast(`${s.triangles.toLocaleString()} triangles · mesh sealed${repairNote}`);
     } catch (e) {
       hideLoading();
       console.error(e);
