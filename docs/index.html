@@ -1015,8 +1015,8 @@ const WaterDetection = {
     const n = bounds.getNorth(), e = bounds.getEast();
 
     const query = `[out:json][timeout:30];(
-      way["natural"="water"]["water"!~"^(river|stream)$"](${s},${w},${n},${e});
-      relation["natural"="water"]["water"!~"^(river|stream)$"](${s},${w},${n},${e});
+      way["natural"="water"]["water"~"^(lake|reservoir)$"](${s},${w},${n},${e});
+      relation["natural"="water"]["water"~"^(lake|reservoir)$"](${s},${w},${n},${e});
     );out geom;`;
 
     const resp = await fetch('https://overpass-api.de/api/interpreter', {
