@@ -1255,6 +1255,46 @@ const MeshGen = {
       }
     }
 
+    // Post-process water mask: remove cells that are above the local water surface.
+    // For each connected component of water cells find the minimum elevation, then
+    // un-mark any cell more than MARGIN meters above it. This eliminates OSM river
+    // polygons bleeding onto riverbanks without breaking river runs in steep canyons.
+    if (waterMask) {
+      const MARGIN = 10;
+      const visited = new Uint8Array(w * h);
+      const clampedMask = new Uint8Array(waterMask);
+
+      for (let start = 0; start < w * h; start++) {
+        if (!clampedMask[start] || visited[start]) continue;
+
+        // BFS to collect the connected component and its minimum elevation
+        const queue = [start];
+        const component = [];
+        visited[start] = 1;
+        let minElev = origData[start];
+        let head = 0;
+
+        while (head < queue.length) {
+          const idx = queue[head++];
+          component.push(idx);
+          if (origData[idx] < minElev) minElev = origData[idx];
+
+          const r = Math.floor(idx / w), c = idx % w;
+          if (r > 0     && clampedMask[idx - w] && !visited[idx - w]) { visited[idx - w] = 1; queue.push(idx - w); }
+          if (r < h - 1 && clampedMask[idx + w] && !visited[idx + w]) { visited[idx + w] = 1; queue.push(idx + w); }
+          if (c > 0     && clampedMask[idx - 1] && !visited[idx - 1]) { visited[idx - 1] = 1; queue.push(idx - 1); }
+          if (c < w - 1 && clampedMask[idx + 1] && !visited[idx + 1]) { visited[idx + 1] = 1; queue.push(idx + 1); }
+        }
+
+        // Un-mark cells that sit above the component's water surface
+        for (const idx of component) {
+          if (origData[idx] > minElev + MARGIN) clampedMask[idx] = 0;
+        }
+      }
+
+      waterMask = clampedMask;
+    }
+
     // Classify triangles by color
     // 0=water, 1=flat terrain (valley/desert/plateau), 2=forest/hills, 3=mountain peaks
     // Priority: water → mountain peaks (high elevation) → flat (low slope) → forest/hills
@@ -1277,10 +1317,7 @@ const MeshGen = {
             if (waterMask[row * w + col]) { isWater = true; break; }
           }
         }
-        // Only paint as water if the surface is flat enough — prevents OSM river
-        // polygons from bleeding onto steep riverbanks and hillsides.
-        const waterSlopeThresh = Math.sin(25 * Math.PI / 180);
-        if (isWater && s < waterSlopeThresh) { triColors[i] = 0; continue; }
+        if (isWater) { triColors[i] = 0; continue; }
       }
 
       if (e < 0) {
