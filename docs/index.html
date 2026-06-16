@@ -412,7 +412,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
     TerraPrint
   </div>
   <div class="header-actions">
-    <button class="btn btn-sm" onclick="UI.importProgress()" title="Import progress">📂 Import</button>
+    <button id="btn-import" class="btn btn-sm" onclick="UI.importProgress()" title="Import progress">📂 Import</button>
     <button class="btn btn-sm" onclick="UI.exportProgress()" title="Export progress">💾 Export</button>
   </div>
 </header>
@@ -494,7 +494,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
     <div class="panel-section">
       <h3>Terrain Colors (3MF)</h3>
       <div class="section-body">
-        <p style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Water uses an elevation threshold. Flat terrain (desert, plateau, valley) is classified by slope angle. Mountains are the highest peaks above the elevation cutoff. When water detection is on, detected lakes &amp; rivers override the elevation threshold.</p>
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Flat terrain (low slope) is beige in the valley band and the high-desert band. Forest/Hills is the solid green zone between them — steep slopes anywhere also stay green. Mountains are grey above the peak cutoff.</p>
         <div class="threshold-row">
           <span class="swatch" style="background:var(--topo-water)"></span>
           <span>Water</span>
@@ -510,13 +510,15 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
         <div class="threshold-row">
           <span class="swatch" style="background:var(--topo-hills)"></span>
           <span>Forest / Hills</span>
-          <span style="color:var(--text-muted)">below</span>
-          <input type="number" id="thresh-hills" value="1500" step="50"> <span style="color:var(--text-muted)">m</span>
+          <input type="number" id="thresh-forest-lo" value="400" step="50">
+          <span style="color:var(--text-muted)">–</span>
+          <input type="number" id="thresh-desert-lo" value="1200" step="50"> <span style="color:var(--text-muted)">m</span>
         </div>
         <div class="threshold-row">
           <span class="swatch" style="background:var(--topo-mountain)"></span>
           <span>Mountains</span>
-          <span style="color:var(--text-muted);flex:1">above</span>
+          <span style="color:var(--text-muted)">above</span>
+          <input type="number" id="thresh-hills" value="1500" step="50"> <span style="color:var(--text-muted)">m</span>
         </div>
       </div>
     </div>
@@ -1104,6 +1106,8 @@ const MeshGen = {
     const baseHeight = parseFloat(document.getElementById('base-height').value) || 4;
     const threshWater    = parseFloat(document.getElementById('thresh-water').value) || 1;
     const threshMountain = parseFloat(document.getElementById('thresh-hills').value) || 1500;
+    const threshForestLo = parseFloat(document.getElementById('thresh-forest-lo').value) || 400;
+    const threshDesertLo = parseFloat(document.getElementById('thresh-desert-lo').value) || 1200;
     const slopeDeg       = parseFloat(document.getElementById('thresh-slope').value) || 12;
     const threshSlope    = Math.sin(slopeDeg * Math.PI / 180);
 
@@ -1332,11 +1336,13 @@ const MeshGen = {
       } else if (e < threshWater) {
         triColors[i] = 0; // water
       } else if (e >= threshMountain) {
-        triColors[i] = 3; // mountain peaks (absolute high elevation)
-      } else if (s < threshSlope) {
-        triColors[i] = 1; // flat terrain — valleys AND high desert/plateau
+        triColors[i] = 3; // mountain peaks
+      } else if (s < threshSlope && e < threshForestLo) {
+        triColors[i] = 1; // flat low-elevation valley
+      } else if (s < threshSlope && e >= threshDesertLo) {
+        triColors[i] = 1; // flat high-elevation desert/plateau
       } else {
-        triColors[i] = 2; // sloped mid-elevation terrain — forest/hills
+        triColors[i] = 2; // forest/hills — solid band + all steep slopes
       }
     }
 
@@ -1846,18 +1852,21 @@ const Progress = {
     }
     Grid.updateCellStyle(id);
     this.update();
+    FileHandleStore.autoSave();
   },
 
   markPrinted(id) {
     State.tileProgress[id] = 'printed';
     Grid.updateCellStyle(id);
     this.update();
+    FileHandleStore.autoSave();
   },
 
   clearStatus(id) {
     delete State.tileProgress[id];
     Grid.updateCellStyle(id);
     this.update();
+    FileHandleStore.autoSave();
   },
 
   clearAll() {
@@ -1890,6 +1899,8 @@ const Progress = {
       terrainColors: {
         threshWaterM:    parseFloat(document.getElementById('thresh-water').value),
         threshMountainM: parseFloat(document.getElementById('thresh-hills').value),
+        threshForestLoM: parseFloat(document.getElementById('thresh-forest-lo').value),
+        threshDesertLoM: parseFloat(document.getElementById('thresh-desert-lo').value),
         threshSlopeDeg:  parseFloat(document.getElementById('thresh-slope').value),
       },
       tiles: State.tileProgress,
@@ -1940,6 +1951,8 @@ const Progress = {
       const tc = data.terrainColors || {};
       if (tc.threshWaterM    != null) document.getElementById('thresh-water').value = tc.threshWaterM;
       if (tc.threshMountainM != null) document.getElementById('thresh-hills').value = tc.threshMountainM;
+      if (tc.threshForestLoM != null) document.getElementById('thresh-forest-lo').value = tc.threshForestLoM;
+      if (tc.threshDesertLoM != null) document.getElementById('thresh-desert-lo').value = tc.threshDesertLoM;
       if (tc.threshSlopeDeg  != null) document.getElementById('thresh-slope').value = tc.threshSlopeDeg;
 
       State.tileProgress = data.tiles || {};
@@ -1949,6 +1962,82 @@ const Progress = {
       toast('Failed to import: ' + e.message);
     }
   }
+};
+
+// ═══════════════════════════════════════════════
+//  FILE HANDLE STORE
+// ═══════════════════════════════════════════════
+
+const FileHandleStore = {
+  DB: 'terraprint-fs',
+  STORE: 'handles',
+
+  _open() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(this.DB, 1);
+      req.onupgradeneeded = e => e.target.result.createObjectStore(this.STORE);
+      req.onsuccess = e => resolve(e.target.result);
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async save(handle) {
+    const db = await this._open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(this.STORE, 'readwrite');
+      tx.objectStore(this.STORE).put(handle, 'progress');
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  },
+
+  async load() {
+    const db = await this._open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(this.STORE, 'readonly');
+      const req = tx.objectStore(this.STORE).get('progress');
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  // Write current progress to stored handle silently. No-op if no handle or no permission.
+  async autoSave() {
+    if (!window.showSaveFilePicker) return;
+    try {
+      const handle = await this.load();
+      if (!handle) return;
+      if (await handle.queryPermission({ mode: 'readwrite' }) !== 'granted') return;
+      const writable = await handle.createWritable();
+      await writable.write(Progress.exportJSON());
+      await writable.close();
+    } catch (e) {
+      console.warn('Auto-save failed:', e);
+    }
+  },
+
+  // On page load: silently load if permission already granted, otherwise surface a Resume button.
+  async tryAutoLoad() {
+    if (!window.showOpenFilePicker) return;
+    try {
+      const handle = await this.load();
+      if (!handle) return;
+      const perm = await handle.queryPermission({ mode: 'readwrite' });
+      if (perm === 'granted') {
+        Progress.importJSON(await (await handle.getFile()).text());
+        toast('Progress loaded from ' + handle.name);
+      } else if (perm === 'prompt') {
+        const btn = document.getElementById('btn-import');
+        if (btn) {
+          btn.textContent = '📂 Resume';
+          btn.title = 'Resume from ' + handle.name;
+          btn.onclick = () => UI.resumeFromHandle();
+        }
+      }
+    } catch (e) {
+      console.warn('Auto-load check failed:', e);
+    }
+  },
 };
 
 // ═══════════════════════════════════════════════
@@ -2110,13 +2199,51 @@ const UI = {
     }
   },
 
-  exportProgress() {
+  async exportProgress() {
     const json = Progress.exportJSON();
+    if (window.showSaveFilePicker) {
+      try {
+        // Reuse stored handle if we still have write permission; otherwise prompt.
+        let handle = await FileHandleStore.load();
+        if (handle && await handle.queryPermission({ mode: 'readwrite' }) !== 'granted') handle = null;
+        if (!handle) {
+          handle = await window.showSaveFilePicker({
+            suggestedName: 'terraprint_progress.json',
+            types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
+          });
+          await FileHandleStore.save(handle);
+        }
+        const writable = await handle.createWritable();
+        await writable.write(json);
+        await writable.close();
+        toast('Saved to ' + handle.name);
+        return;
+      } catch (e) {
+        if (e.name === 'AbortError') return;
+        console.warn('showSaveFilePicker failed, falling back:', e);
+      }
+    }
     downloadBlob(new Blob([json], { type: 'application/json' }), 'terraprint_progress.json');
     toast('Progress exported!');
   },
 
-  importProgress() {
+  async importProgress() {
+    if (window.showOpenFilePicker) {
+      try {
+        const [handle] = await window.showOpenFilePicker({
+          types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
+        });
+        await FileHandleStore.save(handle);
+        Progress.importJSON(await (await handle.getFile()).text());
+        const btn = document.getElementById('btn-import');
+        if (btn) { btn.textContent = '📂 Import'; btn.title = 'Import progress'; btn.onclick = () => UI.importProgress(); }
+        toast('Progress loaded from ' + handle.name);
+        return;
+      } catch (e) {
+        if (e.name === 'AbortError') return;
+        console.warn('showOpenFilePicker failed, falling back:', e);
+      }
+    }
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
@@ -2128,6 +2255,22 @@ const UI = {
       reader.readAsText(file);
     };
     input.click();
+  },
+
+  async resumeFromHandle() {
+    try {
+      const handle = await FileHandleStore.load();
+      if (!handle) return this.importProgress();
+      const perm = await handle.requestPermission({ mode: 'readwrite' });
+      if (perm === 'granted') {
+        Progress.importJSON(await (await handle.getFile()).text());
+        const btn = document.getElementById('btn-import');
+        if (btn) { btn.textContent = '📂 Import'; btn.title = 'Import progress'; btn.onclick = () => UI.importProgress(); }
+        toast('Progress loaded from ' + handle.name);
+      }
+    } catch (e) {
+      if (e.name !== 'AbortError') console.error(e);
+    }
   }
 };
 
@@ -2143,6 +2286,7 @@ function initApp() {
   MapModule.init();
   Preview.init();
   Grid.fitToOregon();
+  FileHandleStore.tryAutoLoad();
 }
 
 if (document.readyState === 'loading') {
