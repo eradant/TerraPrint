@@ -467,8 +467,15 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
           </div>
         </div>
         <div class="input-group" style="display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" id="water-detect" checked style="accent-color:var(--accent);width:16px;height:16px;">
-          <label for="water-detect" style="margin:0;cursor:pointer;">Detect water (lakes &amp; rivers via OSM)</label>
+          <input type="checkbox" id="water-detect" checked style="accent-color:var(--accent);width:16px;height:16px;" onchange="document.getElementById('water-clamp-group').style.display=this.checked?'block':'none'">
+          <label for="water-detect" style="margin:0;cursor:pointer;">Detect water (lakes &amp; reservoirs via OSM)</label>
+        </div>
+        <div class="input-group" id="water-clamp-group" style="margin-top:6px;">
+          <label>Lake edge clamp (meters)</label>
+          <div class="range-row">
+            <input type="range" id="water-clamp" min="1" max="50" step="1" value="10" oninput="document.getElementById('water-clamp-val').textContent=this.value+'m'">
+            <span class="range-val" id="water-clamp-val">10m</span>
+          </div>
         </div>
         <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:6px;">
           <input type="checkbox" id="step-mode" style="accent-color:var(--accent);width:16px;height:16px;" onchange="document.getElementById('step-interval-group').style.display=this.checked?'block':'none'">
@@ -1260,7 +1267,7 @@ const MeshGen = {
     // un-mark any cell more than MARGIN meters above it. This eliminates OSM river
     // polygons bleeding onto riverbanks without breaking river runs in steep canyons.
     if (waterMask) {
-      const MARGIN = 10;
+      const MARGIN = parseFloat(document.getElementById('water-clamp').value) || 10;
       const visited = new Uint8Array(w * h);
       const clampedMask = new Uint8Array(waterMask);
 
@@ -1876,6 +1883,7 @@ const Progress = {
         baseHeightMm:         parseFloat(document.getElementById('base-height').value),
         resolution:           parseInt(document.getElementById('mesh-res').value),
         waterDetect:          document.getElementById('water-detect').checked,
+        waterClampM:          parseFloat(document.getElementById('water-clamp').value),
         stepMode,
         stepIntervalM:        stepMode ? parseFloat(document.getElementById('step-interval').value) : null,
       },
@@ -1912,7 +1920,14 @@ const Progress = {
         document.getElementById('mesh-res').value = s.resolution;
         document.getElementById('res-val').textContent = s.resolution;
       }
-      if (s.waterDetect != null)  document.getElementById('water-detect').checked = s.waterDetect;
+      if (s.waterDetect != null) {
+        document.getElementById('water-detect').checked = s.waterDetect;
+        document.getElementById('water-clamp-group').style.display = s.waterDetect ? 'block' : 'none';
+      }
+      if (s.waterClampM != null) {
+        document.getElementById('water-clamp').value = s.waterClampM;
+        document.getElementById('water-clamp-val').textContent = s.waterClampM + 'm';
+      }
       if (s.stepMode != null) {
         document.getElementById('step-mode').checked = s.stepMode;
         document.getElementById('step-interval-group').style.display = s.stepMode ? 'block' : 'none';
