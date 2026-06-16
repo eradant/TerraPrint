@@ -1277,7 +1277,10 @@ const MeshGen = {
             if (waterMask[row * w + col]) { isWater = true; break; }
           }
         }
-        if (isWater) { triColors[i] = 0; continue; }
+        // Only paint as water if the surface is flat enough — prevents OSM river
+        // polygons from bleeding onto steep riverbanks and hillsides.
+        const waterSlopeThresh = Math.sin(25 * Math.PI / 180);
+        if (isWater && s < waterSlopeThresh) { triColors[i] = 0; continue; }
       }
 
       if (e < 0) {
