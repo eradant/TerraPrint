@@ -1422,9 +1422,10 @@ const MeshGen = {
     // where two separate fans of same-color triangles touch only at v (no shared
     // edge). In the 3MF wall generator this makes the vertical edge
     // top(v)↔base(v) appear 4× instead of 2× → slicer reports open edges.
-    // Fix: detect these vertices and reassign the minority fan(s) to the most
-    // common neighboring color, widening the narrow waist to at least one full
-    // triangle edge.
+    //
+    // IMPORTANT: only reassign fans that belong to the SAME edge-connected
+    // component. Fans that are already in different components will be separate
+    // 3MF objects and don't share a wall vertex, so they are not a problem.
     {
       const QW = w - 1, QH = h - 1;
       const numTerrainTris = 2 * QW * QH;
@@ -1446,7 +1447,6 @@ const MeshGen = {
       };
 
       // All terrain triangles incident to terrain vertex at grid position (vr, vc).
-      // Each vertex acts as TL/TR/BL/BR in the surrounding quads.
       const getIncident = (vr, vc) => {
         const out = [];
         if (vr < QH && vc < QW) out.push(2 * (vr * QW + vc));                // as TL: Tri1
@@ -1458,7 +1458,28 @@ const MeshGen = {
         return out;
       };
 
+      // Step 1: Precompute edge-connected component ID for each terrain triangle.
+      //         Triangles with the same color that are reachable from each other
+      //         via same-color edge adjacency share a component ID.
+      const compId = new Int32Array(numTerrainTris).fill(-1);
+      let nextCId = 0;
+      for (let start = 0; start < numTerrainTris; start++) {
+        if (compId[start] !== -1) continue;
+        const color = triColors[start];
+        const cid = nextCId++;
+        const q = [start]; compId[start] = cid;
+        for (let hd = 0; hd < q.length; hd++) {
+          for (const nb of neighbors(q[hd])) {
+            if (compId[nb] === -1 && triColors[nb] === color) {
+              compId[nb] = cid; q.push(nb);
+            }
+          }
+        }
+      }
+
+      // Step 2: Detect and fix bowtie vertices.
       let anyBowtieFix = false;
+      let bowtieFixes = 0;
 
       for (let vr = 0; vr < h; vr++) {
         for (let vc = 0; vc < w; vc++) {
@@ -1466,7 +1487,6 @@ const MeshGen = {
           const inc = getIncident(vr, vc);
           if (inc.length < 2) continue;
 
-          // Group incident terrain tris by color
           const byColor = new Map();
           for (const ti of inc) {
             const c = triColors[ti];
@@ -1477,7 +1497,8 @@ const MeshGen = {
           for (const [color, cTris] of byColor) {
             if (cTris.length < 2) continue;
 
-            // "Other" vertices (besides v) for each triangle in this color group
+            // Build fan adjacency: two tris are in the same fan at v iff they
+            // share a vertex OTHER than v (i.e. they share an edge incident to v).
             const otherSets = cTris.map(ti => {
               const s = new Set();
               for (let k = 0; k < 3; k++) {
@@ -1487,8 +1508,6 @@ const MeshGen = {
               return s;
             });
 
-            // Fan adjacency: two tris share the same fan at v iff they share
-            // at least one vertex OTHER than v (i.e. they share an edge at v).
             const fanAdj = cTris.map(() => []);
             for (let i = 0; i < cTris.length; i++) {
               for (let j = i + 1; j < cTris.length; j++) {
@@ -1500,12 +1519,11 @@ const MeshGen = {
               }
             }
 
-            // BFS over fan-adjacency
             const vis  = new Uint8Array(cTris.length);
             const fans = [];
-            for (let s = 0; s < cTris.length; s++) {
-              if (vis[s]) continue;
-              const fan = []; const bq = [s]; vis[s] = 1;
+            for (let si = 0; si < cTris.length; si++) {
+              if (vis[si]) continue;
+              const fan = []; const bq = [si]; vis[si] = 1;
               for (let hd = 0; hd < bq.length; hd++) {
                 fan.push(cTris[bq[hd]]);
                 for (const nb of fanAdj[bq[hd]]) {
@@ -1514,39 +1532,52 @@ const MeshGen = {
               }
               fans.push(fan);
             }
-            if (fans.length <= 1) continue; // single fan — no bowtie
+            if (fans.length <= 1) continue;
 
-            // Bowtie at v for this color: reassign minority fan(s)
-            fans.sort((a, b) => b.length - a.length); // largest fan first
-            for (let f = 1; f < fans.length; f++) {
-              const nbrCount = [0, 0, 0, 0];
-              for (const ti of fans[f]) {
-                for (const nb of neighbors(ti)) {
-                  if (triColors[nb] !== color) nbrCount[triColors[nb]]++;
+            // KEY GUARD: fans in different edge-connected components will become
+            // separate 3MF objects and don't cause a manifold problem. Only fix
+            // fans that share the same component ID.
+            const fansByComp = new Map();
+            for (const fan of fans) {
+              const cid = compId[fan[0]];
+              if (!fansByComp.has(cid)) fansByComp.set(cid, []);
+              fansByComp.get(cid).push(fan);
+            }
+
+            for (const [, compFans] of fansByComp) {
+              if (compFans.length <= 1) continue; // only one fan in this component → OK
+
+              // True bowtie within a single component. Reassign minority fan(s).
+              compFans.sort((a, b) => b.length - a.length);
+              for (let f = 1; f < compFans.length; f++) {
+                const nbrCount = [0, 0, 0, 0];
+                for (const ti of compFans[f]) {
+                  for (const nb of neighbors(ti)) {
+                    if (triColors[nb] !== color) nbrCount[triColors[nb]]++;
+                  }
                 }
-              }
-              let best = -1, bestN = 0;
-              for (let k = 1; k < 4; k++) {
-                if (nbrCount[k] > bestN) { bestN = nbrCount[k]; best = k; }
-              }
-              if (best === -1) { // fall back to any non-self color (including 0)
-                for (let k = 0; k < 4; k++) {
-                  if (k !== color && nbrCount[k] > bestN) { bestN = nbrCount[k]; best = k; }
+                let best = -1, bestN = 0;
+                for (let k = 1; k < 4; k++) {
+                  if (nbrCount[k] > bestN) { bestN = nbrCount[k]; best = k; }
                 }
-              }
-              if (best !== -1 && best !== color) {
-                for (const ti of fans[f]) triColors[ti] = best;
-                anyBowtieFix = true;
+                if (best === -1) {
+                  for (let k = 0; k < 4; k++) {
+                    if (k !== color && nbrCount[k] > bestN) { bestN = nbrCount[k]; best = k; }
+                  }
+                }
+                if (best !== -1 && best !== color) {
+                  for (const ti of compFans[f]) triColors[ti] = best;
+                  anyBowtieFix = true;
+                  bowtieFixes++;
+                }
               }
             }
           }
         }
       }
 
-      if (anyBowtieFix) console.log('[TerraPrint] Bowtie vertices fixed; running follow-up smoothing.');
-
-      // Bowtie fixes can introduce new small components; clean them up
       if (anyBowtieFix) {
+        console.log(`[TerraPrint] Fixed ${bowtieFixes} bowtie fan(s); running follow-up smoothing.`);
         for (let pass = 0; pass < 5; pass++) {
           const visited = new Uint8Array(numTerrainTris);
           let anyChanged = false;
