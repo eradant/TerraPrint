@@ -1902,6 +1902,11 @@ const ThreeMFExport = {
       const E_low  = E[ci];
       const E_high = E[ci + 1]; // Infinity for mountains
 
+      // Skip bands whose ceiling equals (or is below) their floor — this happens
+      // when the elevation threshold falls below the tile's minimum terrain
+      // elevation, making toMM() clamp to 0 and collapsing the band to zero height.
+      if (E_high <= E_low) continue;
+
       // Include all terrain triangles whose average elevation is at or above E_low.
       // Band 0 (E_low=0) captures every terrain triangle.
       const bandTris = [];
