@@ -1832,49 +1832,45 @@ const ThreeMFExport = {
     const numVerts = v.length / 3;
     const warnings = [];
 
-    // ── Stacked elevation-band approach ──────────────────────────────────────
-    // Instead of one closed solid per color-classified component (which creates
-    // duplicate coplanar walls at every color seam), we build four solids that
-    // STACK vertically like geological layers:
+    // ── Stacked color-band approach ───────────────────────────────────────────
+    // Four closed solids that STACK vertically.  Band ci includes all terrain
+    // triangles whose preview color is >= ci (so band 0 is the whole tile, band 3
+    // is only the mountain-colored peaks).  Each band's top follows the terrain,
+    // CLAMPED to the next band's floor (flat cap where the next band begins).
+    // The bottom is a flat plane at E[ci].  Adjacent bands share that plane with
+    // no interior seam walls and no duplicate geometry.
     //
-    //  Band 0 (Water):     z = 0           → E_water    covers full tile
-    //  Band 1 (Flatland):  z = E_water     → E_flatland covers terrain > E_water
-    //  Band 2 (Hills):     z = E_flatland  → E_mountain covers terrain > E_flatland
-    //  Band 3 (Mountains): z = E_mountain  → terrain    covers terrain > E_mountain
-    //
-    // Each band's top follows the terrain surface, CLAMPED to the band's upper
-    // threshold (creating a flat "cap" where the next band starts). The bottom is
-    // a flat plane at the lower threshold. Adjacent bands share that flat plane
-    // perfectly — no inner seam walls, no duplicate geometry, guaranteed manifold.
-    //
-    // The 3D preview keeps its slope+elevation coloring unchanged; only the export
-    // changes to these clean elevation-only bands.
+    // E[ci] is derived directly from the triColors distribution — it is the minimum
+    // vertex z of all terrain triangles with triColors >= ci.  By construction,
+    // every included triangle already satisfies minVZ >= E[ci], so walls are never
+    // inverted and the non-manifold risk from straddling vertices is eliminated.
+    // This also guarantees the bands exactly match what the 3-D preview shows.
 
     const elevScale = mesh.elevScale;
-    const minElev   = mesh.minElev;
+    const triColors = mesh.triColors;
 
-    // Threshold elevations in real-world metres → model-space mm
-    const toMM = e => Math.max(0, (e - minElev) * elevScale);
-    const threshWater    = parseFloat(opts.threshWater)    || 1;
-    const threshForestLo = parseFloat(opts.threshForestLo) || 400;
-    const threshMountain = parseFloat(opts.threshMountain) || 1500;
-
-    // E[ci] = lower threshold of band ci; E[ci+1] = upper threshold (cap)
-    const E = [
-      0,                    // water    bottom
-      toMM(threshWater),    // flatland bottom / water cap
-      toMM(threshForestLo), // hills    bottom / flatland cap
-      toMM(threshMountain), // mountain bottom / hills cap
-      Infinity,             // mountain top (no cap — follows terrain)
-    ];
-
-    // Pre-compute per-triangle elevation in model-space mm (-1 for wall/base tris)
+    // Flag wall/base triangles (-1) vs terrain triangles (elevation in mm)
     const triElevMM = new Float64Array(numTris);
     for (let ti = 0; ti < numTris; ti++) {
       triElevMM[ti] = mesh.triElevations[ti] < 0
         ? -1
-        : (mesh.triElevations[ti] - minElev) * elevScale;
+        : (mesh.triElevations[ti] - mesh.minElev) * elevScale;
     }
+
+    // E[ci] = minimum vertex z (model-space mm) of all terrain tris with triColors >= ci.
+    // E[0] is always 0 (the build plate).  Each successive E is >= the previous one
+    // because triColors>=ci+1 ⊆ triColors>=ci, so its minimum can only be higher.
+    const E = [0];
+    for (let ci = 1; ci <= 3; ci++) {
+      let floor = Infinity;
+      for (let ti = 0; ti < numTris; ti++) {
+        if (triElevMM[ti] < 0 || triColors[ti] < ci) continue;
+        const m = Math.min(v[t[ti*3]*3+2], v[t[ti*3+1]*3+2], v[t[ti*3+2]*3+2]);
+        if (m < floor) floor = m;
+      }
+      E.push(isFinite(floor) ? floor : E[ci - 1]); // collapse to previous if color absent
+    }
+    E.push(Infinity); // mountain top — no cap, follows terrain
 
     // Build the model XML as an array of small string fragments, then hand
     // the whole array to new Blob() at the end.  This avoids ever creating a
@@ -1902,20 +1898,17 @@ const ThreeMFExport = {
       const E_low  = E[ci];
       const E_high = E[ci + 1]; // Infinity for mountains
 
-      // Skip bands whose ceiling equals (or is below) their floor — this happens
-      // when the elevation threshold falls below the tile's minimum terrain
-      // elevation, making toMM() clamp to 0 and collapsing the band to zero height.
+      // Skip bands whose ceiling equals their floor — happens when a color is
+      // absent from this tile (e.g. no water bodies → Water and Flatland collapse).
       if (E_high <= E_low) continue;
 
-      // Include terrain triangles where EVERY vertex is at or above E_low.
-      // Using min-vertex (not average) is critical: if we used average, a triangle
-      // whose average exceeds E_low but whose lowest vertex is below E_low would
-      // produce an inverted wall (top z < base z), breaking manifold geometry.
+      // Select terrain triangles whose preview color is >= ci.
+      // Because E_low = min vertex z of this group (by construction above), every
+      // included triangle automatically has all vertices >= E_low — no inversion possible.
       const bandTris = [];
       for (let ti = 0; ti < numTris; ti++) {
         if (triElevMM[ti] < 0) continue; // wall / base triangle — skip
-        const minVZ = Math.min(v[t[ti*3]*3+2], v[t[ti*3+1]*3+2], v[t[ti*3+2]*3+2]);
-        if (minVZ >= E_low) bandTris.push(ti);
+        if (triColors[ti] >= ci) bandTris.push(ti);
       }
       if (bandTris.length === 0) continue;
 
