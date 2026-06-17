@@ -1567,11 +1567,14 @@ const ThreeMFExport = {
     const numVerts = v.length / 3;
     const warnings = [];
 
-    // Build one closed solid per color.
-    // Each solid = terrain surface triangles for that color (top)
+    // Build one closed solid per edge-connected component of each color.
+    // Splitting by edge-connected component (not just vertex-connected) prevents
+    // "pinch-point" (bowtie) topology where two patches share only a vertex —
+    // that would create a non-manifold vertical wall edge appearing 4× instead of 2×.
+    //
+    // Each solid = terrain surface triangles for that component (top)
     //            + same triangles projected to z=0, reversed winding (bottom)
-    //            + drop-down quads along every boundary edge (sides).
-    // This produces 4 individually manifold objects the slicer can assign to separate filaments.
+    //            + drop-down quads along every directed boundary edge (sides).
 
     // Collect terrain-surface triangles per color (exclude walls/base, triElevations < 0)
     const colorGroups = [[], [], [], []];
@@ -1581,97 +1584,125 @@ const ThreeMFExport = {
 
     let objectsXml = '';
     const builtIds = [];
+    let nextObjId = 2;
+    const colorOpenEdges = [0, 0, 0, 0];
 
     for (let ci = 0; ci < 4; ci++) {
-      const tris = colorGroups[ci];
-      if (tris.length === 0) continue;
+      const allTris = colorGroups[ci];
+      if (allTris.length === 0) continue;
 
-      // Map global vertex index → local top index; base index = topIdx + topVerts.length
-      const globalToTop = new Map();
-      const topGlobals = []; // global indices in local order
-      for (const ti of tris) {
-        for (let j = 0; j < 3; j++) {
-          const gi = t[ti*3+j];
-          if (!globalToTop.has(gi)) { globalToTop.set(gi, topGlobals.length); topGlobals.push(gi); }
-        }
-      }
-      const baseOff = topGlobals.length;
-      const top = gi => globalToTop.get(gi);
-      const base = gi => baseOff + globalToTop.get(gi);
-
-      const localTris = [];
-
-      // Top faces
-      for (const ti of tris) {
-        localTris.push(top(t[ti*3]), top(t[ti*3+1]), top(t[ti*3+2]));
-      }
-      // Bottom faces (reversed winding → normal points down)
-      for (const ti of tris) {
-        localTris.push(base(t[ti*3]), base(t[ti*3+2]), base(t[ti*3+1]));
-      }
-
-      // Side walls: find boundary edges (appear exactly once among this color's tris)
-      // Store first-seen directed orientation so the wall normal faces outward.
-      const edgeSeen = new Map(); // canonical key → {a, b} first-seen direction
-      for (const ti of tris) {
+      // Build edge → triangle adjacency for this color group only
+      const edgeToTris = new Map();
+      for (const ti of allTris) {
         for (let e = 0; e < 3; e++) {
           const a = t[ti*3+e], b = t[ti*3+(e+1)%3];
           const key = a < b ? a * numVerts + b : b * numVerts + a;
-          if (!edgeSeen.has(key)) edgeSeen.set(key, { a, b, n: 1 });
-          else edgeSeen.get(key).n++;
+          if (!edgeToTris.has(key)) edgeToTris.set(key, []);
+          edgeToTris.get(key).push(ti);
         }
       }
-      for (const { a, b, n } of edgeSeen.values()) {
-        if (n !== 1) continue; // interior edge — skip
-        // Wall for directed edge a→b: outward normal points right of a→b
-        localTris.push(top(a), base(a), top(b));
-        localTris.push(top(b), base(a), base(b));
-      }
 
-      // ── Manifold check: every edge in a closed solid must be shared by exactly 2 triangles ──
-      // Any edge with count ≠ 2 is an open boundary → gap or hole in this color solid.
-      const localNumVerts = topGlobals.length * 2;
-      const edgeCount = new Map();
-      for (let i = 0; i < localTris.length; i += 3) {
-        for (let e = 0; e < 3; e++) {
-          const a = localTris[i+e], b = localTris[i+(e+1)%3];
-          const key = a < b ? a * localNumVerts + b : b * localNumVerts + a;
-          edgeCount.set(key, (edgeCount.get(key) || 0) + 1);
+      // BFS to find edge-connected components
+      const visited = new Set();
+      const components = [];
+      for (const startTri of allTris) {
+        if (visited.has(startTri)) continue;
+        const comp = []; const bfsQ = [startTri]; visited.add(startTri);
+        for (let head = 0; head < bfsQ.length; head++) {
+          const curr = bfsQ[head]; comp.push(curr);
+          for (let e = 0; e < 3; e++) {
+            const a = t[curr*3+e], b = t[curr*3+(e+1)%3];
+            const key = a < b ? a * numVerts + b : b * numVerts + a;
+            for (const nbr of (edgeToTris.get(key) || [])) {
+              if (!visited.has(nbr)) { visited.add(nbr); bfsQ.push(nbr); }
+            }
+          }
         }
-      }
-      let openEdges = 0;
-      for (const c of edgeCount.values()) { if (c !== 2) openEdges++; }
-      if (openEdges > 0) {
-        warnings.push(`${this.COLORS[ci].name}: ${openEdges} open edge${openEdges !== 1 ? 's' : ''} (gap in solid)`);
+        components.push(comp);
       }
 
-      // Vertex XML: top verts then base verts (same x,y; z=0)
-      const vertParts = [];
-      for (const gi of topGlobals) {
-        vertParts.push(`        <vertex x="${v[gi*3].toFixed(4)}" y="${v[gi*3+1].toFixed(4)}" z="${v[gi*3+2].toFixed(4)}" />\n`);
-      }
-      for (const gi of topGlobals) {
-        vertParts.push(`        <vertex x="${v[gi*3].toFixed(4)}" y="${v[gi*3+1].toFixed(4)}" z="0.0000" />\n`);
+      // Build one manifold solid per component
+      for (const tris of components) {
+        const globalToLocal = new Map();
+        const localGlobals = [];
+        for (const ti of tris) {
+          for (let j = 0; j < 3; j++) {
+            const gi = t[ti*3+j];
+            if (!globalToLocal.has(gi)) { globalToLocal.set(gi, localGlobals.length); localGlobals.push(gi); }
+          }
+        }
+        const baseOff = localGlobals.length;
+        const top = gi => globalToLocal.get(gi);
+        const base = gi => baseOff + globalToLocal.get(gi);
+
+        const localTris = [];
+
+        // Top faces
+        for (const ti of tris) localTris.push(top(t[ti*3]), top(t[ti*3+1]), top(t[ti*3+2]));
+        // Bottom faces (reversed winding → normal points down)
+        for (const ti of tris) localTris.push(base(t[ti*3]), base(t[ti*3+2]), base(t[ti*3+1]));
+
+        // Side walls via directed-edge boundary detection:
+        // a directed edge a→b is a boundary edge iff its reverse b→a doesn't exist in this component.
+        // In a CCW mesh this gives outward-facing walls automatically.
+        const dirEdges = new Set();
+        for (const ti of tris) {
+          for (let e = 0; e < 3; e++) dirEdges.add(t[ti*3+e] * numVerts + t[ti*3+(e+1)%3]);
+        }
+        for (const ti of tris) {
+          for (let e = 0; e < 3; e++) {
+            const a = t[ti*3+e], b = t[ti*3+(e+1)%3];
+            if (!dirEdges.has(b * numVerts + a)) {
+              localTris.push(top(a), base(a), top(b));
+              localTris.push(top(b), base(a), base(b));
+            }
+          }
+        }
+
+        // Manifold check
+        const localNumVerts = localGlobals.length * 2;
+        const edgeCount = new Map();
+        for (let i = 0; i < localTris.length; i += 3) {
+          for (let e = 0; e < 3; e++) {
+            const a = localTris[i+e], b = localTris[i+(e+1)%3];
+            const key = a < b ? a * localNumVerts + b : b * localNumVerts + a;
+            edgeCount.set(key, (edgeCount.get(key) || 0) + 1);
+          }
+        }
+        for (const c of edgeCount.values()) { if (c !== 2) colorOpenEdges[ci]++; }
+
+        // Vertex XML: top verts then base verts (same x,y; z=0)
+        const vertParts = [];
+        for (const gi of localGlobals) {
+          vertParts.push(`        <vertex x="${v[gi*3].toFixed(4)}" y="${v[gi*3+1].toFixed(4)}" z="${v[gi*3+2].toFixed(4)}" />\n`);
+        }
+        for (const gi of localGlobals) {
+          vertParts.push(`        <vertex x="${v[gi*3].toFixed(4)}" y="${v[gi*3+1].toFixed(4)}" z="0.0000" />\n`);
+        }
+
+        const triParts = [];
+        for (let i = 0; i < localTris.length; i += 3) {
+          triParts.push(`        <triangle v1="${localTris[i]}" v2="${localTris[i+1]}" v3="${localTris[i+2]}" />\n`);
+        }
+
+        const objId = nextObjId++;
+        builtIds.push(objId);
+        objectsXml +=
+          `    <object id="${objId}" type="model" pid="1" pindex="${ci}">\n` +
+          `      <mesh>\n` +
+          `        <vertices>\n${vertParts.join('')}        </vertices>\n` +
+          `        <triangles>\n${triParts.join('')}        </triangles>\n` +
+          `      </mesh>\n` +
+          `    </object>\n`;
       }
 
-      const triParts = [];
-      for (let i = 0; i < localTris.length; i += 3) {
-        triParts.push(`        <triangle v1="${localTris[i]}" v2="${localTris[i+1]}" v3="${localTris[i+2]}" />\n`);
+      if (colorOpenEdges[ci] > 0) {
+        warnings.push(`${this.COLORS[ci].name}: ${colorOpenEdges[ci]} open edge${colorOpenEdges[ci] !== 1 ? 's' : ''}`);
       }
-
-      const objId = ci + 2;
-      builtIds.push(objId);
-      objectsXml +=
-        `    <object id="${objId}" type="model" pid="1" pindex="${ci}">\n` +
-        `      <mesh>\n` +
-        `        <vertices>\n${vertParts.join('')}        </vertices>\n` +
-        `        <triangles>\n${triParts.join('')}        </triangles>\n` +
-        `      </mesh>\n` +
-        `    </object>\n`;
     }
 
     // Parent component object
-    const parentId = 10;
+    const parentId = nextObjId;
     objectsXml +=
       `    <object id="${parentId}" type="model">\n` +
       `      <components>\n` +
