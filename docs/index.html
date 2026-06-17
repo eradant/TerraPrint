@@ -1346,6 +1346,76 @@ const MeshGen = {
       }
     }
 
+    // ── Color smoothing: eliminate isolated noise triangles ──────────────────
+    // The slope+elevation classification produces many single-triangle or
+    // 2-triangle "islands" (e.g. one locally flat triangle inside a hillside).
+    // These create thousands of tiny per-color solids in the 3MF and cause
+    // the slicer to report holes at every seam. Up to 5 passes: any
+    // edge-connected component of terrain triangles with fewer than 4 members
+    // is reassigned to its most common neighboring color.
+    {
+      const QW = w - 1, QH = h - 1;        // quads per row / column
+      const numTerrainTris = 2 * QW * QH;  // terrain tris only (walls/base follow)
+
+      // Return edge-adjacent terrain triangle indices for triangle ti
+      const neighbors = (ti) => {
+        const qi = ti >> 1, which = ti & 1;
+        const r = Math.floor(qi / QW), c = qi % QW;
+        const out = [];
+        if (which === 0) {            // Tri1(r,c): neighbors are Tri2 of same / left / above
+          out.push(ti + 1);
+          if (c > 0)   out.push(2 * (r * QW + c - 1) + 1);
+          if (r > 0)   out.push(2 * ((r - 1) * QW + c) + 1);
+        } else {                      // Tri2(r,c): neighbors are Tri1 of same / below / right
+          out.push(ti - 1);
+          if (r < QH - 1) out.push(2 * ((r + 1) * QW + c));
+          if (c < QW - 1) out.push(2 * (r * QW + c + 1));
+        }
+        return out;
+      };
+
+      const MIN_TRIS = 4;
+      for (let pass = 0; pass < 5; pass++) {
+        const visited = new Uint8Array(numTerrainTris);
+        let anyChanged = false;
+
+        for (let start = 0; start < numTerrainTris; start++) {
+          if (visited[start]) continue;
+          const color = triColors[start];
+
+          // BFS within same color to find component
+          const comp = [], q = [start]; visited[start] = 1;
+          for (let head = 0; head < q.length; head++) {
+            const curr = q[head]; comp.push(curr);
+            for (const nbr of neighbors(curr)) {
+              if (!visited[nbr] && triColors[nbr] === color) {
+                visited[nbr] = 1; q.push(nbr);
+              }
+            }
+          }
+
+          if (comp.length < MIN_TRIS) {
+            // Tally neighbor colors outside this component
+            const nbrCount = [0, 0, 0, 0];
+            for (const ti of comp) {
+              for (const nbr of neighbors(ti)) {
+                if (triColors[nbr] !== color) nbrCount[triColors[nbr]]++;
+              }
+            }
+            // Pick most common neighbor color (exclude wall/base color 0 unless it wins)
+            let best = color, bestN = 0;
+            for (let k = 1; k < 4; k++) { if (nbrCount[k] > bestN) { bestN = nbrCount[k]; best = k; } }
+            if (best === color && nbrCount[0] > 0) best = 0; // only fall back to water if nothing else
+            if (best !== color) {
+              for (const ti of comp) triColors[ti] = best;
+              anyChanged = true;
+            }
+          }
+        }
+        if (!anyChanged) break;
+      }
+    }
+
     const vertexArray = new Float32Array(positions);
     const triangleArray = new Uint32Array(triangles);
 
