@@ -1416,6 +1416,170 @@ const MeshGen = {
       }
     }
 
+    // ── Bowtie-vertex elimination ─────────────────────────────────────────────
+    // After smoothing, some color regions still have "bowtie" / "figure-8"
+    // topology: a region that is edge-connected overall but contains a vertex v
+    // where two separate fans of same-color triangles touch only at v (no shared
+    // edge). In the 3MF wall generator this makes the vertical edge
+    // top(v)↔base(v) appear 4× instead of 2× → slicer reports open edges.
+    // Fix: detect these vertices and reassign the minority fan(s) to the most
+    // common neighboring color, widening the narrow waist to at least one full
+    // triangle edge.
+    {
+      const QW = w - 1, QH = h - 1;
+      const numTerrainTris = 2 * QW * QH;
+
+      const neighbors = (ti) => {
+        const qi = ti >> 1, which = ti & 1;
+        const r = Math.floor(qi / QW), c = qi % QW;
+        const out = [];
+        if (which === 0) {
+          out.push(ti + 1);
+          if (c > 0)      out.push(2 * (r * QW + c - 1) + 1);
+          if (r > 0)      out.push(2 * ((r - 1) * QW + c) + 1);
+        } else {
+          out.push(ti - 1);
+          if (r < QH - 1) out.push(2 * ((r + 1) * QW + c));
+          if (c < QW - 1) out.push(2 * (r * QW + c + 1));
+        }
+        return out;
+      };
+
+      // All terrain triangles incident to terrain vertex at grid position (vr, vc).
+      // Each vertex acts as TL/TR/BL/BR in the surrounding quads.
+      const getIncident = (vr, vc) => {
+        const out = [];
+        if (vr < QH && vc < QW) out.push(2 * (vr * QW + vc));                // as TL: Tri1
+        if (vr < QH && vc > 0)  out.push(2 * (vr * QW + vc - 1));            // as TR: Tri1
+        if (vr < QH && vc > 0)  out.push(2 * (vr * QW + vc - 1) + 1);        // as TR: Tri2
+        if (vr > 0  && vc < QW) out.push(2 * ((vr - 1) * QW + vc));          // as BL: Tri1
+        if (vr > 0  && vc < QW) out.push(2 * ((vr - 1) * QW + vc) + 1);      // as BL: Tri2
+        if (vr > 0  && vc > 0)  out.push(2 * ((vr - 1) * QW + vc - 1) + 1);  // as BR: Tri2
+        return out;
+      };
+
+      let anyBowtieFix = false;
+
+      for (let vr = 0; vr < h; vr++) {
+        for (let vc = 0; vc < w; vc++) {
+          const v   = vr * w + vc;
+          const inc = getIncident(vr, vc);
+          if (inc.length < 2) continue;
+
+          // Group incident terrain tris by color
+          const byColor = new Map();
+          for (const ti of inc) {
+            const c = triColors[ti];
+            if (!byColor.has(c)) byColor.set(c, []);
+            byColor.get(c).push(ti);
+          }
+
+          for (const [color, cTris] of byColor) {
+            if (cTris.length < 2) continue;
+
+            // "Other" vertices (besides v) for each triangle in this color group
+            const otherSets = cTris.map(ti => {
+              const s = new Set();
+              for (let k = 0; k < 3; k++) {
+                const u = triangles[ti * 3 + k];
+                if (u !== v) s.add(u);
+              }
+              return s;
+            });
+
+            // Fan adjacency: two tris share the same fan at v iff they share
+            // at least one vertex OTHER than v (i.e. they share an edge at v).
+            const fanAdj = cTris.map(() => []);
+            for (let i = 0; i < cTris.length; i++) {
+              for (let j = i + 1; j < cTris.length; j++) {
+                let shared = false;
+                for (const u of otherSets[i]) {
+                  if (otherSets[j].has(u)) { shared = true; break; }
+                }
+                if (shared) { fanAdj[i].push(j); fanAdj[j].push(i); }
+              }
+            }
+
+            // BFS over fan-adjacency
+            const vis  = new Uint8Array(cTris.length);
+            const fans = [];
+            for (let s = 0; s < cTris.length; s++) {
+              if (vis[s]) continue;
+              const fan = []; const bq = [s]; vis[s] = 1;
+              for (let hd = 0; hd < bq.length; hd++) {
+                fan.push(cTris[bq[hd]]);
+                for (const nb of fanAdj[bq[hd]]) {
+                  if (!vis[nb]) { vis[nb] = 1; bq.push(nb); }
+                }
+              }
+              fans.push(fan);
+            }
+            if (fans.length <= 1) continue; // single fan — no bowtie
+
+            // Bowtie at v for this color: reassign minority fan(s)
+            fans.sort((a, b) => b.length - a.length); // largest fan first
+            for (let f = 1; f < fans.length; f++) {
+              const nbrCount = [0, 0, 0, 0];
+              for (const ti of fans[f]) {
+                for (const nb of neighbors(ti)) {
+                  if (triColors[nb] !== color) nbrCount[triColors[nb]]++;
+                }
+              }
+              let best = -1, bestN = 0;
+              for (let k = 1; k < 4; k++) {
+                if (nbrCount[k] > bestN) { bestN = nbrCount[k]; best = k; }
+              }
+              if (best === -1) { // fall back to any non-self color (including 0)
+                for (let k = 0; k < 4; k++) {
+                  if (k !== color && nbrCount[k] > bestN) { bestN = nbrCount[k]; best = k; }
+                }
+              }
+              if (best !== -1 && best !== color) {
+                for (const ti of fans[f]) triColors[ti] = best;
+                anyBowtieFix = true;
+              }
+            }
+          }
+        }
+      }
+
+      if (anyBowtieFix) console.log('[TerraPrint] Bowtie vertices fixed; running follow-up smoothing.');
+
+      // Bowtie fixes can introduce new small components; clean them up
+      if (anyBowtieFix) {
+        for (let pass = 0; pass < 5; pass++) {
+          const visited = new Uint8Array(numTerrainTris);
+          let anyChanged = false;
+          for (let start = 0; start < numTerrainTris; start++) {
+            if (visited[start]) continue;
+            const color = triColors[start];
+            const comp = [], q = [start]; visited[start] = 1;
+            for (let head = 0; head < q.length; head++) {
+              const curr = q[head]; comp.push(curr);
+              for (const nb of neighbors(curr)) {
+                if (!visited[nb] && triColors[nb] === color) { visited[nb] = 1; q.push(nb); }
+              }
+            }
+            if (comp.length < 4) {
+              const nbrCount = [0, 0, 0, 0];
+              for (const ti of comp) {
+                for (const nb of neighbors(ti)) {
+                  if (triColors[nb] !== color) nbrCount[triColors[nb]]++;
+                }
+              }
+              let best = color, bestN = 0;
+              for (let k = 1; k < 4; k++) {
+                if (nbrCount[k] > bestN) { bestN = nbrCount[k]; best = k; }
+              }
+              if (best === color && nbrCount[0] > 0) best = 0;
+              if (best !== color) { for (const ti of comp) triColors[ti] = best; anyChanged = true; }
+            }
+          }
+          if (!anyChanged) break;
+        }
+      }
+    }
+
     const vertexArray = new Float32Array(positions);
     const triangleArray = new Uint32Array(triangles);
 
