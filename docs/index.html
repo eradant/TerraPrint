@@ -495,12 +495,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
       <h3>Terrain Colors (3MF)</h3>
       <div class="section-body">
         <p style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Flat terrain (low slope) is beige in the valley band and the high-desert band. Forest/Hills is the solid green zone between them — steep slopes anywhere also stay green. Mountains are grey above the peak cutoff.</p>
-        <div class="threshold-row">
-          <span class="swatch" style="background:var(--topo-water)"></span>
-          <span>Water</span>
-          <span style="color:var(--text-muted)">below</span>
-          <input type="number" id="thresh-water" value="1" step="1"> <span style="color:var(--text-muted)">m</span>
-        </div>
+
         <div class="threshold-row">
           <span class="swatch" style="background:var(--topo-flat)"></span>
           <span>Flat terrain</span>
@@ -1104,7 +1099,6 @@ const MeshGen = {
     const printSize = parseFloat(document.getElementById('print-size').value) || 150;
     const vertExag = parseFloat(document.getElementById('vert-exag').value) || 2;
     const baseHeight = parseFloat(document.getElementById('base-height').value) || 4;
-    const threshWater    = parseFloat(document.getElementById('thresh-water').value) || 1;
     const threshMountain = parseFloat(document.getElementById('thresh-hills').value) || 1500;
     const threshForestLo = parseFloat(document.getElementById('thresh-forest-lo').value) || 400;
     const threshDesertLo = parseFloat(document.getElementById('thresh-desert-lo').value) || 1200;
@@ -1799,13 +1793,13 @@ const ThreeMFExport = {
     );
 
     // Read thresholds (meters) from UI — same values used by MeshGen.
-    const threshWaterM    = parseFloat(document.getElementById('thresh-water').value)    || 1;
     const threshForestLoM = parseFloat(document.getElementById('thresh-forest-lo').value) || 400;
     const threshMountainM = parseFloat(document.getElementById('thresh-hills').value)     || 1500;
 
     // Convert meters → model-space mm using the same formula as MeshGen.
     const toMM = m => (m - mesh.minElev) * mesh.elevScale + mesh.baseHeight;
-    const E_water    = toMM(threshWaterM);
+    // E_water pegged to sea level (0m) — matches the elevation ≤ 0 ocean detection.
+    const E_water    = toMM(0);
     const E_flatland = toMM(threshForestLoM);
     const E_mountain = toMM(threshMountainM);
 
@@ -2268,7 +2262,6 @@ const Progress = {
         stepIntervalM:        stepMode ? parseFloat(document.getElementById('step-interval').value) : null,
       },
       terrainColors: {
-        threshWaterM:    parseFloat(document.getElementById('thresh-water').value),
         threshMountainM: parseFloat(document.getElementById('thresh-hills').value),
         threshForestLoM: parseFloat(document.getElementById('thresh-forest-lo').value),
         threshDesertLoM: parseFloat(document.getElementById('thresh-desert-lo').value),
@@ -2320,7 +2313,6 @@ const Progress = {
       }
 
       const tc = data.terrainColors || {};
-      if (tc.threshWaterM    != null) document.getElementById('thresh-water').value = tc.threshWaterM;
       if (tc.threshMountainM != null) document.getElementById('thresh-hills').value = tc.threshMountainM;
       if (tc.threshForestLoM != null) document.getElementById('thresh-forest-lo').value = tc.threshForestLoM;
       if (tc.threshDesertLoM != null) document.getElementById('thresh-desert-lo').value = tc.threshDesertLoM;
@@ -2541,11 +2533,7 @@ const UI = {
     if (!State.meshData) { toast('Generate a model first.'); return; }
     showLoading('Building 3MF…');
     try {
-      const { blob, warnings } = await ThreeMFExport.generate(State.meshData, {
-        threshWater:    parseFloat(document.getElementById('thresh-water').value)     || 1,
-        threshForestLo: parseFloat(document.getElementById('thresh-forest-lo').value) || 400,
-        threshMountain: parseFloat(document.getElementById('thresh-hills').value)     || 1500,
-      });
+      const { blob, warnings } = await ThreeMFExport.generate(State.meshData);
       const name = State.selectedCell && State.selectedCell !== 'custom'
         ? `oregon_tile_${State.selectedCell}.3mf`
         : 'terrain_model.3mf';
