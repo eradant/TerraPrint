@@ -1616,6 +1616,8 @@ const MeshGen = {
       triColors,
       triElevations,
       triSlopes,
+      gridW: w,
+      gridH: h,
       meshW,
       meshH,
       minElev,
@@ -1799,15 +1801,24 @@ const STLExport = {
 
 const ThreeMFExport = {
   COLORS: [
-    { name: 'Water', hex: '#2D6ABF' },
-    { name: 'Flatland', hex: '#3D8C40' },
-    { name: 'Hills', hex: '#C47F17' },
+    { name: 'Water',     hex: '#2D6ABF' },
+    { name: 'Flatland',  hex: '#3D8C40' },
+    { name: 'Hills',     hex: '#C47F17' },
     { name: 'Mountains', hex: '#D4D4D4' },
   ],
 
+  // ── Public entry point ────────────────────────────────────────────────────
+  // Produces a 3MF with 4 separate closed-solid objects, one per color band.
+  // Each band is a non-overlapping elevation slice of the terrain:
+  //   Water    : flat slab  z = [0, E_water]
+  //   Flatland : terrain    z = [E_water,    clamp(terrain, E_flatland)]
+  //   Hills    : terrain    z = [E_flatland, clamp(terrain, E_mountain)]
+  //   Mountains: terrain    z = [E_mountain, terrain_surface]
+  //
+  // Bands share flat horizontal interfaces — no interior seam walls, no holes.
+  // Bambu Studio reads displaycolor and auto-assigns each object to a filament.
   async generate(mesh, opts = {}) {
     const zip = new JSZip();
-
     zip.file('[Content_Types].xml',
       '<?xml version="1.0" encoding="UTF-8"?>\n' +
       '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\n' +
@@ -1822,32 +1833,25 @@ const ThreeMFExport = {
       '</Relationships>'
     );
 
-    const v = mesh.vertices;
-    const t = mesh.triangles;
-    const numTris  = t.length / 3;
-    const numVerts = v.length / 3;
-    const warnings = [];
+    // Read thresholds (meters) from UI — same values used by MeshGen.
+    const threshWaterM    = parseFloat(document.getElementById('thresh-water').value)    || 1;
+    const threshForestLoM = parseFloat(document.getElementById('thresh-forest-lo').value) || 400;
+    const threshMountainM = parseFloat(document.getElementById('thresh-hills').value)     || 1500;
 
-    // ── Single-solid per-triangle-color approach ─────────────────────────────
-    // The stacked-band approach breaks down for slope-classified terrain: flat
-    // areas exist at many elevations, so "Flatland" has no coherent elevation
-    // band and collapses to a near-zero-height slab.
-    //
-    // Instead we export ONE closed solid — the complete terrain mesh already
-    // produced by MeshGen (terrain surface + perimeter walls + flat base).
-    // Each terrain-surface triangle carries a per-triangle pindex matching its
-    // triColors value.  Wall and base triangles inherit the object default (0).
-    //
-    // OrcaSlicer / BambuStudio fully support per-triangle pid/pindex in 3MF.
-    // On import the slicer presents 4 colour groups; the user assigns each to a
-    // filament slot.  This exactly reproduces the preview colours with zero seam
-    // issues and half the file size of the old 4-object approach.
+    // Convert meters → model-space mm using the same formula as MeshGen.
+    const toMM = m => (m - mesh.minElev) * mesh.elevScale + mesh.baseHeight;
+    const E_water    = toMM(threshWaterM);
+    const E_flatland = toMM(threshForestLoM);
+    const E_mountain = toMM(threshMountainM);
 
-    const triColors = mesh.triColors;
+    const bands = [
+      { colorIdx: 0, eLow: 0,          eHigh: E_water    },
+      { colorIdx: 1, eLow: E_water,    eHigh: E_flatland },
+      { colorIdx: 2, eLow: E_flatland, eHigh: E_mountain },
+      { colorIdx: 3, eLow: E_mountain, eHigh: Infinity   },
+    ];
 
-    // Build XML as fragment array → Blob to avoid string-length overflow.
     const xmlParts = [];
-
     xmlParts.push(
       '<?xml version="1.0" encoding="UTF-8"?>\n' +
       '<model unit="millimeter" xml:lang="en-US"\n' +
@@ -1858,50 +1862,158 @@ const ThreeMFExport = {
     this.COLORS.forEach(c => {
       xmlParts.push(`      <base name="${c.name}" displaycolor="${c.hex}" />\n`);
     });
-    xmlParts.push(
-      '    </basematerials>\n' +
-      '    <object id="2" type="model" pid="1" pindex="0">\n' +
-      '      <mesh>\n' +
-      '        <vertices>\n'
-    );
+    xmlParts.push('    </basematerials>\n');
 
-    // All vertices from the existing mesh (terrain + walls + base)
-    for (let vi = 0; vi < numVerts; vi++) {
+    let objectId = 2;
+    const buildIds = [];
+
+    for (const band of bands) {
+      if (band.eHigh <= band.eLow) continue;
+
+      const solid = band.colorIdx === 0
+        ? this._waterSlab(mesh.meshW, mesh.meshH, band.eLow, band.eHigh)
+        : this._terrainBand(mesh, band.eLow, band.eHigh);
+
+      if (!solid) continue;
+
       xmlParts.push(
-        `        <vertex x="${v[vi*3].toFixed(4)}" y="${v[vi*3+1].toFixed(4)}" z="${v[vi*3+2].toFixed(4)}" />\n`
+        `    <object id="${objectId}" type="model" pid="1" pindex="${band.colorIdx}">\n` +
+        `      <mesh>\n        <vertices>\n`
       );
+      const nv = solid.v.length / 3;
+      for (let vi = 0; vi < nv; vi++) {
+        xmlParts.push(
+          `        <vertex x="${solid.v[vi*3].toFixed(4)}" y="${solid.v[vi*3+1].toFixed(4)}" z="${solid.v[vi*3+2].toFixed(4)}" />\n`
+        );
+      }
+      xmlParts.push('        </vertices>\n        <triangles>\n');
+      const nt = solid.t.length / 3;
+      for (let ti = 0; ti < nt; ti++) {
+        xmlParts.push(
+          `        <triangle v1="${solid.t[ti*3]}" v2="${solid.t[ti*3+1]}" v3="${solid.t[ti*3+2]}" />\n`
+        );
+      }
+      xmlParts.push('        </triangles>\n      </mesh>\n    </object>\n');
+      buildIds.push(objectId++);
     }
 
-    xmlParts.push('        </vertices>\n        <triangles>\n');
+    xmlParts.push('  </resources>\n  <build>\n');
+    for (const id of buildIds) {
+      xmlParts.push(`    <item objectid="${id}" />\n`);
+    }
+    xmlParts.push('  </build>\n</model>');
 
-    // Triangles: terrain surface tris carry per-triangle pindex; wall/base inherit default
-    for (let ti = 0; ti < numTris; ti++) {
-      const v0 = t[ti*3], v1 = t[ti*3+1], v2 = t[ti*3+2];
-      if (mesh.triElevations[ti] >= 0) {
-        // Terrain surface triangle — tag with its preview colour
-        const ci = triColors[ti];
-        xmlParts.push(`        <triangle v1="${v0}" v2="${v1}" v3="${v2}" pid="1" pindex="${ci}" />\n`);
-      } else {
-        // Wall or base triangle — inherit object default (pindex 0)
-        xmlParts.push(`        <triangle v1="${v0}" v2="${v1}" v3="${v2}" />\n`);
+    zip.file('3D/3dmodel.model', new Blob(xmlParts, { type: 'text/xml' }));
+    const blob = await zip.generateAsync({
+      type: 'blob',
+      mimeType: 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml',
+    });
+    return { blob, warnings: [] };
+  },
+
+  // Full-tile rectangular box: the Water band base covering z = [eLow, eHigh].
+  _waterSlab(meshW, meshH, eLow, eHigh) {
+    const lo = eLow, hi = eHigh;
+    // prettier-ignore
+    const v = [
+      0,     0,     lo,   // 0 bot front-left
+      meshW, 0,     lo,   // 1 bot front-right
+      meshW, meshH, lo,   // 2 bot back-right
+      0,     meshH, lo,   // 3 bot back-left
+      0,     0,     hi,   // 4 top front-left
+      meshW, 0,     hi,   // 5 top front-right
+      meshW, meshH, hi,   // 6 top back-right
+      0,     meshH, hi,   // 7 top back-left
+    ];
+    // prettier-ignore
+    const t = [
+      0, 3, 2,  0, 2, 1,   // bottom  (−z outward)
+      4, 5, 6,  4, 6, 7,   // top     (+z outward)
+      0, 1, 5,  0, 5, 4,   // front   (−y outward)
+      2, 3, 7,  2, 7, 6,   // back    (+y outward)
+      3, 0, 4,  3, 4, 7,   // left    (−x outward)
+      1, 2, 6,  1, 6, 5,   // right   (+x outward)
+    ];
+    return { v, t };
+  },
+
+  // Terrain solid for the elevation band [eLow, eHigh].
+  //   Top    = terrain surface vertices clamped to eHigh (flat cap where terrain exceeds band ceiling)
+  //   Bottom = flat plane at eLow
+  //   Walls  = boundary edges of the top surface, dropped to eLow
+  //
+  // Only quads where ALL four corner terrain-z values are strictly above eLow
+  // are included — this keeps the solid manifold with no inverted wall faces.
+  _terrainBand(mesh, eLow, eHigh) {
+    const gw = mesh.gridW, gh = mesh.gridH;
+    const mv = mesh.vertices; // first gw*gh entries are terrain vertices (x,y,z in mm)
+
+    // Directed-edge stride for boundary detection (see wall section below).
+    const VSTRIDE = gw * gh; // ≥ maximum local top-vertex index
+
+    const topIdxMap = new Map(); // grid-index → local top-vertex index
+    const topV = [];             // flat xyz array of top vertices
+    let numTop = 0;
+
+    const getTop = gi => {
+      if (topIdxMap.has(gi)) return topIdxMap.get(gi);
+      const x = mv[gi * 3], y = mv[gi * 3 + 1];
+      const topZ = Math.min(mv[gi * 3 + 2], eHigh); // clamp at band ceiling
+      const idx = numTop++;
+      topV.push(x, y, topZ);
+      topIdxMap.set(gi, idx);
+      return idx;
+    };
+
+    const topT = [];        // flat tri index array for top surface
+    const fwdEdges = new Set(); // encoded directed edges: a*VSTRIDE+b
+
+    const addTri = (gi0, gi1, gi2) => {
+      const a = getTop(gi0), b = getTop(gi1), c = getTop(gi2);
+      topT.push(a, b, c);
+      fwdEdges.add(a * VSTRIDE + b);
+      fwdEdges.add(b * VSTRIDE + c);
+      fwdEdges.add(c * VSTRIDE + a);
+    };
+
+    for (let r = 0; r < gh - 1; r++) {
+      for (let c = 0; c < gw - 1; c++) {
+        const TL = r * gw + c,        TR = r * gw + c + 1;
+        const BL = (r + 1) * gw + c,  BR = (r + 1) * gw + c + 1;
+        // Require ALL four corners strictly above the band floor.
+        if (Math.min(mv[TL*3+2], mv[TR*3+2], mv[BL*3+2], mv[BR*3+2]) <= eLow) continue;
+        addTri(TL, BL, TR); // winding matches MeshGen (outward normal = +z)
+        addTri(TR, BL, BR);
       }
     }
 
-    xmlParts.push(
-      '        </triangles>\n' +
-      '      </mesh>\n' +
-      '    </object>\n' +
-      '  </resources>\n' +
-      '  <build>\n' +
-      '    <item objectid="2" />\n' +
-      '  </build>\n' +
-      '</model>'
-    );
+    if (numTop === 0) return null;
 
-    zip.file('3D/3dmodel.model', new Blob(xmlParts, { type: 'text/xml' }));
-    const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml' });
-    return { blob, warnings };
-  }
+    // Bottom vertices: same XY as top, z = eLow.  Offset = numTop in combined array.
+    const allV = topV.slice();
+    for (let i = 0; i < numTop; i++) {
+      allV.push(topV[i * 3], topV[i * 3 + 1], eLow);
+    }
+
+    // Bottom triangles: reversed winding of top (outward normal = −z).
+    const botT = [];
+    for (let i = 0; i < topT.length; i += 3) {
+      botT.push(topT[i] + numTop, topT[i + 2] + numTop, topT[i + 1] + numTop);
+    }
+
+    // Wall triangles: find boundary directed edges (a→b exists; b→a does not).
+    // Wall winding produces an outward normal away from the solid interior.
+    const wallT = [];
+    for (const ab of fwdEdges) {
+      const a = Math.floor(ab / VSTRIDE), b = ab % VSTRIDE;
+      if (fwdEdges.has(b * VSTRIDE + a)) continue; // interior edge — skip
+      const ba = a + numTop, bb = b + numTop;
+      wallT.push(a, ba, b);    // wall tri 1
+      wallT.push(b, ba, bb);   // wall tri 2
+    }
+
+    return { v: allV, t: topT.concat(botT, wallT) };
+  },
 };
 
 // ═══════════════════════════════════════════════
