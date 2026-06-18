@@ -1832,55 +1832,26 @@ const ThreeMFExport = {
     const numVerts = v.length / 3;
     const warnings = [];
 
-    // ── Stacked color-band approach ───────────────────────────────────────────
-    // Four closed solids that STACK vertically.  Band ci includes all terrain
-    // triangles whose preview color is >= ci (so band 0 is the whole tile, band 3
-    // is only the mountain-colored peaks).  Each band's top follows the terrain,
-    // CLAMPED to the next band's floor (flat cap where the next band begins).
-    // The bottom is a flat plane at E[ci].  Adjacent bands share that plane with
-    // no interior seam walls and no duplicate geometry.
+    // ── Single-solid per-triangle-color approach ─────────────────────────────
+    // The stacked-band approach breaks down for slope-classified terrain: flat
+    // areas exist at many elevations, so "Flatland" has no coherent elevation
+    // band and collapses to a near-zero-height slab.
     //
-    // E[ci] is derived directly from the triColors distribution — it is the minimum
-    // vertex z of all terrain triangles with triColors >= ci.  By construction,
-    // every included triangle already satisfies minVZ >= E[ci], so walls are never
-    // inverted and the non-manifold risk from straddling vertices is eliminated.
-    // This also guarantees the bands exactly match what the 3-D preview shows.
+    // Instead we export ONE closed solid — the complete terrain mesh already
+    // produced by MeshGen (terrain surface + perimeter walls + flat base).
+    // Each terrain-surface triangle carries a per-triangle pindex matching its
+    // triColors value.  Wall and base triangles inherit the object default (0).
+    //
+    // OrcaSlicer / BambuStudio fully support per-triangle pid/pindex in 3MF.
+    // On import the slicer presents 4 colour groups; the user assigns each to a
+    // filament slot.  This exactly reproduces the preview colours with zero seam
+    // issues and half the file size of the old 4-object approach.
 
-    const elevScale = mesh.elevScale;
     const triColors = mesh.triColors;
 
-    // Flag wall/base triangles (-1) vs terrain triangles (elevation in mm)
-    const triElevMM = new Float64Array(numTris);
-    for (let ti = 0; ti < numTris; ti++) {
-      triElevMM[ti] = mesh.triElevations[ti] < 0
-        ? -1
-        : (mesh.triElevations[ti] - mesh.minElev) * elevScale;
-    }
-
-    // E[ci] = minimum vertex z (model-space mm) of all terrain tris with triColors >= ci.
-    // E[0] is always 0 (the build plate).  Each successive E is >= the previous one
-    // because triColors>=ci+1 ⊆ triColors>=ci, so its minimum can only be higher.
-    const E = [0];
-    for (let ci = 1; ci <= 3; ci++) {
-      let floor = Infinity;
-      for (let ti = 0; ti < numTris; ti++) {
-        if (triElevMM[ti] < 0 || triColors[ti] < ci) continue;
-        const m = Math.min(v[t[ti*3]*3+2], v[t[ti*3+1]*3+2], v[t[ti*3+2]*3+2]);
-        if (m < floor) floor = m;
-      }
-      E.push(isFinite(floor) ? floor : E[ci - 1]); // collapse to previous if color absent
-    }
-    E.push(Infinity); // mountain top — no cap, follows terrain
-
-    // Build the model XML as an array of small string fragments, then hand
-    // the whole array to new Blob() at the end.  This avoids ever creating a
-    // single concatenated string (which can be 100–400 MB for large tiles and
-    // hits V8's string-length limit with an "invalid string length" error).
+    // Build XML as fragment array → Blob to avoid string-length overflow.
     const xmlParts = [];
-    const bandObjIds = []; // { id, ci } for the build section
-    let nextObjId = 2;
 
-    // ── header ────────────────────────────────────────────────────────────────
     xmlParts.push(
       '<?xml version="1.0" encoding="UTF-8"?>\n' +
       '<model unit="millimeter" xml:lang="en-US"\n' +
@@ -1891,181 +1862,45 @@ const ThreeMFExport = {
     this.COLORS.forEach(c => {
       xmlParts.push(`      <base name="${c.name}" displaycolor="${c.hex}" />\n`);
     });
-    xmlParts.push('    </basematerials>\n');
+    xmlParts.push(
+      '    </basematerials>\n' +
+      '    <object id="2" type="model" pid="1" pindex="0">\n' +
+      '      <mesh>\n' +
+      '        <vertices>\n'
+    );
 
-    // ── one solid per elevation band ──────────────────────────────────────────
-    for (let ci = 0; ci < 4; ci++) {
-      const E_low  = E[ci];
-      const E_high = E[ci + 1]; // Infinity for mountains
-
-      // Skip bands whose ceiling equals their floor — happens when a color is
-      // absent from this tile (e.g. no water bodies → Water and Flatland collapse).
-      if (E_high <= E_low) continue;
-
-      // Select terrain triangles whose preview color is >= ci.
-      // Because E_low = min vertex z of this group (by construction above), every
-      // included triangle automatically has all vertices >= E_low — no inversion possible.
-      const bandTris = [];
-      for (let ti = 0; ti < numTris; ti++) {
-        if (triElevMM[ti] < 0) continue; // wall / base triangle — skip
-        if (triColors[ti] >= ci) bandTris.push(ti);
-      }
-      if (bandTris.length === 0) continue;
-
-      // ── Bowtie boundary fix ──────────────────────────────────────────────
-      // A terrain vertex where two disjoint portions of this band's region
-      // meet at a single point (figure-8 topology) gives that vertex 2 incoming
-      // + 2 outgoing boundary edges.  Its vertical wall edge then appears in 4
-      // triangles instead of 2 → non-manifold.  Fix: remove all band triangles
-      // incident to any such vertex so they fall to the band below.  Iterate
-      // until the boundary is free of bowtie vertices.
-      {
-        const bandSet = new Set(bandTris);
-
-        // One-time vertex→triangles lookup built from the initial set.
-        // Stale entries for deleted triangles are harmless (Set.delete is idempotent).
-        const v2t = new Map();
-        for (const ti of bandSet) {
-          for (let e = 0; e < 3; e++) {
-            const vv = t[ti*3+e];
-            if (!v2t.has(vv)) v2t.set(vv, []);
-            v2t.get(vv).push(ti);
-          }
-        }
-
-        let anyBowtie = true;
-        while (anyBowtie) {
-          anyBowtie = false;
-
-          // Rebuild directed-edge set from current (pruned) triangle set
-          const dir = new Set();
-          for (const ti of bandSet) {
-            for (let e = 0; e < 3; e++) dir.add(t[ti*3+e] * numVerts + t[ti*3+(e+1)%3]);
-          }
-
-          // Count outgoing boundary edges per vertex
-          const outDeg = new Map();
-          for (const ti of bandSet) {
-            for (let e = 0; e < 3; e++) {
-              const a = t[ti*3+e], b = t[ti*3+(e+1)%3];
-              if (!dir.has(b * numVerts + a)) outDeg.set(a, (outDeg.get(a) || 0) + 1);
-            }
-          }
-
-          for (const [vv, deg] of outDeg) {
-            if (deg > 1) {
-              anyBowtie = true;
-              for (const ti of (v2t.get(vv) || [])) bandSet.delete(ti);
-            }
-          }
-        }
-
-        bandTris.length = 0;
-        for (const ti of bandSet) bandTris.push(ti);
-      }
-
-      if (bandTris.length === 0) continue;
-
-      // Build local vertex map. Top z is clamped to [E_low, E_high]:
-      //  • E_high cap: where terrain exceeds the band ceiling, the top is flat at
-      //    E_high — exactly where the next band's flat bottom starts (clean seam).
-      //  • E_low floor: safety clamp so top is never below base, even if floating-
-      //    point puts a vertex fractionally under E_low.
-      const globalToLocal = new Map();
-      const localGlobals  = [];
-      const localTopZ     = []; // model-mm z for each local top vertex
-
-      for (const ti of bandTris) {
-        for (let j = 0; j < 3; j++) {
-          const gi = t[ti*3+j];
-          if (!globalToLocal.has(gi)) {
-            globalToLocal.set(gi, localGlobals.length);
-            localGlobals.push(gi);
-            localTopZ.push(Math.max(E_low, Math.min(v[gi*3+2], E_high)));
-          }
-        }
-      }
-
-      const baseOff = localGlobals.length;
-      const top  = gi => globalToLocal.get(gi);
-      const base = gi => baseOff + globalToLocal.get(gi);
-
-      const localTris = [];
-
-      // Top faces (terrain surface, clamped to E_high)
-      for (const ti of bandTris) localTris.push(top(t[ti*3]), top(t[ti*3+1]), top(t[ti*3+2]));
-      // Bottom faces (flat at E_low, reversed winding → normal faces down)
-      for (const ti of bandTris) localTris.push(base(t[ti*3]), base(t[ti*3+2]), base(t[ti*3+1]));
-
-      // Side walls: drop along every directed boundary edge (a→b where b→a absent)
-      const dirEdges = new Set();
-      for (const ti of bandTris) {
-        for (let e = 0; e < 3; e++) dirEdges.add(t[ti*3+e] * numVerts + t[ti*3+(e+1)%3]);
-      }
-      for (const ti of bandTris) {
-        for (let e = 0; e < 3; e++) {
-          const a = t[ti*3+e], b = t[ti*3+(e+1)%3];
-          if (!dirEdges.has(b * numVerts + a)) {
-            localTris.push(top(a), base(a), top(b));
-            localTris.push(top(b), base(a), base(b));
-          }
-        }
-      }
-
-      // Manifold check
-      const lnv = localGlobals.length * 2;
-      const edgeCount = new Map();
-      for (let i = 0; i < localTris.length; i += 3) {
-        for (let e = 0; e < 3; e++) {
-          const a = localTris[i+e], b = localTris[i+(e+1)%3];
-          const key = a < b ? a * lnv + b : b * lnv + a;
-          edgeCount.set(key, (edgeCount.get(key) || 0) + 1);
-        }
-      }
-      let openEdges = 0;
-      for (const c of edgeCount.values()) { if (c !== 2) openEdges++; }
-      if (openEdges > 0) {
-        warnings.push(`${this.COLORS[ci].name}: ${openEdges} open edge${openEdges !== 1 ? 's' : ''}`);
-      }
-
-      // ── object XML (fragments pushed individually — never joined into one big string)
-      const objId = nextObjId++;
-      bandObjIds.push({ id: objId, ci });
-
+    // All vertices from the existing mesh (terrain + walls + base)
+    for (let vi = 0; vi < numVerts; vi++) {
       xmlParts.push(
-        `    <object id="${objId}" type="model" pid="1" pindex="${ci}">\n` +
-        '      <mesh>\n' +
-        '        <vertices>\n'
+        `        <vertex x="${v[vi*3].toFixed(4)}" y="${v[vi*3+1].toFixed(4)}" z="${v[vi*3+2].toFixed(4)}" />\n`
       );
-
-      const E_low_str = E_low.toFixed(4);
-      for (let li = 0; li < localGlobals.length; li++) {
-        const gi = localGlobals[li];
-        xmlParts.push(
-          `        <vertex x="${v[gi*3].toFixed(4)}" y="${v[gi*3+1].toFixed(4)}" z="${localTopZ[li].toFixed(4)}" />\n`
-        );
-      }
-      for (const gi of localGlobals) {
-        xmlParts.push(
-          `        <vertex x="${v[gi*3].toFixed(4)}" y="${v[gi*3+1].toFixed(4)}" z="${E_low_str}" />\n`
-        );
-      }
-
-      xmlParts.push('        </vertices>\n        <triangles>\n');
-
-      for (let i = 0; i < localTris.length; i += 3) {
-        xmlParts.push(`        <triangle v1="${localTris[i]}" v2="${localTris[i+1]}" v3="${localTris[i+2]}" />\n`);
-      }
-
-      xmlParts.push('        </triangles>\n      </mesh>\n    </object>\n');
     }
 
-    // ── footer ────────────────────────────────────────────────────────────────
-    xmlParts.push('  </resources>\n  <build>\n');
-    for (const { id } of bandObjIds) {
-      xmlParts.push(`    <item objectid="${id}" />\n`);
+    xmlParts.push('        </vertices>\n        <triangles>\n');
+
+    // Triangles: terrain surface tris carry per-triangle pindex; wall/base inherit default
+    for (let ti = 0; ti < numTris; ti++) {
+      const v0 = t[ti*3], v1 = t[ti*3+1], v2 = t[ti*3+2];
+      if (mesh.triElevations[ti] >= 0) {
+        // Terrain surface triangle — tag with its preview colour
+        const ci = triColors[ti];
+        xmlParts.push(`        <triangle v1="${v0}" v2="${v1}" v3="${v2}" pid="1" pindex="${ci}" />\n`);
+      } else {
+        // Wall or base triangle — inherit object default (pindex 0)
+        xmlParts.push(`        <triangle v1="${v0}" v2="${v1}" v3="${v2}" />\n`);
+      }
     }
-    xmlParts.push('  </build>\n</model>');
+
+    xmlParts.push(
+      '        </triangles>\n' +
+      '      </mesh>\n' +
+      '    </object>\n' +
+      '  </resources>\n' +
+      '  <build>\n' +
+      '    <item objectid="2" />\n' +
+      '  </build>\n' +
+      '</model>'
+    );
 
     zip.file('3D/3dmodel.model', new Blob(xmlParts, { type: 'text/xml' }));
     const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml' });
