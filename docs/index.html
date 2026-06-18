@@ -1331,8 +1331,6 @@ const MeshGen = {
 
       if (e < 0) {
         triColors[i] = 0; // base/walls
-      } else if (e < threshWater) {
-        triColors[i] = 0; // water / sea level
       } else if (e < threshForestLo) {
         triColors[i] = 1; // flatland
       } else if (e < threshMountain) {
