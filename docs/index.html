@@ -467,10 +467,10 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
           </div>
         </div>
         <div class="input-group" style="display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" id="water-detect" checked style="accent-color:var(--accent);width:16px;height:16px;" onchange="document.getElementById('water-clamp-group').style.display=this.checked?'block':'none'">
-          <label for="water-detect" style="margin:0;cursor:pointer;">Detect water (lakes &amp; reservoirs via OSM)</label>
+          <input type="checkbox" id="water-detect" checked style="accent-color:var(--accent);width:16px;height:16px;">
+          <label for="water-detect" style="margin:0;cursor:pointer;">Detect ocean</label>
         </div>
-        <div class="input-group" id="water-clamp-group" style="margin-top:6px;">
+        <div class="input-group" id="water-clamp-group" style="margin-top:6px;display:none;">
           <label>Lake edge clamp (meters)</label>
           <div class="range-row">
             <input type="range" id="water-clamp" min="1" max="50" step="1" value="10" oninput="document.getElementById('water-clamp-val').textContent=this.value+'m'">
@@ -1100,7 +1100,7 @@ const MeshGen = {
    * waterMask: optional Uint8Array where 1=water, matching elevData dimensions.
    * Returns { vertices, triangles, triColors, ... }
    */
-  generate(elevData, waterMask) {
+  generate(elevData) {
     const printSize = parseFloat(document.getElementById('print-size').value) || 150;
     const vertExag = parseFloat(document.getElementById('vert-exag').value) || 2;
     const baseHeight = parseFloat(document.getElementById('base-height').value) || 4;
@@ -1266,44 +1266,15 @@ const MeshGen = {
       }
     }
 
-    // Post-process water mask: remove cells that are above the local water surface.
-    // For each connected component of water cells find the minimum elevation, then
-    // un-mark any cell more than MARGIN meters above it. This eliminates OSM river
-    // polygons bleeding onto riverbanks without breaking river runs in steep canyons.
-    if (waterMask) {
-      const MARGIN = parseFloat(document.getElementById('water-clamp').value) || 10;
-      const visited = new Uint8Array(w * h);
-      const clampedMask = new Uint8Array(waterMask);
-
-      for (let start = 0; start < w * h; start++) {
-        if (!clampedMask[start] || visited[start]) continue;
-
-        // BFS to collect the connected component and its minimum elevation
-        const queue = [start];
-        const component = [];
-        visited[start] = 1;
-        let minElev = origData[start];
-        let head = 0;
-
-        while (head < queue.length) {
-          const idx = queue[head++];
-          component.push(idx);
-          if (origData[idx] < minElev) minElev = origData[idx];
-
-          const r = Math.floor(idx / w), c = idx % w;
-          if (r > 0     && clampedMask[idx - w] && !visited[idx - w]) { visited[idx - w] = 1; queue.push(idx - w); }
-          if (r < h - 1 && clampedMask[idx + w] && !visited[idx + w]) { visited[idx + w] = 1; queue.push(idx + w); }
-          if (c > 0     && clampedMask[idx - 1] && !visited[idx - 1]) { visited[idx - 1] = 1; queue.push(idx - 1); }
-          if (c < w - 1 && clampedMask[idx + 1] && !visited[idx + 1]) { visited[idx + 1] = 1; queue.push(idx + 1); }
-        }
-
-        // Un-mark cells that sit above the component's water surface
-        for (const idx of component) {
-          if (origData[idx] > minElev + MARGIN) clampedMask[idx] = 0;
-        }
+    // Ocean detection: pixels at or below sea level (elevation ≤ 0m).
+    // Inland areas in Oregon are always above sea level, so this reliably
+    // detects only the Pacific coast without any false inland positives.
+    const useOceanColor = document.getElementById('water-detect').checked;
+    const oceanMask = new Uint8Array(w * h);
+    if (useOceanColor) {
+      for (let i = 0; i < w * h; i++) {
+        oceanMask[i] = origData[i] <= 0 ? 1 : 0;
       }
-
-      waterMask = clampedMask;
     }
 
     // Classify triangles by color using elevation bands only (no slope).
@@ -1314,19 +1285,15 @@ const MeshGen = {
     for (let i = 0; i < triElevations.length; i++) {
       const e = triElevations[i];
 
-      // Check water mask: if any vertex of this terrain triangle is in water, it's water
-      if (waterMask && e >= 0) {
+      // Ocean check: any terrain vertex at or below sea level → water color.
+      if (e >= 0) {
         const ti = i * 3;
         const v0 = triangles[ti], v1 = triangles[ti + 1], v2 = triangles[ti + 2];
-        let isWater = false;
+        let isOcean = false;
         for (const vi of [v0, v1, v2]) {
-          if (vi < terrainVertCount) {
-            const row = Math.floor(vi / w);
-            const col = vi % w;
-            if (waterMask[row * w + col]) { isWater = true; break; }
-          }
+          if (vi < terrainVertCount && oceanMask[vi]) { isOcean = true; break; }
         }
-        if (isWater) { triColors[i] = 0; continue; }
+        if (isOcean) { triColors[i] = 0; continue; }
       }
 
       if (e < 0) {
@@ -2517,29 +2484,13 @@ const UI = {
     }
 
     const resolution = parseInt(document.getElementById('mesh-res').value) || 256;
-    const useWaterDetect = document.getElementById('water-detect').checked;
-
     try {
       showLoading('Fetching elevation data…');
       State.elevationData = await Elevation.fetchElevation(State.selectedBounds, resolution);
 
-      // Water detection (runs after elevation so loading overlay is already up)
-      let waterMask = null;
-      if (useWaterDetect) {
-        showLoading('Detecting water features…');
-        try {
-          waterMask = await WaterDetection.detect(State.selectedBounds, resolution);
-          const waterPct = Math.round(waterMask.reduce((a, b) => a + b, 0) / waterMask.length * 100);
-          console.log(`Water mask: ${waterPct}% water`);
-        } catch (wErr) {
-          console.warn('Water detection failed, continuing without it:', wErr);
-          toast('Water detection failed — using elevation only');
-        }
-      }
-
       showLoading('Generating mesh…');
       await new Promise(r => setTimeout(r, 50));
-      const rawMesh = MeshGen.generate(State.elevationData, waterMask);
+      const rawMesh = MeshGen.generate(State.elevationData);
 
       showLoading('Checking mesh…');
       await new Promise(r => setTimeout(r, 20));
