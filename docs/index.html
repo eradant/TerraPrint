@@ -1306,15 +1306,13 @@ const MeshGen = {
       waterMask = clampedMask;
     }
 
-    // Classify triangles by color
-    // 0=water, 1=flat terrain (valley/desert/plateau), 2=forest/hills, 3=mountain peaks
-    // Priority: water → mountain peaks (high elevation) → flat (low slope) → forest/hills
+    // Classify triangles by color using elevation bands only (no slope).
+    // 0=water/base, 1=flatland, 2=hills/forest, 3=mountain peaks
     const triColors = new Uint8Array(triElevations.length);
     const terrainVertCount = w * h; // only terrain surface verts have grid coords
 
     for (let i = 0; i < triElevations.length; i++) {
       const e = triElevations[i];
-      const s = triSlopes[i];
 
       // Check water mask: if any vertex of this terrain triangle is in water, it's water
       if (waterMask && e >= 0) {
@@ -1334,15 +1332,13 @@ const MeshGen = {
       if (e < 0) {
         triColors[i] = 0; // base/walls
       } else if (e < threshWater) {
-        triColors[i] = 0; // water
-      } else if (e >= threshMountain) {
-        triColors[i] = 3; // mountain peaks
-      } else if (s < threshSlope && e < threshForestLo) {
-        triColors[i] = 1; // flat low-elevation valley
-      } else if (s < threshSlope && e >= threshDesertLo) {
-        triColors[i] = 1; // flat high-elevation desert/plateau
+        triColors[i] = 0; // water / sea level
+      } else if (e < threshForestLo) {
+        triColors[i] = 1; // flatland
+      } else if (e < threshMountain) {
+        triColors[i] = 2; // hills/forest
       } else {
-        triColors[i] = 2; // forest/hills — solid band + all steep slopes
+        triColors[i] = 3; // mountain peaks
       }
     }
 
