@@ -1939,8 +1939,8 @@ const ThreeMFExport = {
       for (let c = 0; c < gw - 1; c++) {
         const TL = r * gw + c,        TR = r * gw + c + 1;
         const BL = (r + 1) * gw + c,  BR = (r + 1) * gw + c + 1;
-        // Require ALL four corners strictly above the band floor.
-        if (Math.min(mv[TL*3+2], mv[TR*3+2], mv[BL*3+2], mv[BR*3+2]) <= eLow) continue;
+        // Include quads where any corner reaches exactly eLow — excludes only quads entirely below it.
+        if (Math.min(mv[TL*3+2], mv[TR*3+2], mv[BL*3+2], mv[BR*3+2]) < eLow) continue;
         addTri(TL, BL, TR); // winding matches MeshGen (outward normal = +z)
         addTri(TR, BL, BR);
       }
