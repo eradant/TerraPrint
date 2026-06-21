@@ -939,12 +939,16 @@ const MeshGen = {
     } else {
       data.set(origData);
     }
+    // Clamp sub-sea-level depths up to sea level so deep ocean floors don't inflate
+    // the model's base height. (Lakes are already flattened to their surfaces; water
+    // detection still uses the raw origData below.)
+    for (let i = 0; i < data.length; i++) if (data[i] < 0) data[i] = 0;
 
-    // Find elevation range (from ORIGINAL data for consistent coloring)
+    // Elevation range of the clamped geometry — drives the z mapping and band heights.
     let minElev = Infinity, maxElev = -Infinity;
-    for (let i = 0; i < origData.length; i++) {
-      if (origData[i] < minElev) minElev = origData[i];
-      if (origData[i] > maxElev) maxElev = origData[i];
+    for (let i = 0; i < data.length; i++) {
+      if (data[i] < minElev) minElev = data[i];
+      if (data[i] > maxElev) maxElev = data[i];
     }
 
     // Scale factor: map geographic extent to printSize mm
@@ -1567,24 +1571,16 @@ const ThreeMFExport = {
       '</Relationships>'
     );
 
-    const xmlParts = [
-      '<?xml version="1.0" encoding="UTF-8"?>\n' +
-      '<model unit="millimeter" xml:lang="en-US"\n' +
-      '  xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">\n' +
-      '  <resources>\n' +
-      '    <basematerials id="1">\n'
-    ];
-    this.COLORS.forEach(c => {
-      xmlParts.push(`      <base name="${c.name}" displaycolor="${c.hex}" />\n`);
-    });
-    xmlParts.push('    </basematerials>\n');
-
     // Model-space band boundaries (mm). toMM converts elevation (m) → model z.
     const toMM = m => (m - mesh.minElev) * mesh.elevScale + mesh.baseHeight;
     const threshForestLoM = parseFloat(document.getElementById('thresh-forest-lo').value) || 400;
     const threshMountainM = parseFloat(document.getElementById('thresh-hills').value)     || 1500;
     const E_lowToForest    = toMM(threshForestLoM);
     const E_forestToAlpine = toMM(threshMountainM);
+    // Floors clamped to z≥0: when a threshold falls below the tile's lowest terrain
+    // its band collapses and the next band up becomes the base (down to z=0).
+    const fForest = Math.max(0, E_lowToForest);
+    const fAlpine = Math.max(0, E_forestToAlpine);
     const waterDepth = parseFloat(document.getElementById('water-depth').value) || 2;
 
     const wm = mesh.waterMask;
@@ -1605,33 +1601,51 @@ const ThreeMFExport = {
         active: () => true,
         floor:  () => 0,
         ceil:   gi => isWater(gi) ? Math.max(0, tz(gi) - waterDepth)
-                                  : Math.min(tz(gi), E_lowToForest),
+                                  : Math.min(tz(gi), fForest),
       },
       { // 2 Forest — land between the two thresholds
         active: (a,b,c,d) => !isWater(a) && !isWater(b) && !isWater(c) && !isWater(d)
                           && tz(a) >= E_lowToForest && tz(b) >= E_lowToForest
                           && tz(c) >= E_lowToForest && tz(d) >= E_lowToForest,
-        floor:  () => E_lowToForest,
-        ceil:   gi => Math.min(tz(gi), E_forestToAlpine),
+        floor:  () => fForest,
+        ceil:   gi => Math.min(tz(gi), fAlpine),
       },
       { // 3 Alpine — land above the upper threshold
         active: (a,b,c,d) => !isWater(a) && !isWater(b) && !isWater(c) && !isWater(d)
                           && tz(a) >= E_forestToAlpine && tz(b) >= E_forestToAlpine
                           && tz(c) >= E_forestToAlpine && tz(d) >= E_forestToAlpine,
-        floor:  () => E_forestToAlpine,
+        floor:  () => fAlpine,
         ceil:   gi => tz(gi),
       },
     ];
 
+    // Build solids first; keep only bands that produced geometry so unused colors
+    // (e.g. no Alpine in a low tile) are dropped from the material list entirely.
+    const built = [];
+    for (let bandIdx = 0; bandIdx < 4; bandIdx++) {
+      const solid = this._buildStackSolid(mesh, bandSpecs[bandIdx]);
+      if (solid && solid.t.length > 0) built.push({ bandIdx, solid });
+    }
+
+    const xmlParts = [
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<model unit="millimeter" xml:lang="en-US"\n' +
+      '  xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">\n' +
+      '  <resources>\n' +
+      '    <basematerials id="1">\n'
+    ];
+    built.forEach(({ bandIdx }) => {
+      const c = this.COLORS[bandIdx];
+      xmlParts.push(`      <base name="${c.name}" displaycolor="${c.hex}" />\n`);
+    });
+    xmlParts.push('    </basematerials>\n');
+
     let objectId = 2;
     const buildIds = [];
 
-    for (let bandIdx = 0; bandIdx < 4; bandIdx++) {
-      const solid = this._buildStackSolid(mesh, bandSpecs[bandIdx]);
-      if (!solid) continue;
-
+    built.forEach(({ solid }, pindex) => {
       xmlParts.push(
-        `    <object id="${objectId}" type="model" pid="1" pindex="${bandIdx}">\n` +
+        `    <object id="${objectId}" type="model" pid="1" pindex="${pindex}">\n` +
         `      <mesh>\n        <vertices>\n`
       );
       const nv = solid.v.length / 3;
@@ -1649,7 +1663,7 @@ const ThreeMFExport = {
       }
       xmlParts.push('        </triangles>\n      </mesh>\n    </object>\n');
       buildIds.push(objectId++);
-    }
+    });
 
     xmlParts.push('  </resources>\n  <build>\n');
     for (const id of buildIds) xmlParts.push(`    <item objectid="${id}" />\n`);
@@ -1699,6 +1713,12 @@ const ThreeMFExport = {
       for (let c = 0; c < gw - 1; c++) {
         const TL = T(r,c), TR = T(r,c+1), BL = T(r+1,c), BR = T(r+1,c+1);
         if (!spec.active(TL, TR, BL, BR)) continue;
+        // Skip quads with no thickness anywhere (a collapsed/empty band).
+        const thick = Math.max(
+          spec.ceil(TL) - spec.floor(TL), spec.ceil(TR) - spec.floor(TR),
+          spec.ceil(BL) - spec.floor(BL), spec.ceil(BR) - spec.floor(BR)
+        );
+        if (thick <= 1e-6) continue;
         any = true;
         // Top surface (normal +z)
         addT(top(TL), top(BL), top(TR));
