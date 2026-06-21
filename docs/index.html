@@ -855,9 +855,13 @@ const WaterDetection = {
     return { lakeMask, lakeElevMap: null }; // lakeElevMap filled by flattenLakes
   },
 
-  // Flatten lake pixels to their minimum elevation within each connected component.
-  // Mutates elevData.data in-place; returns a lakeElevMap (Float32Array, per-pixel
-  // lake surface elevation, 0 for non-lake pixels).
+  // Flatten each connected lake (OSM-detected pixels only) to a single flat
+  // surface elevation. Mutates elevData.data in-place; returns a lakeElevMap
+  // (Float32Array, per-pixel lake surface elevation, 0 for non-lake pixels).
+  //
+  // The surface elevation is the median over the component — robust against DEM
+  // outliers. NO basin expansion: only the actual OSM water footprint is touched,
+  // so a lake never floods the surrounding terrain that sits below its surface.
   flattenLakes(elevData, lakeMask) {
     if (!lakeMask) return new Float32Array(elevData.data.length);
     const origData = elevData.data;
@@ -869,16 +873,14 @@ const WaterDetection = {
     for (let start = 0; start < n; start++) {
       if (!lakeMask[start] || visited[start]) continue;
 
-      // BFS: find connected component of lake pixels
+      // BFS: find connected component of lake pixels (4-connectivity)
       const comp = [];
       const q = [start];
       visited[start] = 1;
-      let minElev = origData[start];
 
       for (let head = 0; head < q.length; head++) {
         const idx = q[head];
         comp.push(idx);
-        if (origData[idx] < minElev) minElev = origData[idx];
         const row = Math.floor(idx / w), col = idx % w;
         const neighbors = [
           row > 0     ? idx - w : -1,
@@ -894,36 +896,16 @@ const WaterDetection = {
         }
       }
 
-      // Flood-fill basin: pull in any adjacent non-lake pixels below minElev
-      // so the lake basin is fully contained (prevents sub-lake terrain peeking up)
-      const basinVisited = new Set(comp);
-      const basinQ = comp.slice();
-      for (let head = 0; head < basinQ.length; head++) {
-        const idx = basinQ[head];
-        const row = Math.floor(idx / w), col = idx % w;
-        const neighbors = [
-          row > 0     ? idx - w : -1,
-          row < h - 1 ? idx + w : -1,
-          col > 0     ? idx - 1 : -1,
-          col < w - 1 ? idx + 1 : -1,
-        ];
-        for (const nb of neighbors) {
-          if (nb >= 0 && !basinVisited.has(nb) && origData[nb] < minElev) {
-            basinVisited.add(nb);
-            basinQ.push(nb);
-            lakeMask[nb] = 1;
-          }
-        }
-      }
+      // Representative surface = median elevation of the component
+      const elevs = comp.map(i => origData[i]).sort((a, b) => a - b);
+      const surfaceElev = elevs[elevs.length >> 1];
 
-      // Flatten: set all lake pixels to minElev
-      for (const idx of basinVisited) {
-        origData[idx] = minElev;
-        lakeElevMap[idx] = minElev;
+      for (const idx of comp) {
+        origData[idx] = surfaceElev;
+        lakeElevMap[idx] = surfaceElev;
       }
     }
 
-    elevData.data = origData; // ensure reference is updated
     return lakeElevMap;
   },
 };
