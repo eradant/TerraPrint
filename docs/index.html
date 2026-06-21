@@ -1587,36 +1587,43 @@ const ThreeMFExport = {
     const tz = gi => mesh.vertices[gi*3 + 2];
     const isWater = gi => !!(wm && wm[gi]);
 
-    // Stacked horizontal slabs (bottom → top). All interfaces are flat & horizontal,
-    // so adjacent colors never share a vertical seam wall → no surrounding holes.
-    //   Lowland fills the whole tile from z=0 and serves as the base; beneath water
-    //   it stops `waterDepth` below the surface so the thin Water slab rests on it.
+    // The "base band" is the lowest land band actually present (its floor reaches
+    // z=0). It fills the whole tile from z=0 AND fills beneath every water body up
+    // to waterDepth below the surface. Lower bands whose threshold sits below the
+    // tile collapse to nothing, so e.g. a high tile uses Forest (not Lowland) as
+    // its base and under-lake fill.
+    const baseBand = fForest > 0 ? 1 : (fAlpine > 0 ? 2 : 3);
+
+    // Per land band (1=Lowland, 2=Forest, 3=Alpine): membership threshold (unclamped),
+    // clamped floor, clamped ceiling.
+    const lowerThresh = [null, -Infinity,      E_lowToForest,    E_forestToAlpine];
+    const floorZ      = [null, 0,              fForest,          fAlpine];
+    const upperCeil   = [null, fForest,        fAlpine,          Infinity];
+
+    const landBand = i => (i === baseBand)
+      ? { // base band: full tile + under-water fill
+          active: () => true,
+          floor:  () => 0,
+          ceil:   gi => isWater(gi) ? Math.max(0, tz(gi) - waterDepth)
+                                    : Math.min(tz(gi), upperCeil[i]),
+        }
+      : { // stacking band: land only, within its elevation slice
+          active: (a,b,c,d) => !isWater(a) && !isWater(b) && !isWater(c) && !isWater(d)
+                            && tz(a) >= lowerThresh[i] && tz(b) >= lowerThresh[i]
+                            && tz(c) >= lowerThresh[i] && tz(d) >= lowerThresh[i],
+          floor:  () => floorZ[i],
+          ceil:   gi => Math.min(tz(gi), upperCeil[i]),
+        };
+
     const bandSpecs = [
       { // 0 Water — thin slab capped at each water surface
         active: (a,b,c,d) => isWater(a) && isWater(b) && isWater(c) && isWater(d),
         floor:  gi => Math.max(0, tz(gi) - waterDepth),
         ceil:   gi => tz(gi),
       },
-      { // 1 Lowland — full-tile base + lowest elevation slab
-        active: () => true,
-        floor:  () => 0,
-        ceil:   gi => isWater(gi) ? Math.max(0, tz(gi) - waterDepth)
-                                  : Math.min(tz(gi), fForest),
-      },
-      { // 2 Forest — land between the two thresholds
-        active: (a,b,c,d) => !isWater(a) && !isWater(b) && !isWater(c) && !isWater(d)
-                          && tz(a) >= E_lowToForest && tz(b) >= E_lowToForest
-                          && tz(c) >= E_lowToForest && tz(d) >= E_lowToForest,
-        floor:  () => fForest,
-        ceil:   gi => Math.min(tz(gi), fAlpine),
-      },
-      { // 3 Alpine — land above the upper threshold
-        active: (a,b,c,d) => !isWater(a) && !isWater(b) && !isWater(c) && !isWater(d)
-                          && tz(a) >= E_forestToAlpine && tz(b) >= E_forestToAlpine
-                          && tz(c) >= E_forestToAlpine && tz(d) >= E_forestToAlpine,
-        floor:  () => fAlpine,
-        ceil:   gi => tz(gi),
-      },
+      landBand(1),
+      landBand(2),
+      landBand(3),
     ];
 
     // Build solids first; keep only bands that produced geometry so unused colors
