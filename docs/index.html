@@ -411,10 +411,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
     </svg>
     TerraPrint
   </div>
-  <div class="header-actions">
-    <button id="btn-import" class="btn btn-sm" onclick="UI.importProgress()" title="Import progress">📂 Import</button>
-    <button class="btn btn-sm" onclick="UI.exportProgress()" title="Export progress">💾 Export</button>
-  </div>
+  <div class="header-actions"></div>
 </header>
 
 <div class="app-body">
@@ -422,29 +419,12 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
   <div class="panel" id="side-panel">
 
     <div class="panel-section">
-      <h3>Grid Configuration</h3>
+      <h3>Model Settings</h3>
       <div class="section-body">
-        <div class="input-row">
-          <div>
-            <label>Columns</label>
-            <input type="number" id="grid-cols" value="8" min="2" max="30" onchange="Grid.rebuild()">
-          </div>
-          <div>
-            <label>Rows</label>
-            <input type="number" id="grid-rows" value="6" min="2" max="30" onchange="Grid.rebuild()">
-          </div>
-        </div>
         <div class="input-group">
           <label>Print Size (mm per tile)</label>
           <input type="number" id="print-size" value="150" min="50" max="300" step="10">
         </div>
-        <button class="btn btn-sm btn-block" onclick="Grid.fitToOregon()">Reset Grid to Oregon</button>
-      </div>
-    </div>
-
-    <div class="panel-section">
-      <h3>Model Settings</h3>
-      <div class="section-body">
         <div class="input-group">
           <label>Vertical Exaggeration</label>
           <div class="range-row">
@@ -468,14 +448,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
         </div>
         <div class="input-group" style="display:flex;align-items:center;gap:8px;">
           <input type="checkbox" id="water-detect" checked style="accent-color:var(--accent);width:16px;height:16px;">
-          <label for="water-detect" style="margin:0;cursor:pointer;">Detect ocean</label>
-        </div>
-        <div class="input-group" id="water-clamp-group" style="margin-top:6px;display:none;">
-          <label>Lake edge clamp (meters)</label>
-          <div class="range-row">
-            <input type="range" id="water-clamp" min="1" max="50" step="1" value="10" oninput="document.getElementById('water-clamp-val').textContent=this.value+'m'">
-            <span class="range-val" id="water-clamp-val">10m</span>
-          </div>
+          <label for="water-detect" style="margin:0;cursor:pointer;">Detect water (ocean + lakes)</label>
         </div>
         <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:6px;">
           <input type="checkbox" id="step-mode" style="accent-color:var(--accent);width:16px;height:16px;" onchange="document.getElementById('step-interval-group').style.display=this.checked?'block':'none'">
@@ -494,54 +467,42 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
     <div class="panel-section">
       <h3>Terrain Colors (3MF)</h3>
       <div class="section-body">
-        <p style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Flat terrain (low slope) is beige in the valley band and the high-desert band. Forest/Hills is the solid green zone between them — steep slopes anywhere also stay green. Mountains are grey above the peak cutoff.</p>
-
+        <div class="threshold-row">
+          <span class="swatch" style="background:#2D6ABF"></span>
+          <span>Water</span>
+          <span style="color:var(--text-muted);font-size:11px;">ocean + lakes</span>
+        </div>
         <div class="threshold-row">
           <span class="swatch" style="background:var(--topo-flat)"></span>
-          <span>Flat terrain</span>
-          <span style="color:var(--text-muted)">slope&nbsp;&lt;</span>
-          <input type="number" id="thresh-slope" value="12" step="1" min="0" max="45"> <span style="color:var(--text-muted)">°</span>
+          <span>Lowland</span>
+          <span style="color:var(--text-muted)">below</span>
+          <input type="number" id="thresh-forest-lo" value="400" step="50"> <span style="color:var(--text-muted)">m</span>
         </div>
         <div class="threshold-row">
           <span class="swatch" style="background:var(--topo-hills)"></span>
-          <span>Forest / Hills</span>
-          <input type="number" id="thresh-forest-lo" value="400" step="50">
-          <span style="color:var(--text-muted)">–</span>
-          <input type="number" id="thresh-desert-lo" value="1200" step="50"> <span style="color:var(--text-muted)">m</span>
+          <span>Forest</span>
+          <span style="color:var(--text-muted)">to</span>
+          <input type="number" id="thresh-hills" value="1500" step="50"> <span style="color:var(--text-muted)">m</span>
         </div>
         <div class="threshold-row">
           <span class="swatch" style="background:var(--topo-mountain)"></span>
-          <span>Mountains</span>
+          <span>Alpine</span>
           <span style="color:var(--text-muted)">above</span>
-          <input type="number" id="thresh-hills" value="1500" step="50"> <span style="color:var(--text-muted)">m</span>
+        </div>
+        <div class="input-group" style="margin-top:10px;">
+          <label>Slope sharpening (m per degree)</label>
+          <div class="range-row">
+            <input type="range" id="slope-scale" min="0" max="30" step="1" value="10" oninput="document.getElementById('slope-scale-val').textContent=this.value">
+            <span class="range-val" id="slope-scale-val">10</span>
+          </div>
         </div>
       </div>
     </div>
 
     <div class="panel-section">
-      <h3>Selected Tile</h3>
+      <h3>Selected Area</h3>
       <div class="section-body" id="selection-info">
-        <p style="font-size:12px;color:var(--text-muted);">Click a grid cell on the map to select it, or use the rectangle draw tool for a custom area.</p>
-      </div>
-    </div>
-
-    <div class="panel-section">
-      <h3>Oregon Progress</h3>
-      <div class="section-body">
-        <div class="progress-bar-wrap">
-          <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
-        </div>
-        <div class="progress-stats">
-          <span id="progress-printed">0 printed</span>
-          <span id="progress-exported">0 exported</span>
-          <span id="progress-total">0 / 0 tiles</span>
-        </div>
-        <div style="margin-top: 12px;">
-          <div class="legend-row"><span class="legend-swatch" style="background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.15)"></span> Not started</div>
-          <div class="legend-row"><span class="legend-swatch" style="background:rgba(88,166,255,0.35)"></span> Exported</div>
-          <div class="legend-row"><span class="legend-swatch" style="background:rgba(63,185,80,0.45)"></span> Printed</div>
-        </div>
-        <button class="btn btn-sm btn-danger btn-block" style="margin-top:10px" onclick="Progress.clearAll()">Clear All Progress</button>
+        <p style="font-size:12px;color:var(--text-muted);">Draw a rectangle on the map to select an area.</p>
       </div>
     </div>
   </div>
@@ -578,58 +539,25 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 
 const TERRAIN_TILE_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
 
-// Adaptive zoom: smaller selections get higher zoom for more detail
+// Adaptive zoom: smaller selections get higher zoom for more detail (z15 = LiDAR resolution via USGS 3DEP)
 function terrainZoomForBounds(bounds) {
-  const latSpan = bounds.getNorth() - bounds.getSouth();
-  const lngSpan = bounds.getEast() - bounds.getWest();
-  const maxSpan = Math.max(latSpan, lngSpan);
-  if (maxSpan < 0.15) return 14;     // very small area (~15km)
-  if (maxSpan < 0.4)  return 13;     // small area (~40km)
-  if (maxSpan < 1.0)  return 12;     // medium area (~100km)
-  if (maxSpan < 3.0)  return 11;     // large area (~300km)
-  return 10;                          // very large area
+  const maxSpan = Math.max(bounds.getNorth() - bounds.getSouth(), bounds.getEast() - bounds.getWest());
+  if (maxSpan < 0.10) return 15;   // ~10km — LiDAR resolution
+  if (maxSpan < 0.25) return 14;   // ~25km
+  if (maxSpan < 0.70) return 13;   // ~70km
+  if (maxSpan < 2.00) return 12;   // ~200km
+  return 11;
 }
-
-// Simplified Oregon boundary [lng, lat] pairs (GeoJSON winding)
-const OREGON_BOUNDARY = [
-  [-124.567,42.000],[-124.548,42.092],[-124.473,42.434],[-124.418,42.663],
-  [-124.398,42.855],[-124.410,43.051],[-124.317,43.262],[-124.351,43.410],
-  [-124.407,43.535],[-124.356,43.695],[-124.233,43.926],[-124.164,44.130],
-  [-124.116,44.286],[-124.148,44.452],[-124.065,44.632],[-124.053,44.828],
-  [-124.020,45.019],[-124.076,45.173],[-124.041,45.390],[-124.075,45.555],
-  [-124.062,45.739],[-124.065,45.888],[-124.039,46.040],[-124.018,46.190],
-  [-123.960,46.259],[-123.703,46.265],[-123.479,46.269],[-123.262,46.184],
-  [-123.031,46.132],[-122.900,46.084],[-122.789,45.867],[-122.649,45.631],
-  [-122.403,45.580],[-122.241,45.548],[-121.924,45.657],[-121.736,45.694],
-  [-121.445,45.617],[-121.172,45.607],[-120.942,45.656],[-120.591,45.746],
-  [-120.249,45.726],[-119.870,45.836],[-119.490,45.906],[-119.125,45.933],
-  [-118.788,45.960],[-118.424,45.929],[-118.013,45.982],[-117.603,46.000],
-  [-117.420,46.122],[-117.241,46.283],[-117.044,46.388],[-116.918,46.000],
-  [-116.783,45.825],[-116.696,45.635],[-116.527,45.449],[-116.672,45.124],
-  [-116.784,44.996],[-116.898,44.849],[-117.061,44.657],[-117.169,44.428],
-  [-117.147,44.260],[-117.036,44.040],[-117.027,43.815],[-117.026,43.500],
-  [-117.026,43.000],[-117.026,42.500],[-117.026,42.000],[-124.567,42.000]
-];
-
-const OREGON_BOUNDS = {
-  north: 46.40, south: 41.99,
-  east: -116.45, west: -124.60
-};
 
 // ═══════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════
 
 const State = {
-  gridCols: 8,
-  gridRows: 6,
-  gridCells: [],          // [{id, bounds, layer, status}]
-  selectedCell: null,      // grid cell id or 'custom'
   selectedBounds: null,    // L.LatLngBounds of current selection
   customRect: null,        // Leaflet rectangle layer for custom draw
   elevationData: null,     // {width, height, data: Float32Array, bounds}
   meshData: null,          // generated mesh
-  tileProgress: {},        // { 'r-c': 'exported'|'printed' }
 };
 
 // ═══════════════════════════════════════════════
@@ -660,65 +588,27 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(a.href);
 }
 
-function pointInPolygon(lat, lng, polygon) {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const [xi, yi] = polygon[i]; // [lng, lat]
-    const [xj, yj] = polygon[j];
-    if (((yi > lat) !== (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi)) {
-      inside = !inside;
-    }
-  }
-  return inside;
-}
-
-function cellOverlapsOregon(bounds) {
-  // Check if any corner is inside Oregon, or if Oregon boundary crosses the cell
-  const corners = [
-    [bounds.getSouth(), bounds.getWest()],
-    [bounds.getSouth(), bounds.getEast()],
-    [bounds.getNorth(), bounds.getWest()],
-    [bounds.getNorth(), bounds.getEast()],
-  ];
-  for (const [lat, lng] of corners) {
-    if (pointInPolygon(lat, lng, OREGON_BOUNDARY)) return true;
-  }
-  // Also check if some Oregon boundary points are inside the cell
-  for (const [lng, lat] of OREGON_BOUNDARY) {
-    if (lat >= bounds.getSouth() && lat <= bounds.getNorth() &&
-        lng >= bounds.getWest() && lng <= bounds.getEast()) return true;
-  }
-  return false;
-}
 
 // ═══════════════════════════════════════════════
 //  MAP MODULE
 // ═══════════════════════════════════════════════
 
-let map, oregonLayer, drawnItems, drawControl;
+let map, drawnItems, drawControl;
 
 const MapModule = {
   init() {
     map = L.map('map', {
-      center: [44.1, -120.5],
-      zoom: 7,
+      center: [40, -100],
+      zoom: 4,
       zoomControl: true,
       preferCanvas: true,
     });
 
-    // Base tile layer (dark)
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
       maxZoom: 18,
     }).addTo(map);
 
-    // Oregon boundary
-    oregonLayer = L.polygon(
-      OREGON_BOUNDARY.map(([lng, lat]) => [lat, lng]),
-      { color: '#58a6ff', weight: 2, fillColor: 'transparent', fillOpacity: 0, dashArray: '6,4' }
-    ).addTo(map);
-
-    // Drawing support
     drawnItems = L.featureGroup().addTo(map);
     drawControl = new L.Control.Draw({
       position: 'topright',
@@ -733,130 +623,15 @@ const MapModule = {
     map.on(L.Draw.Event.CREATED, (e) => {
       drawnItems.clearLayers();
       drawnItems.addLayer(e.layer);
-      State.selectedCell = 'custom';
       State.selectedBounds = e.layer.getBounds();
       State.customRect = e.layer;
-      Grid.deselectAll();
       UI.updateSelectionInfo();
     });
     map.on(L.Draw.Event.DELETED, () => {
-      State.selectedCell = null;
       State.selectedBounds = null;
       State.customRect = null;
       UI.updateSelectionInfo();
     });
-  }
-};
-
-// ═══════════════════════════════════════════════
-//  GRID MODULE
-// ═══════════════════════════════════════════════
-
-const Grid = {
-  layers: [],
-
-  rebuild() {
-    // Remove existing grid
-    this.layers.forEach(l => map.removeLayer(l));
-    this.layers = [];
-    State.gridCells = [];
-
-    State.gridCols = parseInt(document.getElementById('grid-cols').value) || 8;
-    State.gridRows = parseInt(document.getElementById('grid-rows').value) || 6;
-
-    const { north, south, east, west } = OREGON_BOUNDS;
-    const cellW = (east - west) / State.gridCols;
-    const cellH = (north - south) / State.gridRows;
-
-    for (let r = 0; r < State.gridRows; r++) {
-      for (let c = 0; c < State.gridCols; c++) {
-        const s = south + r * cellH;
-        const n = south + (r + 1) * cellH;
-        const w = west + c * cellW;
-        const e = west + (c + 1) * cellW;
-        const bounds = L.latLngBounds([s, w], [n, e]);
-
-        if (!cellOverlapsOregon(bounds)) continue;
-
-        const id = `${r}-${c}`;
-        const status = State.tileProgress[id] || 'none';
-        const fillColor = status === 'printed' ? 'rgba(63,185,80,0.35)' :
-                          status === 'exported' ? 'rgba(88,166,255,0.25)' :
-                          'rgba(255,255,255,0.04)';
-
-        const layer = L.rectangle(bounds, {
-          color: 'rgba(255,255,255,0.2)',
-          weight: 1,
-          fillColor,
-          fillOpacity: 1,
-          className: 'grid-cell',
-        });
-
-        layer.cellId = id;
-        layer.cellBounds = bounds;
-        layer.on('click', () => this.selectCell(id));
-
-        const centerLat = (s+n)/2, centerLng = (w+e)/2;
-        layer.bindTooltip(
-          `Tile ${c},${r}<br>Status: ${status}`,
-          { className: 'grid-tooltip', direction: 'top' }
-        );
-
-        layer.addTo(map);
-        this.layers.push(layer);
-        State.gridCells.push({ id, bounds, layer, status, row: r, col: c });
-      }
-    }
-    Progress.update();
-  },
-
-  fitToOregon() {
-    document.getElementById('grid-cols').value = 8;
-    document.getElementById('grid-rows').value = 6;
-    this.rebuild();
-    map.fitBounds(oregonLayer.getBounds().pad(0.05));
-  },
-
-  selectCell(id) {
-    // Clear custom rectangle
-    drawnItems.clearLayers();
-    State.customRect = null;
-
-    this.deselectAll();
-    const cell = State.gridCells.find(c => c.id === id);
-    if (!cell) return;
-
-    cell.layer.setStyle({ color: '#f0b429', weight: 3 });
-    State.selectedCell = id;
-    State.selectedBounds = cell.bounds;
-    UI.updateSelectionInfo();
-  },
-
-  deselectAll() {
-    State.gridCells.forEach(c => {
-      const status = State.tileProgress[c.id] || 'none';
-      const fillColor = status === 'printed' ? 'rgba(63,185,80,0.35)' :
-                        status === 'exported' ? 'rgba(88,166,255,0.25)' :
-                        'rgba(255,255,255,0.04)';
-      c.layer.setStyle({ color: 'rgba(255,255,255,0.2)', weight: 1, fillColor, fillOpacity: 1 });
-    });
-    State.selectedCell = null;
-    State.selectedBounds = null;
-  },
-
-  updateCellStyle(id) {
-    const cell = State.gridCells.find(c => c.id === id);
-    if (!cell) return;
-    const status = State.tileProgress[id] || 'none';
-    const fillColor = status === 'printed' ? 'rgba(63,185,80,0.35)' :
-                      status === 'exported' ? 'rgba(88,166,255,0.25)' :
-                      'rgba(255,255,255,0.04)';
-    cell.layer.setStyle({ fillColor, fillOpacity: 1 });
-    cell.layer.unbindTooltip();
-    cell.layer.bindTooltip(
-      `Tile ${cell.col},${cell.row}<br>Status: ${status}`,
-      { className: 'grid-tooltip', direction: 'top' }
-    );
   }
 };
 
@@ -1001,26 +776,27 @@ const Elevation = {
 // ═══════════════════════════════════════════════
 
 const WaterDetection = {
-  /**
-   * Detect water bodies (lakes, ponds, reservoirs) via OpenStreetMap Overpass API.
-   * Returns Uint8Array mask (1 = water) matching resolution × resolution grid.
-   */
+  // Detect water bodies via OSM Overpass API.
+  // Returns { lakeMask: Uint8Array, lakeElevMap: Float32Array }.
+  // On failure returns nulls so ocean-only detection still works.
   async detect(bounds, resolution) {
-    showLoading('Detecting water bodies…');
-    return this.overpassDetect(bounds, resolution);
+    try {
+      showLoading('Detecting water bodies…');
+      return await this.overpassDetect(bounds, resolution);
+    } catch (e) {
+      console.warn('Water detection failed, using ocean-only:', e);
+      return { lakeMask: null, lakeElevMap: null };
+    }
   },
 
-  /**
-   * Query OSM Overpass API for natural=water polygons (lakes, reservoirs, ponds),
-   * rasterize them onto a canvas, and return a binary mask.
-   */
   async overpassDetect(bounds, resolution) {
     const s = bounds.getSouth(), w = bounds.getWest();
     const n = bounds.getNorth(), e = bounds.getEast();
 
+    // Query all natural=water features (lakes, ponds, rivers, reservoirs, etc.)
     const query = `[out:json][timeout:30];(
-      way["natural"="water"]["water"~"^(lake|reservoir)$"](${s},${w},${n},${e});
-      relation["natural"="water"]["water"~"^(lake|reservoir)$"](${s},${w},${n},${e});
+      way["natural"="water"](${s},${w},${n},${e});
+      relation["natural"="water"](${s},${w},${n},${e});
     );out geom;`;
 
     const resp = await fetch('https://overpass-api.de/api/interpreter', {
@@ -1031,7 +807,6 @@ const WaterDetection = {
     if (!resp.ok) throw new Error('Overpass HTTP ' + resp.status);
     const data = await resp.json();
 
-    // Canvas-based rasterization
     const canvas = document.createElement('canvas');
     canvas.width = resolution;
     canvas.height = resolution;
@@ -1053,19 +828,16 @@ const WaterDetection = {
 
     ctx.fillStyle = 'white';
     const elements = data.elements || [];
-    showLoading(`Rasterizing ${elements.length} water bodies…`);
+    showLoading(`Rasterizing ${elements.length} water features…`);
 
     for (const el of elements) {
       if (el.type === 'way' && el.tags?.natural === 'water') {
         drawPoly(el.geometry);
       }
-
       if (el.type === 'relation' && el.tags?.natural === 'water') {
         const outers = (el.members || []).filter(m => m.role === 'outer' && m.geometry);
         const inners = (el.members || []).filter(m => m.role === 'inner' && m.geometry);
-
         for (const m of outers) drawPoly(m.geometry);
-
         if (inners.length) {
           ctx.save();
           ctx.globalCompositeOperation = 'destination-out';
@@ -1075,13 +847,84 @@ const WaterDetection = {
       }
     }
 
-    // Read mask from canvas
     const imageData = ctx.getImageData(0, 0, resolution, resolution);
-    const mask = new Uint8Array(resolution * resolution);
-    for (let i = 0; i < mask.length; i++) {
-      mask[i] = imageData.data[i * 4] > 128 ? 1 : 0;
+    const lakeMask = new Uint8Array(resolution * resolution);
+    for (let i = 0; i < lakeMask.length; i++) {
+      lakeMask[i] = imageData.data[i * 4] > 128 ? 1 : 0;
     }
-    return mask;
+    return { lakeMask, lakeElevMap: null }; // lakeElevMap filled by flattenLakes
+  },
+
+  // Flatten lake pixels to their minimum elevation within each connected component.
+  // Mutates elevData.data in-place; returns a lakeElevMap (Float32Array, per-pixel
+  // lake surface elevation, 0 for non-lake pixels).
+  flattenLakes(elevData, lakeMask) {
+    if (!lakeMask) return new Float32Array(elevData.data.length);
+    const origData = elevData.data;
+    const n = origData.length;
+    const lakeElevMap = new Float32Array(n);
+    const w = elevData.width, h = elevData.height;
+    const visited = new Uint8Array(n);
+
+    for (let start = 0; start < n; start++) {
+      if (!lakeMask[start] || visited[start]) continue;
+
+      // BFS: find connected component of lake pixels
+      const comp = [];
+      const q = [start];
+      visited[start] = 1;
+      let minElev = origData[start];
+
+      for (let head = 0; head < q.length; head++) {
+        const idx = q[head];
+        comp.push(idx);
+        if (origData[idx] < minElev) minElev = origData[idx];
+        const row = Math.floor(idx / w), col = idx % w;
+        const neighbors = [
+          row > 0     ? idx - w : -1,
+          row < h - 1 ? idx + w : -1,
+          col > 0     ? idx - 1 : -1,
+          col < w - 1 ? idx + 1 : -1,
+        ];
+        for (const nb of neighbors) {
+          if (nb >= 0 && lakeMask[nb] && !visited[nb]) {
+            visited[nb] = 1;
+            q.push(nb);
+          }
+        }
+      }
+
+      // Flood-fill basin: pull in any adjacent non-lake pixels below minElev
+      // so the lake basin is fully contained (prevents sub-lake terrain peeking up)
+      const basinVisited = new Set(comp);
+      const basinQ = comp.slice();
+      for (let head = 0; head < basinQ.length; head++) {
+        const idx = basinQ[head];
+        const row = Math.floor(idx / w), col = idx % w;
+        const neighbors = [
+          row > 0     ? idx - w : -1,
+          row < h - 1 ? idx + w : -1,
+          col > 0     ? idx - 1 : -1,
+          col < w - 1 ? idx + 1 : -1,
+        ];
+        for (const nb of neighbors) {
+          if (nb >= 0 && !basinVisited.has(nb) && origData[nb] < minElev) {
+            basinVisited.add(nb);
+            basinQ.push(nb);
+            lakeMask[nb] = 1;
+          }
+        }
+      }
+
+      // Flatten: set all lake pixels to minElev
+      for (const idx of basinVisited) {
+        origData[idx] = minElev;
+        lakeElevMap[idx] = minElev;
+      }
+    }
+
+    elevData.data = origData; // ensure reference is updated
+    return lakeElevMap;
   },
 };
 
@@ -1090,20 +933,15 @@ const WaterDetection = {
 // ═══════════════════════════════════════════════
 
 const MeshGen = {
-  /**
-   * Generate mesh from elevation data.
-   * waterMask: optional Uint8Array where 1=water, matching elevData dimensions.
-   * Returns { vertices, triangles, triColors, ... }
-   */
-  generate(elevData) {
+  // Generate mesh from elevation data.
+  // lakeMask: optional Uint8Array (1=lake pixel), lakeElevMap: optional Float32Array.
+  generate(elevData, lakeMask = null, lakeElevMap = null) {
     const printSize = parseFloat(document.getElementById('print-size').value) || 150;
     const vertExag = parseFloat(document.getElementById('vert-exag').value) || 2;
     const baseHeight = parseFloat(document.getElementById('base-height').value) || 4;
     const threshMountain = parseFloat(document.getElementById('thresh-hills').value) || 1500;
     const threshForestLo = parseFloat(document.getElementById('thresh-forest-lo').value) || 400;
-    const threshDesertLo = parseFloat(document.getElementById('thresh-desert-lo').value) || 1200;
-    const slopeDeg       = parseFloat(document.getElementById('thresh-slope').value) || 12;
-    const threshSlope    = Math.sin(slopeDeg * Math.PI / 180);
+    const slopeScale = parseFloat(document.getElementById('slope-scale').value) || 10;
 
     const w = elevData.width;
     const h = elevData.height;
@@ -1260,45 +1098,54 @@ const MeshGen = {
       }
     }
 
-    // Ocean detection: pixels at or below sea level (elevation ≤ 0m).
-    // Inland areas in Oregon are always above sea level, so this reliably
-    // detects only the Pacific coast without any false inland positives.
-    const useOceanColor = document.getElementById('water-detect').checked;
-    const oceanMask = new Uint8Array(w * h);
-    if (useOceanColor) {
-      for (let i = 0; i < w * h; i++) {
-        oceanMask[i] = origData[i] <= 0 ? 1 : 0;
+    // ── Per-pixel slope in degrees (central differences in model space) ──────
+    const pixelSlopeDeg = new Float32Array(w * h);
+    const sx = meshW / (w - 1), sy = meshH / (h - 1);
+    for (let row = 0; row < h; row++) {
+      for (let col = 0; col < w; col++) {
+        const gi = row * w + col;
+        const zAt = gi2 => positions[gi2 * 3 + 2];
+        const dzdx = col > 0 && col < w - 1
+          ? (zAt(row*w+col+1) - zAt(row*w+col-1)) / (2*sx)
+          : col === 0 ? (zAt(row*w+1) - zAt(gi)) / sx
+                      : (zAt(gi) - zAt(row*w+col-1)) / sx;
+        const dzdy = row > 0 && row < h - 1
+          ? (zAt((row+1)*w+col) - zAt((row-1)*w+col)) / (2*sy)
+          : row === 0 ? (zAt(w+col) - zAt(gi)) / sy
+                      : (zAt(gi) - zAt((row-1)*w+col)) / sy;
+        pixelSlopeDeg[gi] = Math.atan(Math.sqrt(dzdx*dzdx + dzdy*dzdy)) * 180 / Math.PI;
       }
     }
 
-    // Classify triangles by color using elevation bands only (no slope).
-    // 0=water/base, 1=flatland, 2=hills/forest, 3=mountain peaks
-    const triColors = new Uint8Array(triElevations.length);
-    const terrainVertCount = w * h; // only terrain surface verts have grid coords
-
-    for (let i = 0; i < triElevations.length; i++) {
-      const e = triElevations[i];
-
-      // Ocean check: any terrain vertex at or below sea level → water color.
-      if (e >= 0) {
-        const ti = i * 3;
-        const v0 = triangles[ti], v1 = triangles[ti + 1], v2 = triangles[ti + 2];
-        let isOcean = false;
-        for (const vi of [v0, v1, v2]) {
-          if (vi < terrainVertCount && oceanMask[vi]) { isOcean = true; break; }
-        }
-        if (isOcean) { triColors[i] = 0; continue; }
-      }
-
-      if (e < 0) {
-        triColors[i] = 0; // base/walls
-      } else if (e < threshForestLo) {
-        triColors[i] = 1; // flatland
-      } else if (e < threshMountain) {
-        triColors[i] = 2; // hills/forest
+    // ── Per-pixel band assignment (used for 3MF export and preview) ──────────
+    // 0=Water, 1=Lowland, 2=Forest, 3=Alpine
+    // Effective elevation = actual_elevation + slope_degrees × slopeScale
+    // so steep slopes punch up into higher bands even at lower elevations.
+    const useWaterDetect = document.getElementById('water-detect').checked;
+    const pixelBands = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+      if (useWaterDetect && ((lakeMask && lakeMask[i]) || origData[i] <= 0)) {
+        pixelBands[i] = 0; // Water: ocean or lake
       } else {
-        triColors[i] = 3; // mountain peaks
+        const effElev = origData[i] + pixelSlopeDeg[i] * slopeScale;
+        pixelBands[i] = effElev < threshForestLo ? 1
+                      : effElev < threshMountain  ? 2
+                      : 3;
       }
+    }
+
+    // Derive triColors from pixelBands (majority band among a triangle's terrain vertices)
+    const triColors = new Uint8Array(triElevations.length);
+    const terrainVertCount = w * h;
+    for (let i = 0; i < triElevations.length; i++) {
+      if (triElevations[i] < 0) { triColors[i] = 0; continue; } // walls/base
+      const ti = i * 3;
+      const counts = [0, 0, 0, 0];
+      for (let k = 0; k < 3; k++) {
+        const vi = triangles[ti + k];
+        if (vi < terrainVertCount) counts[pixelBands[vi]]++;
+      }
+      triColors[i] = counts.indexOf(Math.max(...counts));
     }
 
     // ── Color smoothing: eliminate isolated noise triangles ──────────────────
@@ -1575,6 +1422,8 @@ const MeshGen = {
       triColors,
       triElevations,
       triSlopes,
+      pixelBands,
+      lakeElevMap,
       gridW: w,
       gridH: h,
       meshW,
@@ -1760,23 +1609,17 @@ const STLExport = {
 
 const ThreeMFExport = {
   COLORS: [
-    { name: 'Water',     hex: '#2D6ABF' },
-    { name: 'Flatland',  hex: '#3D8C40' },
-    { name: 'Hills',     hex: '#C47F17' },
-    { name: 'Mountains', hex: '#D4D4D4' },
+    { name: 'Water',   hex: '#2D6ABF' },
+    { name: 'Lowland', hex: '#3D8C40' },
+    { name: 'Forest',  hex: '#C47F17' },
+    { name: 'Alpine',  hex: '#D4D4D4' },
   ],
 
-  // ── Public entry point ────────────────────────────────────────────────────
-  // Produces a 3MF with 4 separate closed-solid objects, one per color band.
-  // Each band is a non-overlapping elevation slice of the terrain:
-  //   Water    : flat slab  z = [0, E_water]
-  //   Flatland : terrain    z = [E_water,    clamp(terrain, E_flatland)]
-  //   Hills    : terrain    z = [E_flatland, clamp(terrain, E_mountain)]
-  //   Mountains: terrain    z = [E_mountain, terrain_surface]
-  //
-  // Bands share flat horizontal interfaces — no interior seam walls, no holes.
-  // Bambu Studio reads displaycolor and auto-assigns each object to a filament.
-  async generate(mesh, opts = {}) {
+  // Produce a 3MF with 4 separate closed-solid objects (one per filament slot).
+  // Each pixel is assigned to exactly one band via pixelBands[]. Solids fit
+  // together using split walls: at any inter-band edge, each band generates only
+  // its share of the wall so there are no duplicate coplanar faces (no seams/holes).
+  async generate(mesh) {
     const zip = new JSZip();
     zip.file('[Content_Types].xml',
       '<?xml version="1.0" encoding="UTF-8"?>\n' +
@@ -1792,32 +1635,13 @@ const ThreeMFExport = {
       '</Relationships>'
     );
 
-    // Read thresholds (meters) from UI — same values used by MeshGen.
-    const threshForestLoM = parseFloat(document.getElementById('thresh-forest-lo').value) || 400;
-    const threshMountainM = parseFloat(document.getElementById('thresh-hills').value)     || 1500;
-
-    // Convert meters → model-space mm using the same formula as MeshGen.
-    const toMM = m => (m - mesh.minElev) * mesh.elevScale + mesh.baseHeight;
-    // E_water pegged to sea level (0m) — matches the elevation ≤ 0 ocean detection.
-    const E_water    = toMM(0);
-    const E_flatland = toMM(threshForestLoM);
-    const E_mountain = toMM(threshMountainM);
-
-    const bands = [
-      { colorIdx: 0, eLow: 0,          eHigh: E_water    },
-      { colorIdx: 1, eLow: E_water,    eHigh: E_flatland },
-      { colorIdx: 2, eLow: E_flatland, eHigh: E_mountain },
-      { colorIdx: 3, eLow: E_mountain, eHigh: Infinity   },
-    ];
-
-    const xmlParts = [];
-    xmlParts.push(
+    const xmlParts = [
       '<?xml version="1.0" encoding="UTF-8"?>\n' +
       '<model unit="millimeter" xml:lang="en-US"\n' +
       '  xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">\n' +
       '  <resources>\n' +
       '    <basematerials id="1">\n'
-    );
+    ];
     this.COLORS.forEach(c => {
       xmlParts.push(`      <base name="${c.name}" displaycolor="${c.hex}" />\n`);
     });
@@ -1826,17 +1650,12 @@ const ThreeMFExport = {
     let objectId = 2;
     const buildIds = [];
 
-    for (const band of bands) {
-      if (band.eHigh <= band.eLow) continue;
-
-      const solid = band.colorIdx === 0
-        ? this._waterSlab(mesh.meshW, mesh.meshH, band.eLow, band.eHigh)
-        : this._terrainBand(mesh, band.eLow, band.eHigh);
-
+    for (let bandIdx = 0; bandIdx < 4; bandIdx++) {
+      const solid = this._buildPixelBandSolid(bandIdx, mesh);
       if (!solid) continue;
 
       xmlParts.push(
-        `    <object id="${objectId}" type="model" pid="1" pindex="${band.colorIdx}">\n` +
+        `    <object id="${objectId}" type="model" pid="1" pindex="${bandIdx}">\n` +
         `      <mesh>\n        <vertices>\n`
       );
       const nv = solid.v.length / 3;
@@ -1857,9 +1676,7 @@ const ThreeMFExport = {
     }
 
     xmlParts.push('  </resources>\n  <build>\n');
-    for (const id of buildIds) {
-      xmlParts.push(`    <item objectid="${id}" />\n`);
-    }
+    for (const id of buildIds) xmlParts.push(`    <item objectid="${id}" />\n`);
     xmlParts.push('  </build>\n</model>');
 
     zip.file('3D/3dmodel.model', new Blob(xmlParts, { type: 'text/xml' }));
@@ -1870,108 +1687,211 @@ const ThreeMFExport = {
     return { blob, warnings: [] };
   },
 
-  // Full-tile rectangular box: the Water band base covering z = [eLow, eHigh].
-  _waterSlab(meshW, meshH, eLow, eHigh) {
-    const lo = eLow, hi = eHigh;
-    // prettier-ignore
-    const v = [
-      0,     0,     lo,   // 0 bot front-left
-      meshW, 0,     lo,   // 1 bot front-right
-      meshW, meshH, lo,   // 2 bot back-right
-      0,     meshH, lo,   // 3 bot back-left
-      0,     0,     hi,   // 4 top front-left
-      meshW, 0,     hi,   // 5 top front-right
-      meshW, meshH, hi,   // 6 top back-right
-      0,     meshH, hi,   // 7 top back-left
-    ];
-    // prettier-ignore
-    const t = [
-      0, 3, 2,  0, 2, 1,   // bottom  (−z outward)
-      4, 5, 6,  4, 6, 7,   // top     (+z outward)
-      0, 1, 5,  0, 5, 4,   // front   (−y outward)
-      2, 3, 7,  2, 7, 6,   // back    (+y outward)
-      3, 0, 4,  3, 4, 7,   // left    (−x outward)
-      1, 2, 6,  1, 6, 5,   // right   (+x outward)
-    ];
-    return { v, t };
-  },
-
-  // Terrain solid for the elevation band [eLow, eHigh].
-  //   Top    = terrain surface vertices clamped to eHigh (flat cap where terrain exceeds band ceiling)
-  //   Bottom = flat plane at eLow
-  //   Walls  = boundary edges of the top surface, dropped to eLow
+  // Build a closed manifold solid for bandIdx using per-pixel split walls.
   //
-  // Only quads where ALL four corner terrain-z values are strictly above eLow
-  // are included — this keeps the solid manifold with no inverted wall faces.
-  _terrainBand(mesh, eLow, eHigh) {
-    const gw = mesh.gridW, gh = mesh.gridH;
-    const mv = mesh.vertices; // first gw*gh entries are terrain vertices (x,y,z in mm)
+  // Split-wall contract: for adjacent pixels A (band N) and B (band M), N < M:
+  //   - Band N generates wall z = [0, terrain_z_A]
+  //   - Band M generates wall z = [terrain_z_A, terrain_z_B]
+  //   Together they cover [0, terrain_z_B] with no overlap and no gap.
+  //
+  // Tile boundary pixels always generate full-height walls [0, terrain_z].
+  _buildPixelBandSolid(bandIdx, mesh) {
+    const { gridW: gw, gridH: gh, vertices: mv, pixelBands } = mesh;
+    const T = (r, c) => r * gw + c;
+    const tz = gi => mv[gi * 3 + 2]; // model-space z of terrain vertex
 
-    // Directed-edge stride for boundary detection (see wall section below).
-    const VSTRIDE = gw * gh; // ≥ maximum local top-vertex index
+    const verts = [];       // flat [x,y,z, ...]
+    const tris  = [];       // flat [a,b,c, ...]
+    const vidx  = new Map(); // coord-key → vertex index
 
-    const topIdxMap = new Map(); // grid-index → local top-vertex index
-    const topV = [];             // flat xyz array of top vertices
-    let numTop = 0;
-
-    const getTop = gi => {
-      if (topIdxMap.has(gi)) return topIdxMap.get(gi);
-      const x = mv[gi * 3], y = mv[gi * 3 + 1];
-      const topZ = Math.min(mv[gi * 3 + 2], eHigh); // clamp at band ceiling
-      const idx = numTop++;
-      topV.push(x, y, topZ);
-      topIdxMap.set(gi, idx);
+    const addV = (x, y, z) => {
+      const k = `${x.toFixed(3)},${y.toFixed(3)},${z.toFixed(3)}`;
+      if (vidx.has(k)) return vidx.get(k);
+      const idx = verts.length / 3;
+      verts.push(x, y, z);
+      vidx.set(k, idx);
       return idx;
     };
+    const addT = (a, b, c) => { if (a !== b && b !== c && a !== c) tris.push(a, b, c); };
 
-    const topT = [];        // flat tri index array for top surface
-    const fwdEdges = new Set(); // encoded directed edges: a*VSTRIDE+b
-
-    const addTri = (gi0, gi1, gi2) => {
-      const a = getTop(gi0), b = getTop(gi1), c = getTop(gi2);
-      topT.push(a, b, c);
-      fwdEdges.add(a * VSTRIDE + b);
-      fwdEdges.add(b * VSTRIDE + c);
-      fwdEdges.add(c * VSTRIDE + a);
+    // Helper: add a wall quad between two XY points at zLow..zHigh.
+    // outward=true means normal points from A toward B's side (away from solid interior).
+    const addWall = (ax, ay, bx, by, zLow, zHigh, outwardFromA) => {
+      if (zHigh <= zLow) return;
+      const P0 = addV(ax, ay, zLow);
+      const P1 = addV(ax, ay, zHigh);
+      const P2 = addV(bx, by, zHigh);
+      const P3 = addV(bx, by, zLow);
+      if (outwardFromA) {
+        // Outward normal points away from A toward B: CCW winding from B's side
+        addT(P0, P2, P1); addT(P0, P3, P2);
+      } else {
+        addT(P0, P1, P2); addT(P0, P2, P3);
+      }
     };
 
+    // ── TOP SURFACE ───────────────────────────────────────────────────────────
+    // For each pixel quad, add terrain surface tris for corners in this band.
     for (let r = 0; r < gh - 1; r++) {
       for (let c = 0; c < gw - 1; c++) {
-        const TL = r * gw + c,        TR = r * gw + c + 1;
-        const BL = (r + 1) * gw + c,  BR = (r + 1) * gw + c + 1;
-        // Include quads where any corner reaches exactly eLow — excludes only quads entirely below it.
-        if (Math.min(mv[TL*3+2], mv[TR*3+2], mv[BL*3+2], mv[BR*3+2]) < eLow) continue;
-        addTri(TL, BL, TR); // winding matches MeshGen (outward normal = +z)
-        addTri(TR, BL, BR);
+        const TL = T(r,c), TR = T(r,c+1), BL = T(r+1,c), BR = T(r+1,c+1);
+        const inBand = [TL,TR,BL,BR].map(gi => pixelBands[gi] === bandIdx);
+        const cnt = inBand.reduce((s,v) => s + v, 0);
+        if (cnt < 3) continue;
+
+        // Vertex positions at terrain z
+        const vTL = () => addV(mv[TL*3], mv[TL*3+1], tz(TL));
+        const vTR = () => addV(mv[TR*3], mv[TR*3+1], tz(TR));
+        const vBL = () => addV(mv[BL*3], mv[BL*3+1], tz(BL));
+        const vBR = () => addV(mv[BR*3], mv[BR*3+1], tz(BR));
+
+        if (cnt === 4) {
+          // Full quad: two triangles, CCW from above (TL,BL,TR and TR,BL,BR)
+          addT(vTL(), vBL(), vTR());
+          addT(vTR(), vBL(), vBR());
+        } else {
+          // 3 corners: find and add the one valid triangle
+          const corners = [TL,TR,BL,BR];
+          const good = corners.filter((_, i) => inBand[i]);
+          // Use winding based on which corner is excluded
+          const [g0, g1, g2] = good;
+          const vg = gi => addV(mv[gi*3], mv[gi*3+1], tz(gi));
+          // Compute cross product to ensure normal points up
+          const ax = mv[g1*3]-mv[g0*3], ay = mv[g1*3+1]-mv[g0*3+1];
+          const bx = mv[g2*3]-mv[g0*3], by = mv[g2*3+1]-mv[g0*3+1];
+          const nz = ax*by - ay*bx; // positive z means CCW from above
+          if (nz > 0) {
+            addT(vg(g0), vg(g1), vg(g2));
+          } else {
+            addT(vg(g0), vg(g2), vg(g1));
+          }
+        }
       }
     }
 
-    if (numTop === 0) return null;
+    if (verts.length === 0) return null; // no pixels in this band
 
-    // Bottom vertices: same XY as top, z = eLow.  Offset = numTop in combined array.
-    const allV = topV.slice();
-    for (let i = 0; i < numTop; i++) {
-      allV.push(topV[i * 3], topV[i * 3 + 1], eLow);
+    // ── BOTTOM FACE ───────────────────────────────────────────────────────────
+    // Flat face at z=0 for all pixels in this band. Reversed winding (normal −z).
+    for (let r = 0; r < gh - 1; r++) {
+      for (let c = 0; c < gw - 1; c++) {
+        const TL = T(r,c), TR = T(r,c+1), BL = T(r+1,c), BR = T(r+1,c+1);
+        const inBand = [TL,TR,BL,BR].map(gi => pixelBands[gi] === bandIdx);
+        const cnt = inBand.reduce((s,v) => s + v, 0);
+        if (cnt < 3) continue;
+
+        const b0 = gi => addV(mv[gi*3], mv[gi*3+1], 0);
+
+        if (cnt === 4) {
+          addT(b0(TL), b0(TR), b0(BL)); // reversed winding vs top
+          addT(b0(TR), b0(BR), b0(BL));
+        } else {
+          const corners = [TL,TR,BL,BR];
+          const good = corners.filter((_, i) => inBand[i]);
+          const [g0, g1, g2] = good;
+          const ax = mv[g1*3]-mv[g0*3], ay = mv[g1*3+1]-mv[g0*3+1];
+          const bx = mv[g2*3]-mv[g0*3], by = mv[g2*3+1]-mv[g0*3+1];
+          const nz = ax*by - ay*bx;
+          // Bottom face normal is −z, so we want CW from above = reversed of top
+          if (nz > 0) {
+            addT(b0(g0), b0(g2), b0(g1));
+          } else {
+            addT(b0(g0), b0(g1), b0(g2));
+          }
+        }
+      }
     }
 
-    // Bottom triangles: reversed winding of top (outward normal = −z).
-    const botT = [];
-    for (let i = 0; i < topT.length; i += 3) {
-      botT.push(topT[i] + numTop, topT[i + 2] + numTop, topT[i + 1] + numTop);
+    // ── WALLS ─────────────────────────────────────────────────────────────────
+    // Iterate all pixel-grid edges. For each edge between pixel A and pixel B:
+    //   bA === bB: interior, skip
+    //   bA === bandIdx, bB !== bandIdx:
+    //     if bB < bandIdx: bB is lower band → our wall from terrain_z_B to terrain_z_A
+    //     if bB > bandIdx: bB is higher band → our wall from 0 to terrain_z_A
+    //   (symmetric for bB === bandIdx)
+    // Tile boundary (A in band, no neighbor): wall from 0 to terrain_z_A.
+
+    // Horizontal pixel edges: (r,c) ↔ (r,c+1)
+    for (let r = 0; r < gh; r++) {
+      for (let c = 0; c < gw - 1; c++) {
+        const A = T(r,c), B = T(r,c+1);
+        const bA = pixelBands[A], bB = pixelBands[B];
+        if (bA === bB) continue;
+        const ax = mv[A*3], ay = mv[A*3+1];
+        const bx = mv[B*3], by = mv[B*3+1];
+        if (bA === bandIdx) {
+          const zHigh = tz(A), zLow = bB < bandIdx ? tz(B) : 0;
+          // Wall faces away from B (outward from A's solid); normal direction: A toward −B
+          addWall(ax, ay, bx, by, zLow, zHigh, false);
+        } else if (bB === bandIdx) {
+          const zHigh = tz(B), zLow = bA < bandIdx ? tz(A) : 0;
+          addWall(bx, by, ax, ay, zLow, zHigh, false);
+        }
+      }
     }
 
-    // Wall triangles: find boundary directed edges (a→b exists; b→a does not).
-    // Wall winding produces an outward normal away from the solid interior.
-    const wallT = [];
-    for (const ab of fwdEdges) {
-      const a = Math.floor(ab / VSTRIDE), b = ab % VSTRIDE;
-      if (fwdEdges.has(b * VSTRIDE + a)) continue; // interior edge — skip
-      const ba = a + numTop, bb = b + numTop;
-      wallT.push(a, ba, b);    // wall tri 1
-      wallT.push(b, ba, bb);   // wall tri 2
+    // Vertical pixel edges: (r,c) ↔ (r+1,c)
+    for (let r = 0; r < gh - 1; r++) {
+      for (let c = 0; c < gw; c++) {
+        const A = T(r,c), B = T(r+1,c);
+        const bA = pixelBands[A], bB = pixelBands[B];
+        if (bA === bB) continue;
+        const ax = mv[A*3], ay = mv[A*3+1];
+        const bx = mv[B*3], by = mv[B*3+1];
+        if (bA === bandIdx) {
+          const zHigh = tz(A), zLow = bB < bandIdx ? tz(B) : 0;
+          addWall(ax, ay, bx, by, zLow, zHigh, false);
+        } else if (bB === bandIdx) {
+          const zHigh = tz(B), zLow = bA < bandIdx ? tz(A) : 0;
+          addWall(bx, by, ax, ay, zLow, zHigh, false);
+        }
+      }
     }
 
-    return { v: allV, t: topT.concat(botT, wallT) };
+    // ── TILE BOUNDARY WALLS ───────────────────────────────────────────────────
+    // Top row (r=0): outward = −Y (south face in model space)
+    for (let c = 0; c < gw - 1; c++) {
+      const A = T(0,c), B = T(0,c+1);
+      if (pixelBands[A] !== bandIdx && pixelBands[B] !== bandIdx) continue;
+      if (pixelBands[A] === bandIdx) {
+        addWall(mv[B*3], mv[B*3+1], mv[A*3], mv[A*3+1], 0, tz(A), false);
+      }
+      if (pixelBands[B] === bandIdx) {
+        addWall(mv[A*3], mv[A*3+1], mv[B*3], mv[B*3+1], 0, tz(B), false);
+      }
+    }
+    // Bottom row (r=gh-1): outward = +Y
+    for (let c = 0; c < gw - 1; c++) {
+      const A = T(gh-1,c), B = T(gh-1,c+1);
+      if (pixelBands[A] === bandIdx) {
+        addWall(mv[A*3], mv[A*3+1], mv[B*3], mv[B*3+1], 0, tz(A), false);
+      }
+      if (pixelBands[B] === bandIdx) {
+        addWall(mv[B*3], mv[B*3+1], mv[A*3], mv[A*3+1], 0, tz(B), false);
+      }
+    }
+    // Left col (c=0): outward = −X
+    for (let r = 0; r < gh - 1; r++) {
+      const A = T(r,0), B = T(r+1,0);
+      if (pixelBands[A] === bandIdx) {
+        addWall(mv[A*3], mv[A*3+1], mv[B*3], mv[B*3+1], 0, tz(A), false);
+      }
+      if (pixelBands[B] === bandIdx) {
+        addWall(mv[B*3], mv[B*3+1], mv[A*3], mv[A*3+1], 0, tz(B), false);
+      }
+    }
+    // Right col (c=gw-1): outward = +X
+    for (let r = 0; r < gh - 1; r++) {
+      const A = T(r,gw-1), B = T(r+1,gw-1);
+      if (pixelBands[A] === bandIdx) {
+        addWall(mv[B*3], mv[B*3+1], mv[A*3], mv[A*3+1], 0, tz(A), false);
+      }
+      if (pixelBands[B] === bandIdx) {
+        addWall(mv[A*3], mv[A*3+1], mv[B*3], mv[B*3+1], 0, tz(B), false);
+      }
+    }
+
+    return { v: verts, t: tris };
   },
 };
 
@@ -2191,217 +2111,6 @@ const Preview = {
   }
 };
 
-// ═══════════════════════════════════════════════
-//  PROGRESS MODULE
-// ═══════════════════════════════════════════════
-
-const Progress = {
-  update() {
-    const oregonCells = State.gridCells.length;
-    let printed = 0, exported = 0;
-    for (const cell of State.gridCells) {
-      const status = State.tileProgress[cell.id];
-      if (status === 'printed') printed++;
-      else if (status === 'exported') exported++;
-    }
-    const pct = oregonCells > 0 ? Math.round((printed / oregonCells) * 100) : 0;
-    document.getElementById('progress-fill').style.width = pct + '%';
-    document.getElementById('progress-printed').textContent = printed + ' printed';
-    document.getElementById('progress-exported').textContent = exported + ' exported';
-    document.getElementById('progress-total').textContent = `${printed + exported} / ${oregonCells} tiles`;
-  },
-
-  markExported(id) {
-    if (State.tileProgress[id] !== 'printed') {
-      State.tileProgress[id] = 'exported';
-    }
-    Grid.updateCellStyle(id);
-    this.update();
-    FileHandleStore.autoSave();
-  },
-
-  markPrinted(id) {
-    State.tileProgress[id] = 'printed';
-    Grid.updateCellStyle(id);
-    this.update();
-    FileHandleStore.autoSave();
-  },
-
-  clearStatus(id) {
-    delete State.tileProgress[id];
-    Grid.updateCellStyle(id);
-    this.update();
-    FileHandleStore.autoSave();
-  },
-
-  clearAll() {
-    if (!confirm('Clear all progress? This cannot be undone.')) return;
-    State.tileProgress = {};
-    Grid.rebuild();
-    toast('All progress cleared');
-  },
-
-  exportJSON() {
-    const stepMode = document.getElementById('step-mode').checked;
-    return JSON.stringify({
-      version: 2,
-      exportedAt: new Date().toISOString(),
-      gridConfig: {
-        cols: State.gridCols,
-        rows: State.gridRows,
-        bounds: OREGON_BOUNDS,
-      },
-      settings: {
-        printSizeMm:          parseFloat(document.getElementById('print-size').value),
-        verticalExaggeration: parseFloat(document.getElementById('vert-exag').value),
-        baseHeightMm:         parseFloat(document.getElementById('base-height').value),
-        resolution:           parseInt(document.getElementById('mesh-res').value),
-        waterDetect:          document.getElementById('water-detect').checked,
-        waterClampM:          parseFloat(document.getElementById('water-clamp').value),
-        stepMode,
-        stepIntervalM:        stepMode ? parseFloat(document.getElementById('step-interval').value) : null,
-      },
-      terrainColors: {
-        threshMountainM: parseFloat(document.getElementById('thresh-hills').value),
-        threshForestLoM: parseFloat(document.getElementById('thresh-forest-lo').value),
-        threshDesertLoM: parseFloat(document.getElementById('thresh-desert-lo').value),
-        threshSlopeDeg:  parseFloat(document.getElementById('thresh-slope').value),
-      },
-      tiles: State.tileProgress,
-    }, null, 2);
-  },
-
-  importJSON(json) {
-    try {
-      const data = JSON.parse(json);
-      if (!data.version || data.version > 2) throw new Error('Unknown version');
-
-      if (data.gridConfig) {
-        document.getElementById('grid-cols').value = data.gridConfig.cols || 8;
-        document.getElementById('grid-rows').value = data.gridConfig.rows || 6;
-      }
-
-      const s = data.settings || {};
-      if (s.printSizeMm)          document.getElementById('print-size').value = s.printSizeMm;
-      if (s.verticalExaggeration) {
-        document.getElementById('vert-exag').value = s.verticalExaggeration;
-        document.getElementById('vert-exag-val').textContent = s.verticalExaggeration + '×';
-      }
-      if (s.baseHeightMm) {
-        document.getElementById('base-height').value = s.baseHeightMm;
-        document.getElementById('base-val').textContent = s.baseHeightMm + 'mm';
-      }
-      if (s.resolution) {
-        document.getElementById('mesh-res').value = s.resolution;
-        document.getElementById('res-val').textContent = s.resolution;
-      }
-      if (s.waterDetect != null) {
-        document.getElementById('water-detect').checked = s.waterDetect;
-        document.getElementById('water-clamp-group').style.display = s.waterDetect ? 'block' : 'none';
-      }
-      if (s.waterClampM != null) {
-        document.getElementById('water-clamp').value = s.waterClampM;
-        document.getElementById('water-clamp-val').textContent = s.waterClampM + 'm';
-      }
-      if (s.stepMode != null) {
-        document.getElementById('step-mode').checked = s.stepMode;
-        document.getElementById('step-interval-group').style.display = s.stepMode ? 'block' : 'none';
-      }
-      if (s.stepIntervalM) {
-        document.getElementById('step-interval').value = s.stepIntervalM;
-        document.getElementById('step-val').textContent = s.stepIntervalM + 'm';
-      }
-
-      const tc = data.terrainColors || {};
-      if (tc.threshMountainM != null) document.getElementById('thresh-hills').value = tc.threshMountainM;
-      if (tc.threshForestLoM != null) document.getElementById('thresh-forest-lo').value = tc.threshForestLoM;
-      if (tc.threshDesertLoM != null) document.getElementById('thresh-desert-lo').value = tc.threshDesertLoM;
-      if (tc.threshSlopeDeg  != null) document.getElementById('thresh-slope').value = tc.threshSlopeDeg;
-
-      State.tileProgress = data.tiles || {};
-      Grid.rebuild();
-      toast('Progress imported successfully!');
-    } catch (e) {
-      toast('Failed to import: ' + e.message);
-    }
-  }
-};
-
-// ═══════════════════════════════════════════════
-//  FILE HANDLE STORE
-// ═══════════════════════════════════════════════
-
-const FileHandleStore = {
-  DB: 'terraprint-fs',
-  STORE: 'handles',
-
-  _open() {
-    return new Promise((resolve, reject) => {
-      const req = indexedDB.open(this.DB, 1);
-      req.onupgradeneeded = e => e.target.result.createObjectStore(this.STORE);
-      req.onsuccess = e => resolve(e.target.result);
-      req.onerror = () => reject(req.error);
-    });
-  },
-
-  async save(handle) {
-    const db = await this._open();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(this.STORE, 'readwrite');
-      tx.objectStore(this.STORE).put(handle, 'progress');
-      tx.oncomplete = resolve;
-      tx.onerror = () => reject(tx.error);
-    });
-  },
-
-  async load() {
-    const db = await this._open();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(this.STORE, 'readonly');
-      const req = tx.objectStore(this.STORE).get('progress');
-      req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => reject(req.error);
-    });
-  },
-
-  // Write current progress to stored handle silently. No-op if no handle or no permission.
-  async autoSave() {
-    if (!window.showSaveFilePicker) return;
-    try {
-      const handle = await this.load();
-      if (!handle) return;
-      if (await handle.queryPermission({ mode: 'readwrite' }) !== 'granted') return;
-      const writable = await handle.createWritable();
-      await writable.write(Progress.exportJSON());
-      await writable.close();
-    } catch (e) {
-      console.warn('Auto-save failed:', e);
-    }
-  },
-
-  // On page load: silently load if permission already granted, otherwise surface a Resume button.
-  async tryAutoLoad() {
-    if (!window.showOpenFilePicker) return;
-    try {
-      const handle = await this.load();
-      if (!handle) return;
-      const perm = await handle.queryPermission({ mode: 'readwrite' });
-      if (perm === 'granted') {
-        Progress.importJSON(await (await handle.getFile()).text());
-        toast('Progress loaded from ' + handle.name);
-      } else if (perm === 'prompt') {
-        const btn = document.getElementById('btn-import');
-        if (btn) {
-          btn.textContent = '📂 Resume';
-          btn.title = 'Resume from ' + handle.name;
-          btn.onclick = () => UI.resumeFromHandle();
-        }
-      }
-    } catch (e) {
-      console.warn('Auto-load check failed:', e);
-    }
-  },
-};
 
 // ═══════════════════════════════════════════════
 //  UI MODULE
@@ -2411,25 +2120,12 @@ const UI = {
   updateSelectionInfo() {
     const el = document.getElementById('selection-info');
     if (!State.selectedBounds) {
-      el.innerHTML = '<p style="font-size:12px;color:var(--text-muted);">Click a grid cell on the map to select it, or use the rectangle draw tool for a custom area.</p>';
+      el.innerHTML = '<p style="font-size:12px;color:var(--text-muted);">Draw a rectangle on the map to select an area.</p>';
       return;
     }
 
     const b = State.selectedBounds;
-    const isGrid = State.selectedCell && State.selectedCell !== 'custom';
-    const cellId = State.selectedCell;
-    const status = isGrid ? (State.tileProgress[cellId] || 'none') : 'custom';
-
-    let html = '';
-    if (isGrid) {
-      const [r, c] = cellId.split('-').map(Number);
-      html += `<div style="font-size:13px;font-weight:600;margin-bottom:6px;">Tile ${c}, ${r}</div>`;
-      html += `<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Status: ${status}</div>`;
-    } else {
-      html += `<div style="font-size:13px;font-weight:600;margin-bottom:6px;">Custom Selection</div>`;
-    }
-
-    html += `<div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">
+    let html = `<div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">
       ${b.getSouth().toFixed(3)}°N — ${b.getNorth().toFixed(3)}°N<br>
       ${b.getWest().toFixed(3)}°W — ${b.getEast().toFixed(3)}°W
     </div>`;
@@ -2455,34 +2151,32 @@ const UI = {
       }
     }
 
-    if (isGrid) {
-      html += `<div class="btn-row">`;
-      if (status !== 'printed') {
-        html += `<button class="btn btn-success btn-sm" onclick="Progress.markPrinted('${cellId}');UI.updateSelectionInfo();">✓ Mark Printed</button>`;
-      }
-      if (status !== 'none') {
-        html += `<button class="btn btn-danger btn-sm" onclick="Progress.clearStatus('${cellId}');UI.updateSelectionInfo();">✕ Clear</button>`;
-      }
-      html += `</div>`;
-    }
-
     el.innerHTML = html;
   },
 
   async generateModel() {
     if (!State.selectedBounds) {
-      toast('Select an area on the map first.');
+      toast('Draw a rectangle on the map first.');
       return;
     }
 
-    const resolution = parseInt(document.getElementById('mesh-res').value) || 256;
+    const resolution = parseInt(document.getElementById('mesh-res').value) || 512;
     try {
       showLoading('Fetching elevation data…');
       State.elevationData = await Elevation.fetchElevation(State.selectedBounds, resolution);
 
+      let lakeMask = null, lakeElevMap = null;
+      if (document.getElementById('water-detect').checked) {
+        const result = await WaterDetection.detect(State.selectedBounds, resolution);
+        lakeMask = result.lakeMask;
+        if (lakeMask) {
+          lakeElevMap = WaterDetection.flattenLakes(State.elevationData, lakeMask);
+        }
+      }
+
       showLoading('Generating mesh…');
       await new Promise(r => setTimeout(r, 50));
-      const rawMesh = MeshGen.generate(State.elevationData);
+      const rawMesh = MeshGen.generate(State.elevationData, lakeMask, lakeElevMap);
 
       showLoading('Checking mesh…');
       await new Promise(r => setTimeout(r, 20));
@@ -2493,12 +2187,6 @@ const UI = {
       Preview.showMesh(State.meshData);
 
       hideLoading();
-
-      // Mark as exported if it's a grid cell
-      if (State.selectedCell && State.selectedCell !== 'custom') {
-        Progress.markExported(State.selectedCell);
-      }
-
       this.updateSelectionInfo();
       const s = State.meshData.repairStats;
       const repairNote = s.issues.length ? ` · ${s.issues.join(', ')}` : '';
@@ -2516,10 +2204,7 @@ const UI = {
     setTimeout(() => {
       try {
         const blob = STLExport.generate(State.meshData);
-        const name = State.selectedCell && State.selectedCell !== 'custom'
-          ? `oregon_tile_${State.selectedCell}.stl`
-          : 'terrain_model.stl';
-        downloadBlob(blob, name);
+        downloadBlob(blob, 'terrain_model.stl');
         hideLoading();
         toast('STL downloaded!');
       } catch (e) {
@@ -2534,95 +2219,18 @@ const UI = {
     showLoading('Building 3MF…');
     try {
       const { blob, warnings } = await ThreeMFExport.generate(State.meshData);
-      const name = State.selectedCell && State.selectedCell !== 'custom'
-        ? `oregon_tile_${State.selectedCell}.3mf`
-        : 'terrain_model.3mf';
-      downloadBlob(blob, name);
+      downloadBlob(blob, 'terrain_model.3mf');
       hideLoading();
       if (warnings.length) {
         toast('⚠ 3MF exported with gaps: ' + warnings.join(' · '), 6000);
       } else {
-        toast('3MF downloaded — all color solids sealed ✓');
+        toast('3MF downloaded — 4 color solids ✓');
       }
     } catch (e) {
       hideLoading();
       toast('3MF export error: ' + e.message);
     }
   },
-
-  async exportProgress() {
-    const json = Progress.exportJSON();
-    if (window.showSaveFilePicker) {
-      try {
-        // Reuse stored handle if we still have write permission; otherwise prompt.
-        let handle = await FileHandleStore.load();
-        if (handle && await handle.queryPermission({ mode: 'readwrite' }) !== 'granted') handle = null;
-        if (!handle) {
-          handle = await window.showSaveFilePicker({
-            suggestedName: 'terraprint_progress.json',
-            types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
-          });
-          await FileHandleStore.save(handle);
-        }
-        const writable = await handle.createWritable();
-        await writable.write(json);
-        await writable.close();
-        toast('Saved to ' + handle.name);
-        return;
-      } catch (e) {
-        if (e.name === 'AbortError') return;
-        console.warn('showSaveFilePicker failed, falling back:', e);
-      }
-    }
-    downloadBlob(new Blob([json], { type: 'application/json' }), 'terraprint_progress.json');
-    toast('Progress exported!');
-  },
-
-  async importProgress() {
-    if (window.showOpenFilePicker) {
-      try {
-        const [handle] = await window.showOpenFilePicker({
-          types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
-        });
-        await FileHandleStore.save(handle);
-        Progress.importJSON(await (await handle.getFile()).text());
-        const btn = document.getElementById('btn-import');
-        if (btn) { btn.textContent = '📂 Import'; btn.title = 'Import progress'; btn.onclick = () => UI.importProgress(); }
-        toast('Progress loaded from ' + handle.name);
-        return;
-      } catch (e) {
-        if (e.name === 'AbortError') return;
-        console.warn('showOpenFilePicker failed, falling back:', e);
-      }
-    }
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => Progress.importJSON(ev.target.result);
-      reader.readAsText(file);
-    };
-    input.click();
-  },
-
-  async resumeFromHandle() {
-    try {
-      const handle = await FileHandleStore.load();
-      if (!handle) return this.importProgress();
-      const perm = await handle.requestPermission({ mode: 'readwrite' });
-      if (perm === 'granted') {
-        Progress.importJSON(await (await handle.getFile()).text());
-        const btn = document.getElementById('btn-import');
-        if (btn) { btn.textContent = '📂 Import'; btn.title = 'Import progress'; btn.onclick = () => UI.importProgress(); }
-        toast('Progress loaded from ' + handle.name);
-      }
-    } catch (e) {
-      if (e.name !== 'AbortError') console.error(e);
-    }
-  }
 };
 
 // ═══════════════════════════════════════════════
@@ -2636,8 +2244,6 @@ function initApp() {
   }
   MapModule.init();
   Preview.init();
-  Grid.fitToOregon();
-  FileHandleStore.tryAutoLoad();
 }
 
 if (document.readyState === 'loading') {
