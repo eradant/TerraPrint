@@ -496,6 +496,13 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
             <span class="range-val" id="water-depth-val">2mm</span>
           </div>
         </div>
+        <div class="input-group" style="margin-top:10px;">
+          <label>Max water slope (°)</label>
+          <div class="range-row">
+            <input type="range" id="water-slope" min="1" max="30" step="1" value="6" oninput="document.getElementById('water-slope-val').textContent=this.value+'°'">
+            <span class="range-val" id="water-slope-val">6°</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1112,13 +1119,41 @@ const MeshGen = {
     }
 
     // ── Per-pixel band assignment by pure elevation ─────────────────────────
-    // 0=Water (ocean/lake), 1=Lowland, 2=Forest, 3=Alpine.
+    // 0=Water (ocean/lake/river), 1=Lowland, 2=Forest, 3=Alpine.
     const useWaterDetect = document.getElementById('water-detect').checked;
+
+    // Real-world terrain slope, used to reject "water" draped over a hillside
+    // (a wide OSM water polygon on sloped ground paints blue across the hills).
+    // Ocean and flattened lakes are flat, so they always pass; only sloped river
+    // pixels are filtered out.
+    const maxWaterSlopeDeg = parseFloat(document.getElementById('water-slope').value) || 6;
+    const tanMaxSlope = Math.tan(maxWaterSlopeDeg * Math.PI / 180);
+    const midLatR = (elevData.bounds.north + elevData.bounds.south) / 2 * Math.PI / 180;
+    const dxM = Math.abs(elevData.bounds.east - elevData.bounds.west) * Math.cos(midLatR) * 111320 / (w - 1);
+    const dyM = Math.abs(elevData.bounds.north - elevData.bounds.south) * 111320 / (h - 1);
+    const slopeTanAt = (col, row) => {
+      const cL = col > 0 ? col - 1 : col, cR = col < w - 1 ? col + 1 : col;
+      const rU = row > 0 ? row - 1 : row, rD = row < h - 1 ? row + 1 : row;
+      const dEdx = (data[row*w + cR] - data[row*w + cL]) / Math.max(1, cR - cL) / dxM;
+      const dEdy = (data[rD*w + col] - data[rU*w + col]) / Math.max(1, rD - rU) / dyM;
+      return Math.sqrt(dEdx*dEdx + dEdy*dEdy);
+    };
+
     const waterMask = new Uint8Array(w * h);
     const pixelBands = new Uint8Array(w * h);
     for (let i = 0; i < w * h; i++) {
-      if (useWaterDetect && ((lakeMask && lakeMask[i]) || origData[i] <= 0)) {
-        pixelBands[i] = 0; // Water: ocean or lake
+      let isWaterPix = false;
+      if (useWaterDetect) {
+        if (origData[i] <= 0) {
+          isWaterPix = true; // ocean — flat at sea level, always water
+        } else if (lakeMask && lakeMask[i]) {
+          // Lake/river: keep only where terrain is gentle enough to hold water.
+          const col = i % w, row = (i / w) | 0;
+          isWaterPix = slopeTanAt(col, row) <= tanMaxSlope;
+        }
+      }
+      if (isWaterPix) {
+        pixelBands[i] = 0;
         waterMask[i] = 1;
       } else {
         pixelBands[i] = origData[i] < threshForestLo ? 1
