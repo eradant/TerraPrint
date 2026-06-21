@@ -783,8 +783,14 @@ const Elevation = {
 // ═══════════════════════════════════════════════
 
 const WaterDetection = {
+  // Water subtypes that flow downhill — these must follow the terrain rather than
+  // be flattened to one level (flattening a river produces oversized water blobs).
+  FLOWING: new Set(['river', 'stream', 'canal', 'ditch', 'stream_pool', 'tidal_channel']),
+
   // Detect water bodies via OSM Overpass API.
-  // Returns { lakeMask: Uint8Array, lakeElevMap: Float32Array }.
+  // Returns { lakeMask, flattenMask }:
+  //   lakeMask    — every water pixel (still + flowing) → coloured as water
+  //   flattenMask — still-water pixels only (lakes/ponds/reservoirs) → flattened
   // On failure returns nulls so ocean-only detection still works.
   async detect(bounds, resolution) {
     try {
@@ -792,7 +798,7 @@ const WaterDetection = {
       return await this.overpassDetect(bounds, resolution);
     } catch (e) {
       console.warn('Water detection failed, using ocean-only:', e);
-      return { lakeMask: null, lakeElevMap: null };
+      return { lakeMask: null, flattenMask: null };
     }
   },
 
@@ -814,15 +820,21 @@ const WaterDetection = {
     if (!resp.ok) throw new Error('Overpass HTTP ' + resp.status);
     const data = await resp.json();
 
-    const canvas = document.createElement('canvas');
-    canvas.width = resolution;
-    canvas.height = resolution;
-    const ctx = canvas.getContext('2d');
+    // Two render targets: still water (flattened) and flowing water (terrain-following).
+    const makeCtx = () => {
+      const cv = document.createElement('canvas');
+      cv.width = resolution; cv.height = resolution;
+      const cx = cv.getContext('2d');
+      cx.fillStyle = 'white';
+      return cx;
+    };
+    const stillCtx = makeCtx();
+    const flowCtx  = makeCtx();
 
-    function lngToX(lng) { return (lng - w) / (e - w) * resolution; }
-    function latToY(lat) { return (n - lat) / (n - s) * resolution; }
+    const lngToX = lng => (lng - w) / (e - w) * resolution;
+    const latToY = lat => (n - lat) / (n - s) * resolution;
 
-    function drawPoly(geom) {
+    const drawPoly = (ctx, geom) => {
       if (!geom || geom.length < 3) return;
       ctx.beginPath();
       geom.forEach((p, i) => {
@@ -831,44 +843,48 @@ const WaterDetection = {
       });
       ctx.closePath();
       ctx.fill();
-    }
+    };
 
-    ctx.fillStyle = 'white';
     const elements = data.elements || [];
     showLoading(`Rasterizing ${elements.length} water features…`);
 
     for (const el of elements) {
-      if (el.type === 'way' && el.tags?.natural === 'water') {
-        drawPoly(el.geometry);
-      }
-      if (el.type === 'relation' && el.tags?.natural === 'water') {
+      if (el.tags?.natural !== 'water') continue;
+      const ctx = this.FLOWING.has(el.tags.water) ? flowCtx : stillCtx;
+      if (el.type === 'way') {
+        drawPoly(ctx, el.geometry);
+      } else if (el.type === 'relation') {
         const outers = (el.members || []).filter(m => m.role === 'outer' && m.geometry);
         const inners = (el.members || []).filter(m => m.role === 'inner' && m.geometry);
-        for (const m of outers) drawPoly(m.geometry);
+        for (const m of outers) drawPoly(ctx, m.geometry);
         if (inners.length) {
           ctx.save();
           ctx.globalCompositeOperation = 'destination-out';
-          for (const m of inners) drawPoly(m.geometry);
+          for (const m of inners) drawPoly(ctx, m.geometry);
           ctx.restore();
         }
       }
     }
 
-    const imageData = ctx.getImageData(0, 0, resolution, resolution);
-    const lakeMask = new Uint8Array(resolution * resolution);
+    const sd = stillCtx.getImageData(0, 0, resolution, resolution).data;
+    const fd = flowCtx.getImageData(0, 0, resolution, resolution).data;
+    const lakeMask    = new Uint8Array(resolution * resolution);
+    const flattenMask = new Uint8Array(resolution * resolution);
     for (let i = 0; i < lakeMask.length; i++) {
-      lakeMask[i] = imageData.data[i * 4] > 128 ? 1 : 0;
+      const still = sd[i*4] > 128, flow = fd[i*4] > 128;
+      if (still || flow) lakeMask[i] = 1;
+      if (still)         flattenMask[i] = 1;
     }
-    return { lakeMask, lakeElevMap: null }; // lakeElevMap filled by flattenLakes
+    return { lakeMask, flattenMask };
   },
 
-  // Flatten each connected lake (OSM-detected pixels only) to a single flat
+  // Flatten each connected still-water body (lakes/ponds/reservoirs) to a single
   // surface elevation. Mutates elevData.data in-place; returns a lakeElevMap
-  // (Float32Array, per-pixel lake surface elevation, 0 for non-lake pixels).
+  // (Float32Array, per-pixel lake surface elevation, 0 elsewhere).
   //
   // The surface elevation is the median over the component — robust against DEM
-  // outliers. NO basin expansion: only the actual OSM water footprint is touched,
-  // so a lake never floods the surrounding terrain that sits below its surface.
+  // outliers. NO basin expansion: only the actual OSM footprint is touched, so a
+  // lake never floods the surrounding terrain that sits below its surface.
   flattenLakes(elevData, lakeMask) {
     if (!lakeMask) return new Float32Array(elevData.data.length);
     const origData = elevData.data;
@@ -2034,9 +2050,10 @@ const UI = {
       let lakeMask = null, lakeElevMap = null;
       if (document.getElementById('water-detect').checked) {
         const result = await WaterDetection.detect(State.selectedBounds, resolution);
-        lakeMask = result.lakeMask;
+        lakeMask = result.lakeMask;            // all water → coloured as water
         if (lakeMask) {
-          lakeElevMap = WaterDetection.flattenLakes(State.elevationData, lakeMask);
+          // Flatten only still water; rivers/streams keep following the terrain.
+          lakeElevMap = WaterDetection.flattenLakes(State.elevationData, result.flattenMask);
         }
       }
 
