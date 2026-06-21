@@ -919,13 +919,18 @@ const WaterDetection = {
         }
       }
 
-      // Representative surface = median elevation of the component
+      // Flat surface level = median of the component (robust to DEM outliers).
       const elevs = comp.map(i => origData[i]).sort((a, b) => a - b);
       const surfaceElev = elevs[elevs.length >> 1];
 
+      // Lower pixels to that level but NEVER raise one above its own terrain. A
+      // truly flat lake settles at the median; a body that actually spans elevation
+      // (a long reservoir, or a river mis-tagged as still water) then follows the
+      // terrain downhill instead of ballooning into a raised water blob.
       for (const idx of comp) {
-        origData[idx] = surfaceElev;
-        lakeElevMap[idx] = surfaceElev;
+        const z = Math.min(origData[idx], surfaceElev);
+        origData[idx] = z;
+        lakeElevMap[idx] = z;
       }
     }
 
@@ -1610,43 +1615,32 @@ const ThreeMFExport = {
     const tz = gi => mesh.vertices[gi*3 + 2];
     const isWater = gi => !!(wm && wm[gi]);
 
-    // The "base band" is the lowest land band actually present (its floor reaches
-    // z=0). It fills the whole tile from z=0 AND fills beneath every water body up
-    // to waterDepth below the surface. Lower bands whose threshold sits below the
-    // tile collapse to nothing, so e.g. a high tile uses Forest (not Lowland) as
-    // its base and under-lake fill.
-    const baseBand = fForest > 0 ? 1 : (fAlpine > 0 ? 2 : 3);
+    // "Fill top" per pixel: the terrain surface on land, or waterDepth below the
+    // surface under water. The land bands fill [floor, min(fillTop, upperCeil)]
+    // across the WHOLE tile, so the base beneath a river or lake is coloured by the
+    // same elevation bands as the surrounding terrain (no green column climbing up
+    // under high water). The thin Water slab then sits on top from fillTop → surface.
+    const fillTop = gi => isWater(gi) ? Math.max(0, tz(gi) - waterDepth) : tz(gi);
 
-    // Per land band (1=Lowland, 2=Forest, 3=Alpine): membership threshold (unclamped),
-    // clamped floor, clamped ceiling.
-    const lowerThresh = [null, -Infinity,      E_lowToForest,    E_forestToAlpine];
-    const floorZ      = [null, 0,              fForest,          fAlpine];
-    const upperCeil   = [null, fForest,        fAlpine,          Infinity];
-
-    const landBand = i => (i === baseBand)
-      ? { // base band: full tile + under-water fill
-          active: () => true,
-          floor:  () => 0,
-          ceil:   gi => isWater(gi) ? Math.max(0, tz(gi) - waterDepth)
-                                    : Math.min(tz(gi), upperCeil[i]),
-        }
-      : { // stacking band: land only, within its elevation slice
-          active: (a,b,c,d) => !isWater(a) && !isWater(b) && !isWater(c) && !isWater(d)
-                            && tz(a) >= lowerThresh[i] && tz(b) >= lowerThresh[i]
-                            && tz(c) >= lowerThresh[i] && tz(d) >= lowerThresh[i],
-          floor:  () => floorZ[i],
-          ceil:   gi => Math.min(tz(gi), upperCeil[i]),
-        };
+    // Land bands 1=Lowland, 2=Forest, 3=Alpine → entries 0,1,2.
+    // Floors clamp to z≥0 so the lowest present band reaches the build plate.
+    const floorZ    = [0,       fForest,  fAlpine];
+    const upperCeil = [fForest, fAlpine,  Infinity];
+    const landBand = k => ({
+      active: () => true,
+      floor:  () => floorZ[k],
+      ceil:   gi => Math.min(fillTop(gi), upperCeil[k]),
+    });
 
     const bandSpecs = [
-      { // 0 Water — thin slab capped at each water surface
+      { // 0 Water — thin slab from the banded base up to the surface
         active: (a,b,c,d) => isWater(a) && isWater(b) && isWater(c) && isWater(d),
         floor:  gi => Math.max(0, tz(gi) - waterDepth),
         ceil:   gi => tz(gi),
       },
-      landBand(1),
-      landBand(2),
-      landBand(3),
+      landBand(0), // Lowland
+      landBand(1), // Forest
+      landBand(2), // Alpine
     ];
 
     // Build solids first; keep only bands that produced geometry so unused colors
