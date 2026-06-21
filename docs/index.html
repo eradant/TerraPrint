@@ -1970,23 +1970,40 @@ const ThreeMFExport = {
     out.push(x0,y0, x0,y1, x1,y1,  x0,y0, x1,y1, x1,y0);
   },
 
-  // Render text to a tight binary bitmap. Returns { data:Uint8Array, w, h }.
+  // Render text and TIGHT-CROP to the actual glyph pixels, so a caller's heightMM
+  // maps to the real glyph height (not a padded line box). Returns { data, w, h }.
   _textBitmap(text, fontPx, bold) {
     const cv = document.createElement('canvas');
     const ctx = cv.getContext('2d');
     const font = `${bold ? '700 ' : ''}${fontPx}px Arial, sans-serif`;
     ctx.font = font;
     const m = ctx.measureText(text);
-    const w = Math.max(1, Math.ceil(m.width) + 4);
-    const h = Math.ceil(fontPx * 1.35);
-    cv.width = w; cv.height = h;
+    const rw = Math.max(1, Math.ceil(m.width) + 6);
+    const rh = Math.ceil(fontPx * 1.6);
+    cv.width = rw; cv.height = rh;
     ctx.font = font;
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#fff';
-    ctx.fillText(text, 2, h/2);
-    const px = ctx.getImageData(0, 0, w, h).data;
+    ctx.fillText(text, 3, rh/2);
+    const px = ctx.getImageData(0, 0, rw, rh).data;
+
+    // Bounding box of opaque pixels.
+    let minX = rw, minY = rh, maxX = -1, maxY = -1;
+    for (let y = 0; y < rh; y++) {
+      for (let x = 0; x < rw; x++) {
+        if (px[(y*rw + x)*4 + 3] > 100) {
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX < 0) return { data: new Uint8Array(1), w: 1, h: 1 }; // empty (e.g. blank)
+
+    const w = maxX - minX + 1, h = maxY - minY + 1;
     const data = new Uint8Array(w*h);
-    for (let i = 0; i < w*h; i++) data[i] = px[i*4+3] > 100 ? 1 : 0;
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++)
+        data[y*w + x] = px[((y+minY)*rw + (x+minX))*4 + 3] > 100 ? 1 : 0;
     return { data, w, h };
   },
 
@@ -2033,50 +2050,66 @@ const ThreeMFExport = {
     let lowestY = cursorY;
     const track = y => { if (y < lowestY) lowestY = y; };
 
-    const addText = (text, name, hex, heightMM, bold, x) => {
+    // Minimum glyph height so the thinnest stroke stays printable on a 0.4mm nozzle.
+    // Bold Arial stroke ≈ 0.2 × glyph height, so ~4mm → ~0.8mm strokes (2 perimeters).
+    const MIN_TEXT_MM = 4;
+    const availW = (X1 - X0) - 2 * pad; // usable cartouche width
+
+    // Render a tight glyph bitmap and extrude it at (x, cursorY), heightMM tall.
+    // Scales down to fit availW if the string would be too wide. Always bold.
+    const addText = (text, name, hex, heightMM, x) => {
       if (!text) return 0;
-      const bmp = this._textBitmap(text, 40, bold);
-      const wMM = heightMM * (bmp.w / bmp.h);
-      const solid = this._extrudeBitmap(bmp, x, cursorY, wMM, heightMM, inkLow, inkHigh);
-      if (solid) { elems.push({ name, hex, solid }); track(cursorY - heightMM); }
-      return heightMM;
+      const bmp = this._textBitmap(text, 64, true);
+      let hMM = Math.max(heightMM, MIN_TEXT_MM);
+      let wMM = hMM * (bmp.w / bmp.h);
+      if (wMM > availW) { hMM *= availW / wMM; wMM = availW; }
+      const solid = this._extrudeBitmap(bmp, x, cursorY, wMM, hMM, inkLow, inkHigh);
+      if (solid) { elems.push({ name, hex, solid }); track(cursorY - hMM); }
+      return hMM;
     };
 
     // Title
     if (document.getElementById('frame-title-on')?.checked) {
       const title = (document.getElementById('frame-title')?.value || '').trim();
-      const used = addText(title, 'Title', '#F5F5F5', 9, true, X0 + pad);
+      const used = addText(title, 'Title', '#F5F5F5', 9, X0 + pad);
       if (used) cursorY -= used + 3;
     }
-    // Coordinates
+    // Coordinates (centre of the selected area — compact and always fits)
     if (document.getElementById('frame-coords-on')?.checked && mesh.bounds) {
       const b = mesh.bounds;
+      const clat = (b.north + b.south) / 2, clon = (b.east + b.west) / 2;
       const fmt = (v, pos, neg) => `${Math.abs(v).toFixed(3)}°${v >= 0 ? pos : neg}`;
-      const coordStr = `${fmt(b.north,'N','S')}, ${fmt(b.west,'E','W')}  to  ${fmt(b.south,'N','S')}, ${fmt(b.east,'E','W')}`;
-      const used = addText(coordStr, 'Coordinates', '#C8C8C8', 5, false, X0 + pad);
+      const coordStr = `${fmt(clat,'N','S')}  ${fmt(clon,'E','W')}`;
+      const used = addText(coordStr, 'Coordinates', '#C8C8C8', 4.5, X0 + pad);
       if (used) cursorY -= used + 4;
     }
     // Legend: swatch (band colour) + label per present band.
     if (document.getElementById('frame-legend-on')?.checked) {
       const present = presentBands && presentBands.length ? presentBands : [0,1,2,3];
-      const sw = 6, gap = 2;
+      let sw = 6, gap = 2.5, lblH = 4.5, itemGap = 6;
+      // Measure the row, then uniformly scale it down if it would overrun the panel.
+      const bmps = present.map(b => this._textBitmap(this.COLORS[b].name, 64, true));
+      const rowW = () => present.reduce((s, _, i) =>
+        s + sw + gap + lblH * (bmps[i].w / bmps[i].h) + itemGap, 0);
+      const total = rowW();
+      if (total > availW) { const f = availW / total; sw*=f; gap*=f; lblH*=f; itemGap*=f; }
+
       let lx = X0 + pad;
       const legendTop = cursorY;
-      for (const b of present) {
+      present.forEach((b, i) => {
         const c = this.COLORS[b];
         const st = [];
         this._rectTris(st, lx, legendTop - sw, lx + sw, legendTop);
         elems.push({ name: c.name + ' key', hex: c.hex, solid: this._extrudePrism(st, frameH - 0.3, swatchHigh) });
-        const bmp = this._textBitmap(c.name, 32, false);
-        const lblH = 4.5, lblW = lblH * (bmp.w / bmp.h);
-        const ls = this._extrudeBitmap(bmp, lx + sw + gap, legendTop - (sw - lblH)/2, lblW, lblH, inkLow, inkHigh);
+        const lblW = lblH * (bmps[i].w / bmps[i].h);
+        const ls = this._extrudeBitmap(bmps[i], lx + sw + gap, legendTop - (sw - lblH)/2, lblW, lblH, inkLow, inkHigh);
         if (ls) elems.push({ name: c.name + ' label', hex: '#F5F5F5', solid: ls });
-        lx += sw + gap + lblW + 6;
-      }
+        lx += sw + gap + lblW + itemGap;
+      });
       track(legendTop - sw);
-      cursorY = legendTop - sw - 4;
+      cursorY = legendTop - sw - 5;
     }
-    // Scale bar: a filled bar of a round distance, with a label.
+    // Scale bar: a filled bar of a round distance, with a label centred on it.
     if (document.getElementById('frame-scale-on')?.checked && mesh.bounds) {
       const b = mesh.bounds;
       const midLatR = (b.north + b.south) / 2 * Math.PI / 180;
@@ -2087,15 +2120,17 @@ const ThreeMFExport = {
       let distM = nice[0];
       for (const n of nice) if (n <= maxM) distM = n;
       const barMM = distM * mmPerM;
-      const barH = 2.2;
+      const barH = 2.5;
       const bx = X0 + pad, by = cursorY;
       const bar = [];
       this._rectTris(bar, bx, by - barH, bx + barMM, by);
       elems.push({ name: 'Scale bar', hex: '#F5F5F5', solid: this._extrudePrism(bar, frameH - 0.3, frameH + 0.8) });
       const label = distM >= 1000 ? `${distM/1000} km` : `${distM} m`;
-      const bmp = this._textBitmap(label, 32, false);
-      const lblH = 4, lblW = lblH * (bmp.w / bmp.h);
-      const ls = this._extrudeBitmap(bmp, bx + barMM + 3, by, lblW, lblH, inkLow, inkHigh);
+      const bmp = this._textBitmap(label, 64, true);
+      const lblH = 4.5, lblW = lblH * (bmp.w / bmp.h);
+      // Vertically centre the label on the bar.
+      const lblTop = by - barH/2 + lblH/2;
+      const ls = this._extrudeBitmap(bmp, bx + barMM + 3, lblTop, lblW, lblH, inkLow, inkHigh);
       if (ls) elems.push({ name: 'Scale label', hex: '#F5F5F5', solid: ls });
       track(by - barH);
     }
