@@ -507,6 +507,38 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
     </div>
 
     <div class="panel-section">
+      <h3>Frame &amp; Cartouche (3MF)</h3>
+      <div class="section-body">
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" id="frame-enable" style="accent-color:var(--accent);width:16px;height:16px;" onchange="document.getElementById('frame-opts').style.display=this.checked?'block':'none'">
+          <label for="frame-enable" style="margin:0;cursor:pointer;">Add display frame</label>
+        </div>
+        <div id="frame-opts" style="display:none;margin-top:8px;">
+          <div class="input-group">
+            <label>Title</label>
+            <input type="text" id="frame-title" placeholder="e.g. Mount Hood, OR" value="">
+          </div>
+          <div class="input-row" style="margin-top:6px;">
+            <div>
+              <label>Border (mm)</label>
+              <input type="number" id="frame-width" value="8" min="2" max="40" step="1">
+            </div>
+            <div>
+              <label>Panel (mm)</label>
+              <input type="number" id="frame-panel" value="30" min="10" max="120" step="2">
+            </div>
+          </div>
+          <div style="margin-top:8px;display:flex;flex-direction:column;gap:5px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-title-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Title text</label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-coords-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Coordinates</label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-legend-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Color key / legend</label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-scale-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Scale bar</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-section">
       <h3>Selected Area</h3>
       <div class="section-body" id="selection-info">
         <p style="font-size:12px;color:var(--text-muted);">Draw a rectangle on the map to select an area.</p>
@@ -1508,6 +1540,7 @@ const MeshGen = {
       maxElev,
       elevScale,
       baseHeight,
+      bounds: elevData.bounds,
     };
   }
 };
@@ -1755,12 +1788,21 @@ const ThreeMFExport = {
       landBand(2), // Alpine
     ];
 
-    // Build solids first; keep only bands that produced geometry so unused colors
-    // (e.g. no Alpine in a low tile) are dropped from the material list entirely.
+    // Each object carries its own colour (so frame/label elements can each be a
+    // distinct filament). Build terrain bands first, dropping empty ones.
     const built = [];
+    const presentBands = [];
     for (let bandIdx = 0; bandIdx < 4; bandIdx++) {
       const solid = this._buildStackSolid(mesh, bandSpecs[bandIdx]);
-      if (solid && solid.t.length > 0) built.push({ bandIdx, solid });
+      if (solid && solid.t.length > 0) {
+        built.push({ name: this.COLORS[bandIdx].name, hex: this.COLORS[bandIdx].hex, solid });
+        presentBands.push(bandIdx);
+      }
+    }
+
+    // Optional frame / cartouche (border, title, coordinates, legend, scale bar).
+    for (const obj of this._buildFrameObjects(mesh, presentBands)) {
+      if (obj.solid && obj.solid.t.length > 0) built.push(obj);
     }
 
     const xmlParts = [
@@ -1770,9 +1812,8 @@ const ThreeMFExport = {
       '  <resources>\n' +
       '    <basematerials id="1">\n'
     ];
-    built.forEach(({ bandIdx }) => {
-      const c = this.COLORS[bandIdx];
-      xmlParts.push(`      <base name="${c.name}" displaycolor="${c.hex}" />\n`);
+    built.forEach(({ name, hex }) => {
+      xmlParts.push(`      <base name="${name}" displaycolor="${hex}" />\n`);
     });
     xmlParts.push('    </basematerials>\n');
 
@@ -1880,6 +1921,199 @@ const ThreeMFExport = {
     }
 
     return { v: verts, t: tris };
+  },
+
+  // ── Frame / cartouche geometry helpers ────────────────────────────────────
+
+  // Extrude a list of CCW-from-above 2D triangles (flat array x,y,x,y,…) into a
+  // watertight prism z=[zLow,zHigh]. Shared interior edges (present in both
+  // directions) get no wall; only true boundary edges do — so a frame ring or a
+  // glyph bitmap closes correctly with no internal coplanar faces.
+  _extrudePrism(tris2d, zLow, zHigh) {
+    const verts = [], tris = [], vmap = new Map();
+    const STR = 1e7;
+    const addV = (x, y, z) => {
+      const k = `${x.toFixed(3)},${y.toFixed(3)},${z.toFixed(3)}`;
+      let i = vmap.get(k);
+      if (i !== undefined) return i;
+      i = verts.length / 3; verts.push(x, y, z); vmap.set(k, i); return i;
+    };
+    const addT = (a, b, c) => { if (a !== b && b !== c && a !== c) tris.push(a, b, c); };
+    // Index 2D points so we can detect shared edges by point id.
+    const pid = new Map();
+    const pidOf = (x, y) => {
+      const k = `${x.toFixed(3)},${y.toFixed(3)}`;
+      let i = pid.get(k); if (i === undefined) { i = pid.size; pid.set(k, i); } return i;
+    };
+    const fwd = new Set();
+    const pts = []; // pid → [x,y]
+    for (let i = 0; i < tris2d.length; i += 6) {
+      const x0=tris2d[i],   y0=tris2d[i+1], x1=tris2d[i+2], y1=tris2d[i+3], x2=tris2d[i+4], y2=tris2d[i+5];
+      const p0=pidOf(x0,y0), p1=pidOf(x1,y1), p2=pidOf(x2,y2);
+      pts[p0]=[x0,y0]; pts[p1]=[x1,y1]; pts[p2]=[x2,y2];
+      addT(addV(x0,y0,zHigh), addV(x1,y1,zHigh), addV(x2,y2,zHigh)); // top
+      addT(addV(x0,y0,zLow),  addV(x2,y2,zLow),  addV(x1,y1,zLow));  // bottom (reversed)
+      fwd.add(p0*STR+p1); fwd.add(p1*STR+p2); fwd.add(p2*STR+p0);
+    }
+    for (const ab of fwd) {
+      const a = Math.floor(ab/STR), b = ab % STR;
+      if (fwd.has(b*STR + a)) continue; // interior edge
+      const [ax,ay]=pts[a], [bx,by]=pts[b];
+      const ta=addV(ax,ay,zHigh), tb=addV(bx,by,zHigh), ba=addV(ax,ay,zLow), bb=addV(bx,by,zLow);
+      addT(ta, ba, tb); addT(tb, ba, bb);
+    }
+    return { v: verts, t: tris };
+  },
+
+  // Rectangle → 2 CCW triangles (flat array), appended to `out`.
+  _rectTris(out, x0, y0, x1, y1) {
+    out.push(x0,y0, x0,y1, x1,y1,  x0,y0, x1,y1, x1,y0);
+  },
+
+  // Render text to a tight binary bitmap. Returns { data:Uint8Array, w, h }.
+  _textBitmap(text, fontPx, bold) {
+    const cv = document.createElement('canvas');
+    const ctx = cv.getContext('2d');
+    const font = `${bold ? '700 ' : ''}${fontPx}px Arial, sans-serif`;
+    ctx.font = font;
+    const m = ctx.measureText(text);
+    const w = Math.max(1, Math.ceil(m.width) + 4);
+    const h = Math.ceil(fontPx * 1.35);
+    cv.width = w; cv.height = h;
+    ctx.font = font;
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(text, 2, h/2);
+    const px = ctx.getImageData(0, 0, w, h).data;
+    const data = new Uint8Array(w*h);
+    for (let i = 0; i < w*h; i++) data[i] = px[i*4+3] > 100 ? 1 : 0;
+    return { data, w, h };
+  },
+
+  // Extrude a binary bitmap into raised geometry over an XY rectangle whose
+  // top-left is (x0,y0) and which is `wMM`×`hMM` mm (bitmap row 0 = top).
+  _extrudeBitmap(bmp, x0, y0, wMM, hMM, zLow, zHigh) {
+    const { data, w, h } = bmp;
+    const dx = wMM / w, dy = hMM / h;
+    const tris2d = [];
+    for (let r = 0; r < h; r++) {
+      for (let c = 0; c < w; c++) {
+        if (!data[r*w + c]) continue;
+        // Pixel rectangle in model space (row 0 at the top → y decreases as r grows).
+        const px0 = x0 + c*dx, px1 = x0 + (c+1)*dx;
+        const py1 = y0 - r*dy, py0 = y0 - (r+1)*dy; // py0 < py1
+        this._rectTris(tris2d, px0, py0, px1, py1);
+      }
+    }
+    if (tris2d.length === 0) return null;
+    return this._extrudePrism(tris2d, zLow, zHigh);
+  },
+
+  // Build the frame plate and all enabled label/legend/scale objects.
+  // Returns an array of { name, hex, solid }. Elements are laid out first so the
+  // cartouche panel can grow to contain them (never less than the requested height).
+  _buildFrameObjects(mesh, presentBands) {
+    if (!document.getElementById('frame-enable')?.checked) return [];
+    const elems = [];
+    const meshW = mesh.meshW, meshH = mesh.meshH;
+    const frameH = mesh.baseHeight;            // border top flush with terrain base
+    const inkLow = frameH - 0.3;               // labels embed slightly into the plate
+    const inkHigh = frameH + 0.8;              // raised 0.8mm
+    const swatchHigh = frameH + 1.2;
+
+    const fw = parseFloat(document.getElementById('frame-width')?.value) || 8;   // border width
+    const ph = parseFloat(document.getElementById('frame-panel')?.value) || 30;  // min cartouche height
+
+    const X0 = -fw, X1 = meshW + fw;
+    const Y1 = meshH + fw;          // top of frame
+    const Yc = -fw;                 // top edge of cartouche panel (just below terrain border)
+    const pad = Math.min(fw, 6);
+
+    let cursorY = Yc - pad;
+    let lowestY = cursorY;
+    const track = y => { if (y < lowestY) lowestY = y; };
+
+    const addText = (text, name, hex, heightMM, bold, x) => {
+      if (!text) return 0;
+      const bmp = this._textBitmap(text, 40, bold);
+      const wMM = heightMM * (bmp.w / bmp.h);
+      const solid = this._extrudeBitmap(bmp, x, cursorY, wMM, heightMM, inkLow, inkHigh);
+      if (solid) { elems.push({ name, hex, solid }); track(cursorY - heightMM); }
+      return heightMM;
+    };
+
+    // Title
+    if (document.getElementById('frame-title-on')?.checked) {
+      const title = (document.getElementById('frame-title')?.value || '').trim();
+      const used = addText(title, 'Title', '#F5F5F5', 9, true, X0 + pad);
+      if (used) cursorY -= used + 3;
+    }
+    // Coordinates
+    if (document.getElementById('frame-coords-on')?.checked && mesh.bounds) {
+      const b = mesh.bounds;
+      const fmt = (v, pos, neg) => `${Math.abs(v).toFixed(3)}°${v >= 0 ? pos : neg}`;
+      const coordStr = `${fmt(b.north,'N','S')}, ${fmt(b.west,'E','W')}  to  ${fmt(b.south,'N','S')}, ${fmt(b.east,'E','W')}`;
+      const used = addText(coordStr, 'Coordinates', '#C8C8C8', 5, false, X0 + pad);
+      if (used) cursorY -= used + 4;
+    }
+    // Legend: swatch (band colour) + label per present band.
+    if (document.getElementById('frame-legend-on')?.checked) {
+      const present = presentBands && presentBands.length ? presentBands : [0,1,2,3];
+      const sw = 6, gap = 2;
+      let lx = X0 + pad;
+      const legendTop = cursorY;
+      for (const b of present) {
+        const c = this.COLORS[b];
+        const st = [];
+        this._rectTris(st, lx, legendTop - sw, lx + sw, legendTop);
+        elems.push({ name: c.name + ' key', hex: c.hex, solid: this._extrudePrism(st, frameH - 0.3, swatchHigh) });
+        const bmp = this._textBitmap(c.name, 32, false);
+        const lblH = 4.5, lblW = lblH * (bmp.w / bmp.h);
+        const ls = this._extrudeBitmap(bmp, lx + sw + gap, legendTop - (sw - lblH)/2, lblW, lblH, inkLow, inkHigh);
+        if (ls) elems.push({ name: c.name + ' label', hex: '#F5F5F5', solid: ls });
+        lx += sw + gap + lblW + 6;
+      }
+      track(legendTop - sw);
+      cursorY = legendTop - sw - 4;
+    }
+    // Scale bar: a filled bar of a round distance, with a label.
+    if (document.getElementById('frame-scale-on')?.checked && mesh.bounds) {
+      const b = mesh.bounds;
+      const midLatR = (b.north + b.south) / 2 * Math.PI / 180;
+      const realWm = Math.abs(b.east - b.west) * Math.cos(midLatR) * 111320; // tile width in m
+      const mmPerM = meshW / realWm;
+      const maxM = 0.4 * realWm;
+      const nice = [1,2,5,10,20,50,100,200,500,1000,2000,5000,10000,20000,50000,100000];
+      let distM = nice[0];
+      for (const n of nice) if (n <= maxM) distM = n;
+      const barMM = distM * mmPerM;
+      const barH = 2.2;
+      const bx = X0 + pad, by = cursorY;
+      const bar = [];
+      this._rectTris(bar, bx, by - barH, bx + barMM, by);
+      elems.push({ name: 'Scale bar', hex: '#F5F5F5', solid: this._extrudePrism(bar, frameH - 0.3, frameH + 0.8) });
+      const label = distM >= 1000 ? `${distM/1000} km` : `${distM} m`;
+      const bmp = this._textBitmap(label, 32, false);
+      const lblH = 4, lblW = lblH * (bmp.w / bmp.h);
+      const ls = this._extrudeBitmap(bmp, bx + barMM + 3, by, lblW, lblH, inkLow, inkHigh);
+      if (ls) elems.push({ name: 'Scale label', hex: '#F5F5F5', solid: ls });
+      track(by - barH);
+    }
+
+    // Panel bottom: at least the requested height, but grown to contain content.
+    const Y0 = Math.min(-(fw + ph), lowestY - pad);
+
+    // Frame plate: outer rectangle minus the terrain window, as an aligned 3×3 grid
+    // of cells (skipping the window) so all shared edges match — no T-junctions.
+    const xs = [X0, 0, meshW, X1], ys = [Y0, 0, meshH, Y1];
+    const frameTris = [];
+    for (let ci = 0; ci < 3; ci++) {
+      for (let ri = 0; ri < 3; ri++) {
+        if (ci === 1 && ri === 1) continue; // terrain window
+        this._rectTris(frameTris, xs[ci], ys[ri], xs[ci+1], ys[ri+1]);
+      }
+    }
+    return [{ name: 'Frame', hex: '#2B2B2B', solid: this._extrudePrism(frameTris, 0, frameH) }, ...elems];
   },
 };
 
