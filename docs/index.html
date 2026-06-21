@@ -539,6 +539,40 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 
 <div id="toast"></div>
 
+<!-- ─── Water Paint Modal ─── -->
+<div id="paint-modal" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,0.75);align-items:center;justify-content:center;">
+  <div style="background:var(--bg-surface,#161b22);border:1px solid var(--border,#30363d);border-radius:12px;padding:16px;max-width:92vw;max-height:92vh;display:flex;flex-direction:column;gap:12px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+      <strong style="font-size:14px;">Water Paint — correct detected water</strong>
+      <button class="btn btn-sm" onclick="Paint.close()">✕ Close</button>
+    </div>
+    <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">
+      <canvas id="paint-canvas" style="background:#0d1117;border:1px solid var(--border,#30363d);border-radius:8px;cursor:crosshair;touch-action:none;max-width:70vw;max-height:72vh;"></canvas>
+      <div style="display:flex;flex-direction:column;gap:12px;min-width:170px;">
+        <div>
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Brush mode</div>
+          <div class="btn-row">
+            <button id="paint-mode-add" class="btn btn-sm btn-primary" onclick="Paint.setMode('add')">＋ Add water</button>
+            <button id="paint-mode-erase" class="btn btn-sm" onclick="Paint.setMode('erase')">－ Erase</button>
+          </div>
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--text-muted);">Brush size</label>
+          <div class="range-row">
+            <input type="range" id="paint-brush" min="1" max="40" step="1" value="6" oninput="Paint.brush=parseInt(this.value);document.getElementById('paint-brush-val').textContent=this.value">
+            <span class="range-val" id="paint-brush-val">6</span>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);line-height:1.5;">
+          Blue = water. Paint to add, erase to remove. Changes apply on regenerate.
+        </div>
+        <button class="btn btn-sm btn-block btn-danger" onclick="Paint.clear()">Clear edits</button>
+        <button class="btn btn-sm btn-block btn-primary" onclick="Paint.apply()">✓ Apply &amp; regenerate</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════
 //  CONSTANTS
@@ -565,6 +599,7 @@ const State = {
   customRect: null,        // Leaflet rectangle layer for custom draw
   elevationData: null,     // {width, height, data: Float32Array, bounds}
   meshData: null,          // generated mesh
+  waterOverride: null,     // { w, h, add:Uint8Array, remove:Uint8Array } manual paint edits
 };
 
 // ═══════════════════════════════════════════════
@@ -945,6 +980,37 @@ const WaterDetection = {
   },
 };
 
+// Separable binary morphology on a w×h Uint8Array mask. isDilate=true → max
+// (dilation, grows the mask); false → min (erosion, shrinks it). Square structuring
+// element of Chebyshev radius r. Out-of-bounds treated as background.
+function morphPass(src, w, h, r, isDilate) {
+  const oob = isDilate ? 0 : 1;
+  const cmp = isDilate ? (a, b) => (a > b ? a : b) : (a, b) => (a < b ? a : b);
+  const tmp = new Uint8Array(src.length);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let v = oob;
+      for (let dx = -r; dx <= r; dx++) {
+        const xx = x + dx;
+        v = cmp(v, (xx < 0 || xx >= w) ? oob : src[y*w + xx]);
+      }
+      tmp[y*w + x] = v;
+    }
+  }
+  const out = new Uint8Array(src.length);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let v = oob;
+      for (let dy = -r; dy <= r; dy++) {
+        const yy = y + dy;
+        v = cmp(v, (yy < 0 || yy >= h) ? oob : tmp[yy*w + x]);
+      }
+      out[y*w + x] = v;
+    }
+  }
+  return out;
+}
+
 // ═══════════════════════════════════════════════
 //  MESH GENERATION
 // ═══════════════════════════════════════════════
@@ -1140,26 +1206,43 @@ const MeshGen = {
     };
 
     const waterMask = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+      if (!useWaterDetect) continue;
+      if (origData[i] <= 0) {
+        waterMask[i] = 1; // ocean — flat at sea level, always water
+      } else if (lakeMask && lakeMask[i]) {
+        // Lake/river: keep only where terrain is gentle enough to hold water.
+        const col = i % w, row = (i / w) | 0;
+        if (slopeTanAt(col, row) <= tanMaxSlope) waterMask[i] = 1;
+      }
+    }
+
+    // Bridge intermittent rivers: a small morphological closing (dilate→erode)
+    // constrained to the OSM water footprint. This rejoins slope-dropped pixels
+    // that sit in small gaps between kept water — without inventing water on dry
+    // land or refilling a large dropped blob (its interior is far from kept water).
+    if (useWaterDetect && lakeMask) {
+      const dil = morphPass(waterMask, w, h, 3, true);
+      const clo = morphPass(dil,       w, h, 3, false);
+      for (let i = 0; i < w * h; i++) if (clo[i] && lakeMask[i]) waterMask[i] = 1;
+    }
+
+    // Manual paint corrections win over everything: forced-add pixels become water
+    // (terrain-following, slope-exempt); forced-remove pixels revert to land.
+    const ov = State.waterOverride;
+    if (ov && ov.w === w && ov.h === h) {
+      for (let i = 0; i < w * h; i++) {
+        if (ov.remove[i]) waterMask[i] = 0;
+        else if (ov.add[i]) waterMask[i] = 1;
+      }
+    }
+
     const pixelBands = new Uint8Array(w * h);
     for (let i = 0; i < w * h; i++) {
-      let isWaterPix = false;
-      if (useWaterDetect) {
-        if (origData[i] <= 0) {
-          isWaterPix = true; // ocean — flat at sea level, always water
-        } else if (lakeMask && lakeMask[i]) {
-          // Lake/river: keep only where terrain is gentle enough to hold water.
-          const col = i % w, row = (i / w) | 0;
-          isWaterPix = slopeTanAt(col, row) <= tanMaxSlope;
-        }
-      }
-      if (isWaterPix) {
-        pixelBands[i] = 0;
-        waterMask[i] = 1;
-      } else {
-        pixelBands[i] = origData[i] < threshForestLo ? 1
-                      : origData[i] < threshMountain  ? 2
-                      : 3;
-      }
+      pixelBands[i] = waterMask[i] ? 0
+                    : origData[i] < threshForestLo ? 1
+                    : origData[i] < threshMountain  ? 2
+                    : 3;
     }
 
     // Derive triColors from pixelBands (majority band among a triangle's terrain vertices)
@@ -2044,6 +2127,7 @@ const UI = {
     html += `<button class="btn btn-primary btn-block" onclick="UI.generateModel()">Generate 3D Model</button>`;
 
     if (State.meshData) {
+      html += `<button class="btn btn-block" style="margin-top:8px;" onclick="Paint.open()">🖌 Paint Water</button>`;
       html += `<div class="btn-row" style="margin-top:8px;">
         <button class="btn" onclick="UI.exportSTL()">⬇ STL</button>
         <button class="btn" onclick="UI.export3MF()">⬇ 3MF</button>
@@ -2142,6 +2226,168 @@ const UI = {
       hideLoading();
       toast('3MF export error: ' + e.message);
     }
+  },
+};
+
+// ═══════════════════════════════════════════════
+//  WATER PAINT
+// ═══════════════════════════════════════════════
+
+const Paint = {
+  mode: 'add',
+  brush: 6,
+  painting: false,
+  baseCanvas: null,   // offscreen hillshade at grid resolution
+  dispScale: 1,       // canvas pixels per grid pixel
+
+  open() {
+    const ed = State.elevationData;
+    if (!ed) { toast('Generate a model first.'); return; }
+    const w = ed.width, h = ed.height;
+
+    // (Re)allocate override masks if grid size changed.
+    if (!State.waterOverride || State.waterOverride.w !== w || State.waterOverride.h !== h) {
+      State.waterOverride = { w, h, add: new Uint8Array(w*h), remove: new Uint8Array(w*h) };
+    }
+
+    this._buildHillshade(ed);
+
+    // Fit the display canvas to the viewport while keeping the grid aspect ratio.
+    const maxPx = Math.min(window.innerWidth * 0.66, window.innerHeight * 0.7, 720);
+    this.dispScale = Math.max(1, Math.floor(maxPx / Math.max(w, h)));
+    const cv = document.getElementById('paint-canvas');
+    cv.width = w * this.dispScale;
+    cv.height = h * this.dispScale;
+
+    this.setMode('add');
+    this.redraw();
+    document.getElementById('paint-modal').style.display = 'flex';
+    this._attach(cv);
+  },
+
+  close() {
+    document.getElementById('paint-modal').style.display = 'none';
+  },
+
+  setMode(m) {
+    this.mode = m;
+    document.getElementById('paint-mode-add').className   = 'btn btn-sm' + (m === 'add'   ? ' btn-primary' : '');
+    document.getElementById('paint-mode-erase').className = 'btn btn-sm' + (m === 'erase' ? ' btn-primary' : '');
+  },
+
+  clear() {
+    const ov = State.waterOverride;
+    if (ov) { ov.add.fill(0); ov.remove.fill(0); }
+    this.redraw();
+  },
+
+  apply() {
+    this.close();
+    UI.generateModel();
+  },
+
+  // Grayscale Lambertian hillshade of the elevation grid → offscreen canvas.
+  _buildHillshade(ed) {
+    const w = ed.width, h = ed.height, d = ed.data;
+    // Real horizontal pixel spacing (m) so the surface normal uses true slope.
+    const midLatR = (ed.bounds.north + ed.bounds.south) / 2 * Math.PI / 180;
+    const dxM = Math.abs(ed.bounds.east - ed.bounds.west) * Math.cos(midLatR) * 111320 / (w - 1) || 1;
+    const dyM = Math.abs(ed.bounds.north - ed.bounds.south) * 111320 / (h - 1) || 1;
+
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d');
+    const img = ctx.createImageData(w, h);
+    // Light from the north-west, slightly above.
+    const lx = -0.5, ly = -0.5, lz = 0.7;
+    const llen = Math.hypot(lx, ly, lz);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const xl = x > 0 ? x-1 : x, xr = x < w-1 ? x+1 : x;
+        const yu = y > 0 ? y-1 : y, yd = y < h-1 ? y+1 : y;
+        const dzdx = (d[y*w + xr] - d[y*w + xl]) / ((xr - xl) * dxM);
+        const dzdy = (d[yd*w + x] - d[yu*w + x]) / ((yd - yu) * dyM);
+        const nlen = Math.hypot(dzdx, dzdy, 1); // surface normal (−dzdx, −dzdy, 1)
+        let s = (-dzdx*lx - dzdy*ly + 1*lz) / (nlen * llen);
+        s = Math.max(0.15, Math.min(1, s));
+        const v = Math.round(40 + s * 175);
+        const o = (y*w + x) * 4;
+        img.data[o] = v; img.data[o+1] = v; img.data[o+2] = v; img.data[o+3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    this.baseCanvas = cv;
+  },
+
+  // Composite: hillshade + current water (detected ∪ add) ∖ remove, tinted blue.
+  redraw() {
+    const cv = document.getElementById('paint-canvas');
+    const ctx = cv.getContext('2d');
+    const ov = State.waterOverride;
+    const w = ov.w, h = ov.h;
+    const base = State.meshData && State.meshData.waterMask &&
+                 State.meshData.gridW === w && State.meshData.gridH === h
+                 ? State.meshData.waterMask : null;
+
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.drawImage(this.baseCanvas, 0, 0, cv.width, cv.height);
+
+    // Water overlay at grid resolution (cached canvas, refreshed in place).
+    if (!this._overlay || this._overlay.width !== w || this._overlay.height !== h) {
+      this._overlay = document.createElement('canvas');
+      this._overlay.width = w; this._overlay.height = h;
+    }
+    const tctx = this._overlay.getContext('2d');
+    const img = tctx.createImageData(w, h);
+    for (let i = 0; i < w*h; i++) {
+      const isWater = !ov.remove[i] && ((base && base[i]) || ov.add[i]);
+      if (isWater) {
+        const o = i*4;
+        img.data[o] = 45; img.data[o+1] = 120; img.data[o+2] = 210; img.data[o+3] = 170;
+      }
+    }
+    tctx.putImageData(img, 0, 0);
+    ctx.drawImage(this._overlay, 0, 0, cv.width, cv.height);
+  },
+
+  _attach(cv) {
+    if (cv._paintBound) return;
+    cv._paintBound = true;
+    const pos = e => {
+      const r = cv.getBoundingClientRect();
+      const cx = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
+      const cy = (e.touches ? e.touches[0].clientY : e.clientY) - r.top;
+      return { gx: Math.floor(cx / r.width * State.waterOverride.w),
+               gy: Math.floor(cy / r.height * State.waterOverride.h) };
+    };
+    const start = e => { this.painting = true; const p = pos(e); this._stamp(p.gx, p.gy); e.preventDefault(); };
+    const move  = e => { if (!this.painting) return; const p = pos(e); this._stamp(p.gx, p.gy); e.preventDefault(); };
+    const end   = () => { this.painting = false; };
+    cv.addEventListener('mousedown', start);
+    cv.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', end);
+    cv.addEventListener('touchstart', start, { passive: false });
+    cv.addEventListener('touchmove', move, { passive: false });
+    window.addEventListener('touchend', end);
+  },
+
+  _stamp(gx, gy) {
+    const ov = State.waterOverride;
+    const w = ov.w, h = ov.h, r = this.brush;
+    const addMask = this.mode === 'add' ? ov.add : ov.remove;
+    const clrMask = this.mode === 'add' ? ov.remove : ov.add;
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx*dx + dy*dy > r*r) continue;
+        const x = gx + dx, y = gy + dy;
+        if (x < 0 || x >= w || y < 0 || y >= h) continue;
+        const i = y*w + x;
+        addMask[i] = 1;
+        clrMask[i] = 0;
+      }
+    }
+    this.redraw();
   },
 };
 
