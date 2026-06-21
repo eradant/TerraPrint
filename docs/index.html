@@ -1242,26 +1242,7 @@ const MeshGen = {
         return out;
       };
 
-      // Step 1: Precompute edge-connected component ID for each terrain triangle.
-      //         Triangles with the same color that are reachable from each other
-      //         via same-color edge adjacency share a component ID.
-      const compId = new Int32Array(numTerrainTris).fill(-1);
-      let nextCId = 0;
-      for (let start = 0; start < numTerrainTris; start++) {
-        if (compId[start] !== -1) continue;
-        const color = triColors[start];
-        const cid = nextCId++;
-        const q = [start]; compId[start] = cid;
-        for (let hd = 0; hd < q.length; hd++) {
-          for (const nb of neighbors(q[hd])) {
-            if (compId[nb] === -1 && triColors[nb] === color) {
-              compId[nb] = cid; q.push(nb);
-            }
-          }
-        }
-      }
-
-      // Step 2: Detect and fix bowtie vertices.
+      // Detect and fix bowtie vertices.
       let anyBowtieFix = false;
       let bowtieFixes = 0;
 
@@ -1318,42 +1299,31 @@ const MeshGen = {
             }
             if (fans.length <= 1) continue;
 
-            // KEY GUARD: fans in different edge-connected components will become
-            // separate 3MF objects and don't cause a manifold problem. Only fix
-            // fans that share the same component ID.
-            const fansByComp = new Map();
-            for (const fan of fans) {
-              const cid = compId[fan[0]];
-              if (!fansByComp.has(cid)) fansByComp.set(cid, []);
-              fansByComp.get(cid).push(fan);
-            }
-
-            for (const [, compFans] of fansByComp) {
-              if (compFans.length <= 1) continue; // only one fan in this component → OK
-
-              // True bowtie within a single component. Reassign minority fan(s).
-              compFans.sort((a, b) => b.length - a.length);
-              for (let f = 1; f < compFans.length; f++) {
-                const nbrCount = [0, 0, 0, 0];
-                for (const ti of compFans[f]) {
-                  for (const nb of neighbors(ti)) {
-                    if (triColors[nb] !== color) nbrCount[triColors[nb]]++;
-                  }
+            // Every band now exports as a SINGLE solid (all its triangles), so any
+            // vertex where two same-color fans meet only at a point is a bowtie that
+            // would produce a non-manifold vertical wall edge. Keep the largest fan
+            // and reassign every other fan to a neighboring color.
+            fans.sort((a, b) => b.length - a.length);
+            for (let f = 1; f < fans.length; f++) {
+              const nbrCount = [0, 0, 0, 0];
+              for (const ti of fans[f]) {
+                for (const nb of neighbors(ti)) {
+                  if (triColors[nb] !== color) nbrCount[triColors[nb]]++;
                 }
-                let best = -1, bestN = 0;
-                for (let k = 1; k < 4; k++) {
-                  if (nbrCount[k] > bestN) { bestN = nbrCount[k]; best = k; }
+              }
+              let best = -1, bestN = 0;
+              for (let k = 1; k < 4; k++) {
+                if (nbrCount[k] > bestN) { bestN = nbrCount[k]; best = k; }
+              }
+              if (best === -1) {
+                for (let k = 0; k < 4; k++) {
+                  if (k !== color && nbrCount[k] > bestN) { bestN = nbrCount[k]; best = k; }
                 }
-                if (best === -1) {
-                  for (let k = 0; k < 4; k++) {
-                    if (k !== color && nbrCount[k] > bestN) { bestN = nbrCount[k]; best = k; }
-                  }
-                }
-                if (best !== -1 && best !== color) {
-                  for (const ti of compFans[f]) triColors[ti] = best;
-                  anyBowtieFix = true;
-                  bowtieFixes++;
-                }
+              }
+              if (best !== -1 && best !== color) {
+                for (const ti of fans[f]) triColors[ti] = best;
+                anyBowtieFix = true;
+                bowtieFixes++;
               }
             }
           }
@@ -1633,7 +1603,7 @@ const ThreeMFExport = {
     const buildIds = [];
 
     for (let bandIdx = 0; bandIdx < 4; bandIdx++) {
-      const solid = this._buildPixelBandSolid(bandIdx, mesh);
+      const solid = this._buildBandSolid(bandIdx, mesh);
       if (!solid) continue;
 
       xmlParts.push(
@@ -1669,211 +1639,71 @@ const ThreeMFExport = {
     return { blob, warnings: [] };
   },
 
-  // Build a closed manifold solid for bandIdx using per-pixel split walls.
+  // Build a closed manifold solid for bandIdx by extruding its terrain triangles
+  // down to z=0. Band membership is per-TRIANGLE (from triColors, which has
+  // already been smoothed + bowtie-cleaned in MeshGen for exactly this purpose).
   //
-  // Split-wall contract: for adjacent pixels A (band N) and B (band M), N < M:
-  //   - Band N generates wall z = [0, terrain_z_A]
-  //   - Band M generates wall z = [terrain_z_A, terrain_z_B]
-  //   Together they cover [0, terrain_z_B] with no overlap and no gap.
+  //   Top    = terrain triangles where triColors === bandIdx (normals +z)
+  //   Bottom = same triangles mirrored to z=0 (normals −z)
+  //   Walls  = every boundary edge of the band's triangle set, dropped to z=0
   //
-  // Tile boundary pixels always generate full-height walls [0, terrain_z].
-  _buildPixelBandSolid(bandIdx, mesh) {
-    const { gridW: gw, gridH: gh, vertices: mv, pixelBands } = mesh;
-    const T = (r, c) => r * gw + c;
-    const tz = gi => mv[gi * 3 + 2]; // model-space z of terrain vertex
+  // This is a straight prism extrusion of a sub-region of the (manifold) terrain
+  // grid, so it is watertight: each top edge is shared by two top tris or one wall,
+  // and the bottom mirrors it exactly. Adjacent bands share coincident wall planes
+  // but are separate 3MF objects, so each prints as its own watertight solid.
+  _buildBandSolid(bandIdx, mesh) {
+    const { gridW: gw, gridH: gh, vertices: mv, triangles: tri, triColors } = mesh;
+    const numTerrainTris = 2 * (gw - 1) * (gh - 1);
+    const STRIDE = gw * gh; // > any local vertex index
 
-    const verts = [];       // flat [x,y,z, ...]
-    const tris  = [];       // flat [a,b,c, ...]
-    const vidx  = new Map(); // coord-key → vertex index
-
-    const addV = (x, y, z) => {
-      const k = `${x.toFixed(3)},${y.toFixed(3)},${z.toFixed(3)}`;
-      if (vidx.has(k)) return vidx.get(k);
-      const idx = verts.length / 3;
-      verts.push(x, y, z);
-      vidx.set(k, idx);
-      return idx;
-    };
-    const addT = (a, b, c) => { if (a !== b && b !== c && a !== c) tris.push(a, b, c); };
-
-    // Helper: add a wall quad between two XY points at zLow..zHigh.
-    // outward=true means normal points from A toward B's side (away from solid interior).
-    const addWall = (ax, ay, bx, by, zLow, zHigh, outwardFromA) => {
-      if (zHigh <= zLow) return;
-      const P0 = addV(ax, ay, zLow);
-      const P1 = addV(ax, ay, zHigh);
-      const P2 = addV(bx, by, zHigh);
-      const P3 = addV(bx, by, zLow);
-      if (outwardFromA) {
-        // Outward normal points away from A toward B: CCW winding from B's side
-        addT(P0, P2, P1); addT(P0, P3, P2);
-      } else {
-        addT(P0, P1, P2); addT(P0, P2, P3);
-      }
+    const localOf = new Map(); // global grid vertex → local top index
+    const topV = [];           // flat xyz of top vertices
+    let numTop = 0;
+    const getV = gi => {
+      let li = localOf.get(gi);
+      if (li !== undefined) return li;
+      li = numTop++;
+      topV.push(mv[gi*3], mv[gi*3+1], mv[gi*3+2]);
+      localOf.set(gi, li);
+      return li;
     };
 
-    // ── TOP SURFACE ───────────────────────────────────────────────────────────
-    // For each pixel quad, add terrain surface tris for corners in this band.
-    for (let r = 0; r < gh - 1; r++) {
-      for (let c = 0; c < gw - 1; c++) {
-        const TL = T(r,c), TR = T(r,c+1), BL = T(r+1,c), BR = T(r+1,c+1);
-        const inBand = [TL,TR,BL,BR].map(gi => pixelBands[gi] === bandIdx);
-        const cnt = inBand.reduce((s,v) => s + v, 0);
-        if (cnt < 3) continue;
+    const topT = [];
+    const dirEdges = new Set(); // directed edges a*STRIDE+b over LOCAL indices
 
-        // Vertex positions at terrain z
-        const vTL = () => addV(mv[TL*3], mv[TL*3+1], tz(TL));
-        const vTR = () => addV(mv[TR*3], mv[TR*3+1], tz(TR));
-        const vBL = () => addV(mv[BL*3], mv[BL*3+1], tz(BL));
-        const vBR = () => addV(mv[BR*3], mv[BR*3+1], tz(BR));
-
-        if (cnt === 4) {
-          // Full quad: two triangles, CCW from above (TL,BL,TR and TR,BL,BR)
-          addT(vTL(), vBL(), vTR());
-          addT(vTR(), vBL(), vBR());
-        } else {
-          // 3 corners: find and add the one valid triangle
-          const corners = [TL,TR,BL,BR];
-          const good = corners.filter((_, i) => inBand[i]);
-          // Use winding based on which corner is excluded
-          const [g0, g1, g2] = good;
-          const vg = gi => addV(mv[gi*3], mv[gi*3+1], tz(gi));
-          // Compute cross product to ensure normal points up
-          const ax = mv[g1*3]-mv[g0*3], ay = mv[g1*3+1]-mv[g0*3+1];
-          const bx = mv[g2*3]-mv[g0*3], by = mv[g2*3+1]-mv[g0*3+1];
-          const nz = ax*by - ay*bx; // positive z means CCW from above
-          if (nz > 0) {
-            addT(vg(g0), vg(g1), vg(g2));
-          } else {
-            addT(vg(g0), vg(g2), vg(g1));
-          }
-        }
-      }
+    for (let ti = 0; ti < numTerrainTris; ti++) {
+      if (triColors[ti] !== bandIdx) continue;
+      const a = getV(tri[ti*3]), b = getV(tri[ti*3+1]), c = getV(tri[ti*3+2]);
+      topT.push(a, b, c);
+      dirEdges.add(a*STRIDE + b);
+      dirEdges.add(b*STRIDE + c);
+      dirEdges.add(c*STRIDE + a);
     }
 
-    if (verts.length === 0) return null; // no pixels in this band
+    if (numTop === 0) return null;
 
-    // ── BOTTOM FACE ───────────────────────────────────────────────────────────
-    // Flat face at z=0 for all pixels in this band. Reversed winding (normal −z).
-    for (let r = 0; r < gh - 1; r++) {
-      for (let c = 0; c < gw - 1; c++) {
-        const TL = T(r,c), TR = T(r,c+1), BL = T(r+1,c), BR = T(r+1,c+1);
-        const inBand = [TL,TR,BL,BR].map(gi => pixelBands[gi] === bandIdx);
-        const cnt = inBand.reduce((s,v) => s + v, 0);
-        if (cnt < 3) continue;
+    // Bottom vertices: same XY as top, z=0. Offset = numTop.
+    const allV = topV.slice();
+    for (let i = 0; i < numTop; i++) allV.push(topV[i*3], topV[i*3+1], 0);
 
-        const b0 = gi => addV(mv[gi*3], mv[gi*3+1], 0);
-
-        if (cnt === 4) {
-          addT(b0(TL), b0(TR), b0(BL)); // reversed winding vs top
-          addT(b0(TR), b0(BR), b0(BL));
-        } else {
-          const corners = [TL,TR,BL,BR];
-          const good = corners.filter((_, i) => inBand[i]);
-          const [g0, g1, g2] = good;
-          const ax = mv[g1*3]-mv[g0*3], ay = mv[g1*3+1]-mv[g0*3+1];
-          const bx = mv[g2*3]-mv[g0*3], by = mv[g2*3+1]-mv[g0*3+1];
-          const nz = ax*by - ay*bx;
-          // Bottom face normal is −z, so we want CW from above = reversed of top
-          if (nz > 0) {
-            addT(b0(g0), b0(g2), b0(g1));
-          } else {
-            addT(b0(g0), b0(g1), b0(g2));
-          }
-        }
-      }
+    // Bottom triangles: reversed winding (outward normal −z).
+    const botT = [];
+    for (let i = 0; i < topT.length; i += 3) {
+      botT.push(topT[i] + numTop, topT[i+2] + numTop, topT[i+1] + numTop);
     }
 
-    // ── WALLS ─────────────────────────────────────────────────────────────────
-    // Iterate all pixel-grid edges. For each edge between pixel A and pixel B:
-    //   bA === bB: interior, skip
-    //   bA === bandIdx, bB !== bandIdx:
-    //     if bB < bandIdx: bB is lower band → our wall from terrain_z_B to terrain_z_A
-    //     if bB > bandIdx: bB is higher band → our wall from 0 to terrain_z_A
-    //   (symmetric for bB === bandIdx)
-    // Tile boundary (A in band, no neighbor): wall from 0 to terrain_z_A.
-
-    // Horizontal pixel edges: (r,c) ↔ (r,c+1)
-    for (let r = 0; r < gh; r++) {
-      for (let c = 0; c < gw - 1; c++) {
-        const A = T(r,c), B = T(r,c+1);
-        const bA = pixelBands[A], bB = pixelBands[B];
-        if (bA === bB) continue;
-        const ax = mv[A*3], ay = mv[A*3+1];
-        const bx = mv[B*3], by = mv[B*3+1];
-        if (bA === bandIdx) {
-          const zHigh = tz(A), zLow = bB < bandIdx ? tz(B) : 0;
-          // Wall faces away from B (outward from A's solid); normal direction: A toward −B
-          addWall(ax, ay, bx, by, zLow, zHigh, false);
-        } else if (bB === bandIdx) {
-          const zHigh = tz(B), zLow = bA < bandIdx ? tz(A) : 0;
-          addWall(bx, by, ax, ay, zLow, zHigh, false);
-        }
-      }
+    // Wall triangles: each boundary directed edge a→b (where b→a is absent) gets
+    // a vertical quad connecting the top edge to its z=0 counterpart.
+    const wallT = [];
+    for (const ab of dirEdges) {
+      const a = Math.floor(ab / STRIDE), b = ab % STRIDE;
+      if (dirEdges.has(b*STRIDE + a)) continue; // interior edge — shared by 2 tris
+      const ba = a + numTop, bb = b + numTop;
+      wallT.push(a, ba, b);
+      wallT.push(b, ba, bb);
     }
 
-    // Vertical pixel edges: (r,c) ↔ (r+1,c)
-    for (let r = 0; r < gh - 1; r++) {
-      for (let c = 0; c < gw; c++) {
-        const A = T(r,c), B = T(r+1,c);
-        const bA = pixelBands[A], bB = pixelBands[B];
-        if (bA === bB) continue;
-        const ax = mv[A*3], ay = mv[A*3+1];
-        const bx = mv[B*3], by = mv[B*3+1];
-        if (bA === bandIdx) {
-          const zHigh = tz(A), zLow = bB < bandIdx ? tz(B) : 0;
-          addWall(ax, ay, bx, by, zLow, zHigh, false);
-        } else if (bB === bandIdx) {
-          const zHigh = tz(B), zLow = bA < bandIdx ? tz(A) : 0;
-          addWall(bx, by, ax, ay, zLow, zHigh, false);
-        }
-      }
-    }
-
-    // ── TILE BOUNDARY WALLS ───────────────────────────────────────────────────
-    // Top row (r=0): outward = −Y (south face in model space)
-    for (let c = 0; c < gw - 1; c++) {
-      const A = T(0,c), B = T(0,c+1);
-      if (pixelBands[A] !== bandIdx && pixelBands[B] !== bandIdx) continue;
-      if (pixelBands[A] === bandIdx) {
-        addWall(mv[B*3], mv[B*3+1], mv[A*3], mv[A*3+1], 0, tz(A), false);
-      }
-      if (pixelBands[B] === bandIdx) {
-        addWall(mv[A*3], mv[A*3+1], mv[B*3], mv[B*3+1], 0, tz(B), false);
-      }
-    }
-    // Bottom row (r=gh-1): outward = +Y
-    for (let c = 0; c < gw - 1; c++) {
-      const A = T(gh-1,c), B = T(gh-1,c+1);
-      if (pixelBands[A] === bandIdx) {
-        addWall(mv[A*3], mv[A*3+1], mv[B*3], mv[B*3+1], 0, tz(A), false);
-      }
-      if (pixelBands[B] === bandIdx) {
-        addWall(mv[B*3], mv[B*3+1], mv[A*3], mv[A*3+1], 0, tz(B), false);
-      }
-    }
-    // Left col (c=0): outward = −X
-    for (let r = 0; r < gh - 1; r++) {
-      const A = T(r,0), B = T(r+1,0);
-      if (pixelBands[A] === bandIdx) {
-        addWall(mv[A*3], mv[A*3+1], mv[B*3], mv[B*3+1], 0, tz(A), false);
-      }
-      if (pixelBands[B] === bandIdx) {
-        addWall(mv[B*3], mv[B*3+1], mv[A*3], mv[A*3+1], 0, tz(B), false);
-      }
-    }
-    // Right col (c=gw-1): outward = +X
-    for (let r = 0; r < gh - 1; r++) {
-      const A = T(r,gw-1), B = T(r+1,gw-1);
-      if (pixelBands[A] === bandIdx) {
-        addWall(mv[B*3], mv[B*3+1], mv[A*3], mv[A*3+1], 0, tz(A), false);
-      }
-      if (pixelBands[B] === bandIdx) {
-        addWall(mv[A*3], mv[A*3+1], mv[B*3], mv[B*3+1], 0, tz(B), false);
-      }
-    }
-
-    return { v: verts, t: tris };
+    return { v: allV, t: topT.concat(botT, wallT) };
   },
 };
 
