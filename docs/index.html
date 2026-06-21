@@ -490,10 +490,10 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
           <span style="color:var(--text-muted)">above</span>
         </div>
         <div class="input-group" style="margin-top:10px;">
-          <label>Slope sharpening (m per degree)</label>
+          <label>Water depth (mm)</label>
           <div class="range-row">
-            <input type="range" id="slope-scale" min="0" max="30" step="1" value="10" oninput="document.getElementById('slope-scale-val').textContent=this.value">
-            <span class="range-val" id="slope-scale-val">10</span>
+            <input type="range" id="water-depth" min="0.5" max="10" step="0.5" value="2" oninput="document.getElementById('water-depth-val').textContent=this.value+'mm'">
+            <span class="range-val" id="water-depth-val">2mm</span>
           </div>
         </div>
       </div>
@@ -923,7 +923,6 @@ const MeshGen = {
     const baseHeight = parseFloat(document.getElementById('base-height').value) || 4;
     const threshMountain = parseFloat(document.getElementById('thresh-hills').value) || 1500;
     const threshForestLo = parseFloat(document.getElementById('thresh-forest-lo').value) || 400;
-    const slopeScale = parseFloat(document.getElementById('slope-scale').value) || 10;
 
     const w = elevData.width;
     const h = elevData.height;
@@ -1080,38 +1079,18 @@ const MeshGen = {
       }
     }
 
-    // ── Per-pixel slope in degrees (central differences in model space) ──────
-    const pixelSlopeDeg = new Float32Array(w * h);
-    const sx = meshW / (w - 1), sy = meshH / (h - 1);
-    for (let row = 0; row < h; row++) {
-      for (let col = 0; col < w; col++) {
-        const gi = row * w + col;
-        const zAt = gi2 => positions[gi2 * 3 + 2];
-        const dzdx = col > 0 && col < w - 1
-          ? (zAt(row*w+col+1) - zAt(row*w+col-1)) / (2*sx)
-          : col === 0 ? (zAt(row*w+1) - zAt(gi)) / sx
-                      : (zAt(gi) - zAt(row*w+col-1)) / sx;
-        const dzdy = row > 0 && row < h - 1
-          ? (zAt((row+1)*w+col) - zAt((row-1)*w+col)) / (2*sy)
-          : row === 0 ? (zAt(w+col) - zAt(gi)) / sy
-                      : (zAt(gi) - zAt((row-1)*w+col)) / sy;
-        pixelSlopeDeg[gi] = Math.atan(Math.sqrt(dzdx*dzdx + dzdy*dzdy)) * 180 / Math.PI;
-      }
-    }
-
-    // ── Per-pixel band assignment (used for 3MF export and preview) ──────────
-    // 0=Water, 1=Lowland, 2=Forest, 3=Alpine
-    // Effective elevation = actual_elevation + slope_degrees × slopeScale
-    // so steep slopes punch up into higher bands even at lower elevations.
+    // ── Per-pixel band assignment by pure elevation ─────────────────────────
+    // 0=Water (ocean/lake), 1=Lowland, 2=Forest, 3=Alpine.
     const useWaterDetect = document.getElementById('water-detect').checked;
+    const waterMask = new Uint8Array(w * h);
     const pixelBands = new Uint8Array(w * h);
     for (let i = 0; i < w * h; i++) {
       if (useWaterDetect && ((lakeMask && lakeMask[i]) || origData[i] <= 0)) {
         pixelBands[i] = 0; // Water: ocean or lake
+        waterMask[i] = 1;
       } else {
-        const effElev = origData[i] + pixelSlopeDeg[i] * slopeScale;
-        pixelBands[i] = effElev < threshForestLo ? 1
-                      : effElev < threshMountain  ? 2
+        pixelBands[i] = origData[i] < threshForestLo ? 1
+                      : origData[i] < threshMountain  ? 2
                       : 3;
       }
     }
@@ -1375,6 +1354,7 @@ const MeshGen = {
       triElevations,
       triSlopes,
       pixelBands,
+      waterMask,
       lakeElevMap,
       gridW: w,
       gridH: h,
@@ -1599,11 +1579,55 @@ const ThreeMFExport = {
     });
     xmlParts.push('    </basematerials>\n');
 
+    // Model-space band boundaries (mm). toMM converts elevation (m) → model z.
+    const toMM = m => (m - mesh.minElev) * mesh.elevScale + mesh.baseHeight;
+    const threshForestLoM = parseFloat(document.getElementById('thresh-forest-lo').value) || 400;
+    const threshMountainM = parseFloat(document.getElementById('thresh-hills').value)     || 1500;
+    const E_lowToForest    = toMM(threshForestLoM);
+    const E_forestToAlpine = toMM(threshMountainM);
+    const waterDepth = parseFloat(document.getElementById('water-depth').value) || 2;
+
+    const wm = mesh.waterMask;
+    const tz = gi => mesh.vertices[gi*3 + 2];
+    const isWater = gi => !!(wm && wm[gi]);
+
+    // Stacked horizontal slabs (bottom → top). All interfaces are flat & horizontal,
+    // so adjacent colors never share a vertical seam wall → no surrounding holes.
+    //   Lowland fills the whole tile from z=0 and serves as the base; beneath water
+    //   it stops `waterDepth` below the surface so the thin Water slab rests on it.
+    const bandSpecs = [
+      { // 0 Water — thin slab capped at each water surface
+        active: (a,b,c,d) => isWater(a) && isWater(b) && isWater(c) && isWater(d),
+        floor:  gi => Math.max(0, tz(gi) - waterDepth),
+        ceil:   gi => tz(gi),
+      },
+      { // 1 Lowland — full-tile base + lowest elevation slab
+        active: () => true,
+        floor:  () => 0,
+        ceil:   gi => isWater(gi) ? Math.max(0, tz(gi) - waterDepth)
+                                  : Math.min(tz(gi), E_lowToForest),
+      },
+      { // 2 Forest — land between the two thresholds
+        active: (a,b,c,d) => !isWater(a) && !isWater(b) && !isWater(c) && !isWater(d)
+                          && tz(a) >= E_lowToForest && tz(b) >= E_lowToForest
+                          && tz(c) >= E_lowToForest && tz(d) >= E_lowToForest,
+        floor:  () => E_lowToForest,
+        ceil:   gi => Math.min(tz(gi), E_forestToAlpine),
+      },
+      { // 3 Alpine — land above the upper threshold
+        active: (a,b,c,d) => !isWater(a) && !isWater(b) && !isWater(c) && !isWater(d)
+                          && tz(a) >= E_forestToAlpine && tz(b) >= E_forestToAlpine
+                          && tz(c) >= E_forestToAlpine && tz(d) >= E_forestToAlpine,
+        floor:  () => E_forestToAlpine,
+        ceil:   gi => tz(gi),
+      },
+    ];
+
     let objectId = 2;
     const buildIds = [];
 
     for (let bandIdx = 0; bandIdx < 4; bandIdx++) {
-      const solid = this._buildBandSolid(bandIdx, mesh);
+      const solid = this._buildStackSolid(mesh, bandSpecs[bandIdx]);
       if (!solid) continue;
 
       xmlParts.push(
@@ -1639,71 +1663,67 @@ const ThreeMFExport = {
     return { blob, warnings: [] };
   },
 
-  // Build a closed manifold solid for bandIdx by extruding its terrain triangles
-  // down to z=0. Band membership is per-TRIANGLE (from triColors, which has
-  // already been smoothed + bowtie-cleaned in MeshGen for exactly this purpose).
+  // Build a closed manifold slab from a band spec:
+  //   active(TL,TR,BL,BR) → include this grid quad
+  //   floor(gi) → bottom z for grid vertex gi
+  //   ceil(gi)  → top z for grid vertex gi
   //
-  //   Top    = terrain triangles where triColors === bandIdx (normals +z)
-  //   Bottom = same triangles mirrored to z=0 (normals −z)
-  //   Walls  = every boundary edge of the band's triangle set, dropped to z=0
-  //
-  // This is a straight prism extrusion of a sub-region of the (manifold) terrain
-  // grid, so it is watertight: each top edge is shared by two top tris or one wall,
-  // and the bottom mirrors it exactly. Adjacent bands share coincident wall planes
-  // but are separate 3MF objects, so each prints as its own watertight solid.
-  _buildBandSolid(bandIdx, mesh) {
-    const { gridW: gw, gridH: gh, vertices: mv, triangles: tri, triColors } = mesh;
-    const numTerrainTris = 2 * (gw - 1) * (gh - 1);
-    const STRIDE = gw * gh; // > any local vertex index
+  // The result is a heightfield prism between the floor and ceil surfaces over the
+  // active region. Stacked bands share flat horizontal interfaces (e.g. Forest's
+  // floor == Lowland's clamped ceil), so adjacent colors meet flush with no vertical
+  // seam walls. Each slab is independently watertight; coincident interface planes
+  // between separate 3MF objects are fine for multi-object printing.
+  _buildStackSolid(mesh, spec) {
+    const gw = mesh.gridW, gh = mesh.gridH, mv = mesh.vertices;
+    const T = (r, c) => r * gw + c;
+    const STRIDE = gw * gh;
 
-    const localOf = new Map(); // global grid vertex → local top index
-    const topV = [];           // flat xyz of top vertices
-    let numTop = 0;
-    const getV = gi => {
-      let li = localOf.get(gi);
-      if (li !== undefined) return li;
-      li = numTop++;
-      topV.push(mv[gi*3], mv[gi*3+1], mv[gi*3+2]);
-      localOf.set(gi, li);
-      return li;
+    const verts = [], tris = [], vmap = new Map();
+    const addV = (x, y, z) => {
+      const k = `${x.toFixed(3)},${y.toFixed(3)},${z.toFixed(3)}`;
+      let i = vmap.get(k);
+      if (i !== undefined) return i;
+      i = verts.length / 3;
+      verts.push(x, y, z);
+      vmap.set(k, i);
+      return i;
     };
+    const addT = (a, b, c) => { if (a !== b && b !== c && a !== c) tris.push(a, b, c); };
+    const top = gi => addV(mv[gi*3], mv[gi*3+1], spec.ceil(gi));
+    const bot = gi => addV(mv[gi*3], mv[gi*3+1], spec.floor(gi));
 
-    const topT = [];
-    const dirEdges = new Set(); // directed edges a*STRIDE+b over LOCAL indices
+    const fwd = new Set(); // directed grid edges of the top surface
+    let any = false;
 
-    for (let ti = 0; ti < numTerrainTris; ti++) {
-      if (triColors[ti] !== bandIdx) continue;
-      const a = getV(tri[ti*3]), b = getV(tri[ti*3+1]), c = getV(tri[ti*3+2]);
-      topT.push(a, b, c);
-      dirEdges.add(a*STRIDE + b);
-      dirEdges.add(b*STRIDE + c);
-      dirEdges.add(c*STRIDE + a);
+    for (let r = 0; r < gh - 1; r++) {
+      for (let c = 0; c < gw - 1; c++) {
+        const TL = T(r,c), TR = T(r,c+1), BL = T(r+1,c), BR = T(r+1,c+1);
+        if (!spec.active(TL, TR, BL, BR)) continue;
+        any = true;
+        // Top surface (normal +z)
+        addT(top(TL), top(BL), top(TR));
+        addT(top(TR), top(BL), top(BR));
+        // Bottom surface (normal −z, reversed winding)
+        addT(bot(TL), bot(TR), bot(BL));
+        addT(bot(TR), bot(BR), bot(BL));
+        // Record directed grid edges matching the top winding (for boundary walls)
+        fwd.add(TL*STRIDE + BL); fwd.add(BL*STRIDE + TR); fwd.add(TR*STRIDE + TL);
+        fwd.add(TR*STRIDE + BL); fwd.add(BL*STRIDE + BR); fwd.add(BR*STRIDE + TR);
+      }
     }
 
-    if (numTop === 0) return null;
+    if (!any) return null;
 
-    // Bottom vertices: same XY as top, z=0. Offset = numTop.
-    const allV = topV.slice();
-    for (let i = 0; i < numTop; i++) allV.push(topV[i*3], topV[i*3+1], 0);
-
-    // Bottom triangles: reversed winding (outward normal −z).
-    const botT = [];
-    for (let i = 0; i < topT.length; i += 3) {
-      botT.push(topT[i] + numTop, topT[i+2] + numTop, topT[i+1] + numTop);
-    }
-
-    // Wall triangles: each boundary directed edge a→b (where b→a is absent) gets
-    // a vertical quad connecting the top edge to its z=0 counterpart.
-    const wallT = [];
-    for (const ab of dirEdges) {
+    // Walls along boundary edges (directed grid edge with no reverse partner).
+    for (const ab of fwd) {
       const a = Math.floor(ab / STRIDE), b = ab % STRIDE;
-      if (dirEdges.has(b*STRIDE + a)) continue; // interior edge — shared by 2 tris
-      const ba = a + numTop, bb = b + numTop;
-      wallT.push(a, ba, b);
-      wallT.push(b, ba, bb);
+      if (fwd.has(b*STRIDE + a)) continue; // interior edge — shared by 2 quads
+      const ta = top(a), tb = top(b), ba = bot(a), bb = bot(b);
+      addT(ta, ba, tb);
+      addT(tb, ba, bb);
     }
 
-    return { v: allV, t: topT.concat(botT, wallT) };
+    return { v: verts, t: tris };
   },
 };
 
