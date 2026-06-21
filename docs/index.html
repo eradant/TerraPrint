@@ -539,37 +539,31 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 
 <div id="toast"></div>
 
-<!-- ─── Water Paint Modal ─── -->
-<div id="paint-modal" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,0.75);align-items:center;justify-content:center;">
-  <div style="background:var(--bg-surface,#161b22);border:1px solid var(--border,#30363d);border-radius:12px;padding:16px;max-width:92vw;max-height:92vh;display:flex;flex-direction:column;gap:12px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
-      <strong style="font-size:14px;">Water Paint — correct detected water</strong>
-      <button class="btn btn-sm" onclick="Paint.close()">✕ Close</button>
+<!-- ─── Water Paint Modal (full screen) ─── -->
+<div id="paint-modal" style="display:none;position:fixed;inset:0;z-index:2000;background:#0d1117;flex-direction:column;">
+  <div style="display:flex;align-items:center;gap:14px;padding:10px 14px;border-bottom:1px solid var(--border,#30363d);flex-wrap:wrap;">
+    <strong style="font-size:14px;">Water Paint</strong>
+    <div class="btn-row" style="margin:0;">
+      <button id="paint-mode-add" class="btn btn-sm btn-primary" onclick="Paint.setMode('add')">＋ Add</button>
+      <button id="paint-mode-erase" class="btn btn-sm" onclick="Paint.setMode('erase')">－ Erase</button>
     </div>
-    <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">
-      <canvas id="paint-canvas" style="background:#0d1117;border:1px solid var(--border,#30363d);border-radius:8px;cursor:crosshair;touch-action:none;max-width:70vw;max-height:72vh;"></canvas>
-      <div style="display:flex;flex-direction:column;gap:12px;min-width:170px;">
-        <div>
-          <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Brush mode</div>
-          <div class="btn-row">
-            <button id="paint-mode-add" class="btn btn-sm btn-primary" onclick="Paint.setMode('add')">＋ Add water</button>
-            <button id="paint-mode-erase" class="btn btn-sm" onclick="Paint.setMode('erase')">－ Erase</button>
-          </div>
-        </div>
-        <div>
-          <label style="font-size:11px;color:var(--text-muted);">Brush size</label>
-          <div class="range-row">
-            <input type="range" id="paint-brush" min="1" max="40" step="1" value="6" oninput="Paint.brush=parseInt(this.value);document.getElementById('paint-brush-val').textContent=this.value">
-            <span class="range-val" id="paint-brush-val">6</span>
-          </div>
-        </div>
-        <div style="font-size:11px;color:var(--text-muted);line-height:1.5;">
-          Blue = water. Paint to add, erase to remove. Changes apply on regenerate.
-        </div>
-        <button class="btn btn-sm btn-block btn-danger" onclick="Paint.clear()">Clear edits</button>
-        <button class="btn btn-sm btn-block btn-primary" onclick="Paint.apply()">✓ Apply &amp; regenerate</button>
-      </div>
+    <label style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:8px;">Brush
+      <input type="range" id="paint-brush" min="1" max="60" step="1" value="6" style="width:110px;" oninput="Paint.brush=parseInt(this.value);document.getElementById('paint-brush-val').textContent=this.value">
+      <span id="paint-brush-val" style="min-width:18px;">6</span>
+    </label>
+    <div class="btn-row" style="margin:0;">
+      <button class="btn btn-sm" onclick="Paint.zoomBy(0.8)" title="Zoom out">－</button>
+      <button class="btn btn-sm" onclick="Paint.zoomFit()" title="Fit to screen">Fit</button>
+      <button class="btn btn-sm" onclick="Paint.zoomBy(1.25)" title="Zoom in">＋</button>
     </div>
+    <span style="font-size:11px;color:var(--text-muted);">scroll = zoom · right-drag = pan</span>
+    <div style="flex:1;"></div>
+    <button class="btn btn-sm btn-danger" onclick="Paint.clear()">Clear edits</button>
+    <button class="btn btn-sm btn-primary" onclick="Paint.apply()">✓ Apply &amp; regenerate</button>
+    <button class="btn btn-sm" onclick="Paint.close()">✕ Close</button>
+  </div>
+  <div id="paint-stage" style="flex:1;position:relative;overflow:hidden;touch-action:none;">
+    <canvas id="paint-canvas" style="position:absolute;top:0;left:0;transform-origin:0 0;cursor:crosshair;image-rendering:pixelated;"></canvas>
   </div>
 </div>
 
@@ -2237,8 +2231,9 @@ const Paint = {
   mode: 'add',
   brush: 6,
   painting: false,
-  baseCanvas: null,   // offscreen hillshade at grid resolution
-  dispScale: 1,       // canvas pixels per grid pixel
+  panning: false,
+  baseCanvas: null,             // offscreen hillshade at grid resolution
+  view: { scale: 1, x: 0, y: 0 }, // canvas CSS transform (translate + scale)
 
   open() {
     const ed = State.elevationData;
@@ -2252,17 +2247,16 @@ const Paint = {
 
     this._buildHillshade(ed);
 
-    // Fit the display canvas to the viewport while keeping the grid aspect ratio.
-    const maxPx = Math.min(window.innerWidth * 0.66, window.innerHeight * 0.7, 720);
-    this.dispScale = Math.max(1, Math.floor(maxPx / Math.max(w, h)));
+    // Canvas internal resolution = grid resolution; zoom is done via CSS transform
+    // (image-rendering:pixelated keeps it crisp), so painting precision is per-pixel.
     const cv = document.getElementById('paint-canvas');
-    cv.width = w * this.dispScale;
-    cv.height = h * this.dispScale;
+    cv.width = w; cv.height = h;
 
     this.setMode('add');
     this.redraw();
     document.getElementById('paint-modal').style.display = 'flex';
-    this._attach(cv);
+    this._attach();
+    requestAnimationFrame(() => this.zoomFit());
   },
 
   close() {
@@ -2273,6 +2267,32 @@ const Paint = {
     this.mode = m;
     document.getElementById('paint-mode-add').className   = 'btn btn-sm' + (m === 'add'   ? ' btn-primary' : '');
     document.getElementById('paint-mode-erase').className = 'btn btn-sm' + (m === 'erase' ? ' btn-primary' : '');
+  },
+
+  _applyView() {
+    const cv = document.getElementById('paint-canvas');
+    cv.style.transform = `translate(${this.view.x}px, ${this.view.y}px) scale(${this.view.scale})`;
+  },
+
+  zoomFit() {
+    const stage = document.getElementById('paint-stage');
+    const cv = document.getElementById('paint-canvas');
+    const sw = stage.clientWidth, sh = stage.clientHeight;
+    const sc = Math.min(sw / cv.width, sh / cv.height) * 0.96;
+    this.view.scale = sc;
+    this.view.x = (sw - cv.width * sc) / 2;
+    this.view.y = (sh - cv.height * sc) / 2;
+    this._applyView();
+  },
+
+  // Zoom by a factor about the centre of the stage.
+  zoomBy(factor, cx, cy) {
+    const stage = document.getElementById('paint-stage');
+    if (cx === undefined) { cx = stage.clientWidth / 2; cy = stage.clientHeight / 2; }
+    this.view.x = cx - (cx - this.view.x) * factor;
+    this.view.y = cy - (cy - this.view.y) * factor;
+    this.view.scale *= factor;
+    this._applyView();
   },
 
   clear() {
@@ -2330,8 +2350,8 @@ const Paint = {
                  ? State.meshData.waterMask : null;
 
     ctx.imageSmoothingEnabled = false;
-    ctx.clearRect(0, 0, cv.width, cv.height);
-    ctx.drawImage(this.baseCanvas, 0, 0, cv.width, cv.height);
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(this.baseCanvas, 0, 0);
 
     // Water overlay at grid resolution (cached canvas, refreshed in place).
     if (!this._overlay || this._overlay.width !== w || this._overlay.height !== h) {
@@ -2348,28 +2368,94 @@ const Paint = {
       }
     }
     tctx.putImageData(img, 0, 0);
-    ctx.drawImage(this._overlay, 0, 0, cv.width, cv.height);
+    ctx.drawImage(this._overlay, 0, 0);
   },
 
-  _attach(cv) {
-    if (cv._paintBound) return;
-    cv._paintBound = true;
-    const pos = e => {
-      const r = cv.getBoundingClientRect();
-      const cx = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
-      const cy = (e.touches ? e.touches[0].clientY : e.clientY) - r.top;
-      return { gx: Math.floor(cx / r.width * State.waterOverride.w),
-               gy: Math.floor(cy / r.height * State.waterOverride.h) };
-    };
-    const start = e => { this.painting = true; const p = pos(e); this._stamp(p.gx, p.gy); e.preventDefault(); };
-    const move  = e => { if (!this.painting) return; const p = pos(e); this._stamp(p.gx, p.gy); e.preventDefault(); };
-    const end   = () => { this.painting = false; };
-    cv.addEventListener('mousedown', start);
-    cv.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', end);
-    cv.addEventListener('touchstart', start, { passive: false });
-    cv.addEventListener('touchmove', move, { passive: false });
-    window.addEventListener('touchend', end);
+  // Map a client point to grid coords using the canvas's transformed rect.
+  _toGrid(clientX, clientY) {
+    const cv = document.getElementById('paint-canvas');
+    const r = cv.getBoundingClientRect();
+    return { gx: Math.floor((clientX - r.left) / r.width  * State.waterOverride.w),
+             gy: Math.floor((clientY - r.top)  / r.height * State.waterOverride.h) };
+  },
+
+  _attach() {
+    const stage = document.getElementById('paint-stage');
+    const cv = document.getElementById('paint-canvas');
+    if (stage._paintBound) return;
+    stage._paintBound = true;
+
+    let panStart = null;
+
+    // Left button on the canvas paints; other buttons / empty stage pans.
+    cv.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      this.painting = true;
+      const p = this._toGrid(e.clientX, e.clientY);
+      this._stamp(p.gx, p.gy);
+      e.preventDefault();
+    });
+    stage.addEventListener('mousedown', e => {
+      if (e.button === 0 && e.target === cv) return; // painting handled above
+      this.panning = true;
+      panStart = { x: e.clientX, y: e.clientY, vx: this.view.x, vy: this.view.y };
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', e => {
+      if (this.painting) {
+        const p = this._toGrid(e.clientX, e.clientY);
+        this._stamp(p.gx, p.gy);
+      } else if (this.panning && panStart) {
+        this.view.x = panStart.vx + (e.clientX - panStart.x);
+        this.view.y = panStart.vy + (e.clientY - panStart.y);
+        this._applyView();
+      }
+    });
+    window.addEventListener('mouseup', () => { this.painting = false; this.panning = false; });
+    stage.addEventListener('contextmenu', e => e.preventDefault());
+
+    stage.addEventListener('wheel', e => {
+      e.preventDefault();
+      const r = stage.getBoundingClientRect();
+      this.zoomBy(e.deltaY < 0 ? 1.15 : 1/1.15, e.clientX - r.left, e.clientY - r.top);
+    }, { passive: false });
+
+    // Touch: one finger paints, two fingers pan + pinch-zoom.
+    let touchMode = null, pinch = null;
+    stage.addEventListener('touchstart', e => {
+      if (e.touches.length === 1 && e.target === cv) {
+        touchMode = 'paint';
+        const t = e.touches[0];
+        const p = this._toGrid(t.clientX, t.clientY);
+        this._stamp(p.gx, p.gy);
+      } else if (e.touches.length === 2) {
+        touchMode = 'pinch';
+        const [a, b] = e.touches;
+        pinch = { dist: Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY),
+                  mx: (a.clientX+b.clientX)/2, my: (a.clientY+b.clientY)/2,
+                  vx: this.view.x, vy: this.view.y };
+      }
+      e.preventDefault();
+    }, { passive: false });
+    stage.addEventListener('touchmove', e => {
+      if (touchMode === 'paint' && e.touches.length === 1) {
+        const t = e.touches[0];
+        const p = this._toGrid(t.clientX, t.clientY);
+        this._stamp(p.gx, p.gy);
+      } else if (touchMode === 'pinch' && e.touches.length === 2) {
+        const [a, b] = e.touches;
+        const dist = Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY);
+        const mx = (a.clientX+b.clientX)/2, my = (a.clientY+b.clientY)/2;
+        const r = stage.getBoundingClientRect();
+        this.view.x = pinch.vx + (mx - pinch.mx);
+        this.view.y = pinch.vy + (my - pinch.my);
+        this._applyView();
+        this.zoomBy(dist / pinch.dist, mx - r.left, my - r.top);
+        pinch.dist = dist; pinch.mx = mx; pinch.my = my; pinch.vx = this.view.x; pinch.vy = this.view.y;
+      }
+      e.preventDefault();
+    }, { passive: false });
+    stage.addEventListener('touchend', e => { if (e.touches.length === 0) touchMode = null; });
   },
 
   _stamp(gx, gy) {
