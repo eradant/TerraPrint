@@ -706,11 +706,13 @@ const MapModule = {
     }).addTo(map);
 
     drawnItems = L.featureGroup().addTo(map);
+    const shapeStyle = { color: '#f0b429', weight: 2, fillOpacity: 0.15 };
     drawControl = new L.Control.Draw({
       position: 'topright',
       draw: {
-        rectangle: { shapeOptions: { color: '#f0b429', weight: 2, fillOpacity: 0.15 } },
-        polygon: false, polyline: false, circle: false, marker: false, circlemarker: false,
+        rectangle: { shapeOptions: shapeStyle },
+        circle: { shapeOptions: shapeStyle, metric: true },
+        polygon: false, polyline: false, marker: false, circlemarker: false,
       },
       edit: { featureGroup: drawnItems, remove: true }
     });
@@ -719,6 +721,8 @@ const MapModule = {
     map.on(L.Draw.Event.CREATED, (e) => {
       drawnItems.clearLayers();
       drawnItems.addLayer(e.layer);
+      // Rectangle or circle — both expose getBounds(); the tile uses the bounding
+      // box, so a circle is just a quicker way to pick a square area.
       State.selectedBounds = e.layer.getBounds();
       State.customRect = e.layer;
       UI.updateSelectionInfo();
