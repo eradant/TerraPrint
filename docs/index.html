@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TerraPrint — Oregon Terrain Model Generator</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
@@ -381,15 +381,17 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 .grid-tooltip::before { border-top-color: var(--border-hi) !important; }
 
 /* ─── Leaflet overrides ─── */
+/* Use background-color (not the `background` shorthand) so Leaflet.Draw's sprite
+   icons (set via background-image) are preserved. Light controls keep the dark
+   zoom glyphs and dark draw icons clearly visible. */
 .leaflet-bar a {
-  background: var(--bg-card) !important;
-  color: var(--text-primary) !important;
-  border-color: var(--border-hi) !important;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.7) !important;
+  background-color: #ffffff !important;
+  color: #333333 !important;
+  border-color: rgba(0,0,0,0.2) !important;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.5) !important;
 }
-.leaflet-bar a:hover { background: var(--bg-surface) !important; }
-.leaflet-draw-toolbar a { color: var(--text-primary) !important; }
-.leaflet-bar { box-shadow: 0 4px 20px rgba(0,0,0,0.8) !important; }
+.leaflet-bar a:hover { background-color: #f0f0f0 !important; }
+.leaflet-bar { box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important; }
 
 /* ─── Color threshold inputs ─── */
 .threshold-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
@@ -518,9 +520,13 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
             <label>Title</label>
             <input type="text" id="frame-title" placeholder="e.g. Mount Hood, OR" value="">
           </div>
+          <div class="input-group" style="margin-top:6px;">
+            <label>Subtitle</label>
+            <input type="text" id="frame-subtitle" placeholder="e.g. Cascade Range" value="">
+          </div>
           <div class="input-row" style="margin-top:6px;">
             <div>
-              <label>Border (mm)</label>
+              <label>Margin (mm)</label>
               <input type="number" id="frame-width" value="8" min="2" max="40" step="1">
             </div>
             <div>
@@ -530,9 +536,24 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
           </div>
           <div style="margin-top:8px;display:flex;flex-direction:column;gap:5px;">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-title-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Title text</label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-subtitle-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Subtitle text</label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-coords-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Coordinates</label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-legend-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Color key / legend</label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-scale-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Scale bar</label>
+          </div>
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="frame-border-on" style="accent-color:var(--accent);width:15px;height:15px;" onchange="document.getElementById('frame-border-opts').style.display=this.checked?'flex':'none'">
+            <label for="frame-border-on" style="margin:0;cursor:pointer;">Raised outer border</label>
+          </div>
+          <div class="input-row" id="frame-border-opts" style="display:none;margin-top:6px;">
+            <div>
+              <label>Rim width (mm)</label>
+              <input type="number" id="frame-rim-width" value="4" min="1" max="20" step="0.5">
+            </div>
+            <div>
+              <label>Rim height (mm)</label>
+              <input type="number" id="frame-rim-height" value="4" min="1" max="20" step="0.5">
+            </div>
           </div>
         </div>
       </div>
@@ -2074,6 +2095,12 @@ const ThreeMFExport = {
       const used = addText(title, 'Title', '#F5F5F5', 9, X0 + pad);
       if (used) cursorY -= used + 3;
     }
+    // Subtitle (smaller, directly under the title)
+    if (document.getElementById('frame-subtitle-on')?.checked) {
+      const sub = (document.getElementById('frame-subtitle')?.value || '').trim();
+      const used = addText(sub, 'Subtitle', '#DADADA', 6, X0 + pad);
+      if (used) cursorY -= used + 4;
+    }
     // Coordinates (centre of the selected area — compact and always fits)
     if (document.getElementById('frame-coords-on')?.checked && mesh.bounds) {
       const b = mesh.bounds;
@@ -2148,7 +2175,27 @@ const ThreeMFExport = {
         this._rectTris(frameTris, xs[ci], ys[ri], xs[ci+1], ys[ri+1]);
       }
     }
-    return [{ name: 'Frame', hex: '#2B2B2B', solid: this._extrudePrism(frameTris, 0, frameH) }, ...elems];
+    const objs = [{ name: 'Frame', hex: '#2B2B2B', solid: this._extrudePrism(frameTris, 0, frameH) }];
+
+    // Optional raised outer border (a rim around the whole plate perimeter, sitting
+    // on top of the frame plate edge — a shadow-box lip). Built as a ring (outer
+    // rect minus an inset inner rect) so it's watertight, extruded above the plate.
+    if (document.getElementById('frame-border-on')?.checked) {
+      const rimW = Math.min(parseFloat(document.getElementById('frame-rim-width')?.value) || 4, fw);
+      const rimH = parseFloat(document.getElementById('frame-rim-height')?.value) || 4;
+      const rxs = [X0, X0 + rimW, X1 - rimW, X1];
+      const rys = [Y0, Y0 + rimW, Y1 - rimW, Y1];
+      const rimTris = [];
+      for (let ci = 0; ci < 3; ci++) {
+        for (let ri = 0; ri < 3; ri++) {
+          if (ci === 1 && ri === 1) continue; // hollow centre
+          this._rectTris(rimTris, rxs[ci], rys[ri], rxs[ci+1], rys[ri+1]);
+        }
+      }
+      objs.push({ name: 'Border', hex: '#1E1E1E', solid: this._extrudePrism(rimTris, frameH, frameH + rimH) });
+    }
+
+    return [...objs, ...elems];
   },
 };
 
@@ -2242,16 +2289,16 @@ const Preview = {
   showMesh(meshData) {
     document.getElementById('preview-panel').style.display = 'block';
 
-    // Remove old mesh
-    if (this.terrainMesh) {
-      this.scene.remove(this.terrainMesh);
-      this.terrainMesh.geometry.dispose();
-      if (this.terrainMesh.material.length) {
-        this.terrainMesh.material.forEach(m => m.dispose());
-      } else {
-        this.terrainMesh.material.dispose();
-      }
+    // Remove old model group (terrain + any frame objects)
+    if (this.modelGroup) {
+      this.scene.remove(this.modelGroup);
+      this.modelGroup.traverse(o => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose());
+      });
     }
+    const group = new THREE.Group();
+    this.modelGroup = group;
 
     const geom = new THREE.BufferGeometry();
 
@@ -2307,20 +2354,34 @@ const Preview = {
     });
 
     this.terrainMesh = new THREE.Mesh(geom, mat);
+    group.add(this.terrainMesh);
 
-    // Center the mesh
-    geom.computeBoundingBox();
-    const box = geom.boundingBox;
-    const cx = (box.max.x + box.min.x) / 2;
-    const cy = (box.max.y + box.min.y) / 2;
-    const cz = (box.max.z + box.min.z) / 2;
-    this.terrainMesh.position.set(-cx, -cy, -cz);
+    // Frame / cartouche objects (if enabled) — same model-space coordinates.
+    try {
+      const seen = [false, false, false, false];
+      for (let i = 0; i < meshData.pixelBands.length; i++) seen[meshData.pixelBands[i]] = true;
+      const presentBands = [0,1,2,3].filter(b => seen[b]);
+      for (const obj of ThreeMFExport._buildFrameObjects(meshData, presentBands)) {
+        if (!obj.solid || !obj.solid.t.length) continue;
+        const fg = new THREE.BufferGeometry();
+        fg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(obj.solid.v), 3));
+        fg.setIndex(new THREE.BufferAttribute(new Uint32Array(obj.solid.t), 1));
+        fg.computeVertexNormals();
+        group.add(new THREE.Mesh(fg, new THREE.MeshPhongMaterial({
+          color: new THREE.Color(obj.hex), side: THREE.DoubleSide,
+        })));
+      }
+    } catch (e) { console.warn('Frame preview failed:', e); }
+
+    // Center the whole group and frame the camera to it.
+    const box = new THREE.Box3().setFromObject(group);
+    const ctr = box.getCenter(new THREE.Vector3());
+    group.position.set(-ctr.x, -ctr.y, -ctr.z);
     this.target = new THREE.Vector3(0, 0, 0);
+    this.scene.add(group);
 
-    this.scene.add(this.terrainMesh);
-
-    // Set camera distance based on model size
-    const maxDim = Math.max(box.max.x - box.min.x, box.max.y - box.min.y, box.max.z - box.min.z);
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
     this.spherical.radius = maxDim * 1.5;
 
     // Start render loop if not running
