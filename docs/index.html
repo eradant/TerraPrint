@@ -643,6 +643,7 @@ function terrainZoomForBounds(bounds) {
 
 const State = {
   selectedBounds: null,    // L.LatLngBounds of current selection
+  selectionShape: 'rect',  // 'rect' | 'circle' — circle masks the tile to a disc
   customRect: null,        // Leaflet rectangle layer for custom draw
   elevationData: null,     // {width, height, data: Float32Array, bounds}
   meshData: null,          // generated mesh
@@ -721,14 +722,16 @@ const MapModule = {
     map.on(L.Draw.Event.CREATED, (e) => {
       drawnItems.clearLayers();
       drawnItems.addLayer(e.layer);
-      // Rectangle or circle — both expose getBounds(); the tile uses the bounding
-      // box, so a circle is just a quicker way to pick a square area.
+      // Both rectangle and circle expose getBounds(); a circle additionally masks
+      // the generated tile to an inscribed disc.
       State.selectedBounds = e.layer.getBounds();
+      State.selectionShape = e.layerType === 'circle' ? 'circle' : 'rect';
       State.customRect = e.layer;
       UI.updateSelectionInfo();
     });
     map.on(L.Draw.Event.DELETED, () => {
       State.selectedBounds = null;
+      State.selectionShape = 'rect';
       State.customRect = null;
       UI.updateSelectionInfo();
     });
@@ -1548,9 +1551,26 @@ const MeshGen = {
     const vertexArray = new Float32Array(positions);
     const triangleArray = new Uint32Array(triangles);
 
+    // Optional disc mask (circle selection): 1 = inside the inscribed circle.
+    // The grid is square (resolution×resolution) and a circle selection yields a
+    // square model, so a grid-space disc maps to a model-space disc.
+    let shapeMask = null;
+    if (State.selectionShape === 'circle') {
+      shapeMask = new Uint8Array(w * h);
+      const cx = (w - 1) / 2, cy = (h - 1) / 2, R = Math.min(w, h) / 2;
+      const R2 = R * R;
+      for (let row = 0; row < h; row++) {
+        for (let col = 0; col < w; col++) {
+          const dx = col - cx, dy = row - cy;
+          shapeMask[row * w + col] = (dx*dx + dy*dy) <= R2 ? 1 : 0;
+        }
+      }
+    }
+
     return {
       vertices: vertexArray,
       triangles: triangleArray,
+      shapeMask,
       triColors,
       triElevations,
       triSlopes,
@@ -1681,8 +1701,30 @@ const MeshRepair = {
 // ═══════════════════════════════════════════════
 
 const STLExport = {
+  // Concatenate {v,t} solids into one {v:Float32Array, t:Uint32Array}.
+  _combine(solids) {
+    const V = [], T = []; let off = 0;
+    for (const s of solids) {
+      for (let i = 0; i < s.v.length; i++) V.push(s.v[i]);
+      for (let i = 0; i < s.t.length; i++) T.push(s.t[i] + off);
+      off += s.v.length / 3;
+    }
+    return { v: new Float32Array(V), t: new Uint32Array(T) };
+  },
+
   generate(mesh) {
-    const numTriangles = mesh.triangles.length / 3;
+    // For a circular tile the unified rectangular mesh would still be square, so
+    // build the STL from the disc-clipped terrain band solids instead.
+    let v, t;
+    if (mesh.shapeMask) {
+      const { built } = ThreeMFExport._buildTerrainSolids(mesh);
+      const c = this._combine(built.map(b => b.solid));
+      v = c.v; t = c.t;
+    } else {
+      v = mesh.vertices; t = mesh.triangles;
+    }
+
+    const numTriangles = t.length / 3;
     const bufferSize = 80 + 4 + numTriangles * 50;
     const buffer = new ArrayBuffer(bufferSize);
     const view = new DataView(buffer);
@@ -1696,8 +1738,6 @@ const STLExport = {
     view.setUint32(80, numTriangles, true);
 
     let offset = 84;
-    const v = mesh.vertices;
-    const t = mesh.triangles;
 
     for (let i = 0; i < numTriangles; i++) {
       const i0 = t[i * 3] * 3;
@@ -1769,61 +1809,8 @@ const ThreeMFExport = {
       '</Relationships>'
     );
 
-    // Model-space band boundaries (mm). toMM converts elevation (m) → model z.
-    const toMM = m => (m - mesh.minElev) * mesh.elevScale + mesh.baseHeight;
-    const threshForestLoM = parseFloat(document.getElementById('thresh-forest-lo').value) || 400;
-    const threshMountainM = parseFloat(document.getElementById('thresh-hills').value)     || 1500;
-    const E_lowToForest    = toMM(threshForestLoM);
-    const E_forestToAlpine = toMM(threshMountainM);
-    // Floors clamped to z≥0: when a threshold falls below the tile's lowest terrain
-    // its band collapses and the next band up becomes the base (down to z=0).
-    const fForest = Math.max(0, E_lowToForest);
-    const fAlpine = Math.max(0, E_forestToAlpine);
-    const waterDepth = parseFloat(document.getElementById('water-depth').value) || 2;
-
-    const wm = mesh.waterMask;
-    const tz = gi => mesh.vertices[gi*3 + 2];
-    const isWater = gi => !!(wm && wm[gi]);
-
-    // "Fill top" per pixel: the terrain surface on land, or waterDepth below the
-    // surface under water. The land bands fill [floor, min(fillTop, upperCeil)]
-    // across the WHOLE tile, so the base beneath a river or lake is coloured by the
-    // same elevation bands as the surrounding terrain (no green column climbing up
-    // under high water). The thin Water slab then sits on top from fillTop → surface.
-    const fillTop = gi => isWater(gi) ? Math.max(0, tz(gi) - waterDepth) : tz(gi);
-
-    // Land bands 1=Lowland, 2=Forest, 3=Alpine → entries 0,1,2.
-    // Floors clamp to z≥0 so the lowest present band reaches the build plate.
-    const floorZ    = [0,       fForest,  fAlpine];
-    const upperCeil = [fForest, fAlpine,  Infinity];
-    const landBand = k => ({
-      active: () => true,
-      floor:  () => floorZ[k],
-      ceil:   gi => Math.min(fillTop(gi), upperCeil[k]),
-    });
-
-    const bandSpecs = [
-      { // 0 Water — thin slab from the banded base up to the surface
-        active: (a,b,c,d) => isWater(a) && isWater(b) && isWater(c) && isWater(d),
-        floor:  gi => Math.max(0, tz(gi) - waterDepth),
-        ceil:   gi => tz(gi),
-      },
-      landBand(0), // Lowland
-      landBand(1), // Forest
-      landBand(2), // Alpine
-    ];
-
-    // Each object carries its own colour (so frame/label elements can each be a
-    // distinct filament). Build terrain bands first, dropping empty ones.
-    const built = [];
-    const presentBands = [];
-    for (let bandIdx = 0; bandIdx < 4; bandIdx++) {
-      const solid = this._buildStackSolid(mesh, bandSpecs[bandIdx]);
-      if (solid && solid.t.length > 0) {
-        built.push({ name: this.COLORS[bandIdx].name, hex: this.COLORS[bandIdx].hex, solid });
-        presentBands.push(bandIdx);
-      }
-    }
+    // Terrain colour bands (each its own closed solid). Reused by the 3D preview.
+    const { built, presentBands } = this._buildTerrainSolids(mesh);
 
     // Optional frame / cartouche (border, title, coordinates, legend, scale bar).
     for (const obj of this._buildFrameObjects(mesh, presentBands)) {
@@ -1879,6 +1866,54 @@ const ThreeMFExport = {
     return { blob, warnings: [] };
   },
 
+  // Build the four terrain colour-band solids (Water/Lowland/Forest/Alpine) as
+  // stacked horizontal slabs. Returns { built:[{name,hex,solid}], presentBands:[…] }.
+  // Used by both the 3MF export and the 3D preview so they always match.
+  _buildTerrainSolids(mesh) {
+    const toMM = m => (m - mesh.minElev) * mesh.elevScale + mesh.baseHeight;
+    const threshForestLoM = parseFloat(document.getElementById('thresh-forest-lo').value) || 400;
+    const threshMountainM = parseFloat(document.getElementById('thresh-hills').value)     || 1500;
+    const E_lowToForest    = toMM(threshForestLoM);
+    const E_forestToAlpine = toMM(threshMountainM);
+    const fForest = Math.max(0, E_lowToForest);
+    const fAlpine = Math.max(0, E_forestToAlpine);
+    const waterDepth = parseFloat(document.getElementById('water-depth').value) || 2;
+
+    const wm = mesh.waterMask;
+    const tz = gi => mesh.vertices[gi*3 + 2];
+    const isWater = gi => !!(wm && wm[gi]);
+    const fillTop = gi => isWater(gi) ? Math.max(0, tz(gi) - waterDepth) : tz(gi);
+
+    const floorZ    = [0,       fForest,  fAlpine];
+    const upperCeil = [fForest, fAlpine,  Infinity];
+    const landBand = k => ({
+      active: () => true,
+      floor:  () => floorZ[k],
+      ceil:   gi => Math.min(fillTop(gi), upperCeil[k]),
+    });
+
+    const bandSpecs = [
+      { // 0 Water — thin slab from the banded base up to the surface
+        active: (a,b,c,d) => isWater(a) && isWater(b) && isWater(c) && isWater(d),
+        floor:  gi => Math.max(0, tz(gi) - waterDepth),
+        ceil:   gi => tz(gi),
+      },
+      landBand(0), // Lowland
+      landBand(1), // Forest
+      landBand(2), // Alpine
+    ];
+
+    const built = [], presentBands = [];
+    for (let bandIdx = 0; bandIdx < 4; bandIdx++) {
+      const solid = this._buildStackSolid(mesh, bandSpecs[bandIdx]);
+      if (solid && solid.t.length > 0) {
+        built.push({ name: this.COLORS[bandIdx].name, hex: this.COLORS[bandIdx].hex, solid });
+        presentBands.push(bandIdx);
+      }
+    }
+    return { built, presentBands };
+  },
+
   // Build a closed manifold slab from a band spec:
   //   active(TL,TR,BL,BR) → include this grid quad
   //   floor(gi) → bottom z for grid vertex gi
@@ -1891,6 +1926,7 @@ const ThreeMFExport = {
   // between separate 3MF objects are fine for multi-object printing.
   _buildStackSolid(mesh, spec) {
     const gw = mesh.gridW, gh = mesh.gridH, mv = mesh.vertices;
+    const sm = mesh.shapeMask; // disc clip (circle selection); null = full rectangle
     const T = (r, c) => r * gw + c;
     const STRIDE = gw * gh;
 
@@ -1914,6 +1950,9 @@ const ThreeMFExport = {
     for (let r = 0; r < gh - 1; r++) {
       for (let c = 0; c < gw - 1; c++) {
         const TL = T(r,c), TR = T(r,c+1), BL = T(r+1,c), BR = T(r+1,c+1);
+        // Disc clip: drop quads not fully inside the circle (directed-edge walls
+        // below then wrap the circular boundary as a clean cliff).
+        if (sm && !(sm[TL] && sm[TR] && sm[BL] && sm[BR])) continue;
         if (!spec.active(TL, TR, BL, BR)) continue;
         // Skip quads with no thickness anywhere (a collapsed/empty band).
         const thick = Math.max(
@@ -2181,6 +2220,24 @@ const ThreeMFExport = {
     }
     const objs = [{ name: 'Frame', hex: '#2B2B2B', solid: this._extrudePrism(frameTris, 0, frameH) }];
 
+    // Circular tile: the card stays rectangular, so fill the square window's corners
+    // (window square minus the disc) with card material. Built on the terrain grid so
+    // its inner edge matches the terrain's circular cliff exactly (flush seam).
+    if (mesh.shapeMask) {
+      const sm = mesh.shapeMask, gw = mesh.gridW, gh = mesh.gridH, mv = mesh.vertices;
+      const cornerTris = [];
+      for (let r = 0; r < gh - 1; r++) {
+        for (let c = 0; c < gw - 1; c++) {
+          const TL = r*gw+c, TR = r*gw+c+1, BL = (r+1)*gw+c, BR = (r+1)*gw+c+1;
+          if (sm[TL] && sm[TR] && sm[BL] && sm[BR]) continue; // fully inside disc = terrain
+          this._rectTris(cornerTris, mv[TL*3], mv[BL*3+1], mv[TR*3], mv[TL*3+1]);
+        }
+      }
+      if (cornerTris.length) {
+        objs.push({ name: 'Frame fill', hex: '#2B2B2B', solid: this._extrudePrism(cornerTris, 0, frameH) });
+      }
+    }
+
     // Optional raised outer border (a rim around the whole plate perimeter, sitting
     // on top of the frame plate edge — a shadow-box lip). Built as a ring (outer
     // rect minus an inset inner rect) so it's watertight, extruded above the plate.
@@ -2304,78 +2361,31 @@ const Preview = {
     const group = new THREE.Group();
     this.modelGroup = group;
 
-    const geom = new THREE.BufferGeometry();
+    // Render the exact printed geometry: the terrain colour-band solids plus any
+    // frame/cartouche objects. This keeps the preview in sync with the export and
+    // naturally shows circular tiles (the bands respect the disc mask).
+    const addSolid = (solid, hex) => {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(solid.v), 3));
+      g.setIndex(new THREE.BufferAttribute(new Uint32Array(solid.t), 1));
+      g.computeVertexNormals();
+      group.add(new THREE.Mesh(g, new THREE.MeshPhongMaterial({
+        color: new THREE.Color(hex), side: THREE.DoubleSide, flatShading: false,
+      })));
+    };
 
-    // Build indexed geometry with vertex colors
-    const v = meshData.vertices;
-    const t = meshData.triangles;
-    const numTris = t.length / 3;
-
-    // We need per-face colors, so we'll use non-indexed geometry
-    const posArray = new Float32Array(numTris * 9);
-    const colorArray = new Float32Array(numTris * 9);
-
-    // Read terrain palette from CSS variables so preview matches the legend exactly
-    function hexToRgb(hex) {
-      hex = hex.trim();
-      return [
-        parseInt(hex.slice(1, 3), 16) / 255,
-        parseInt(hex.slice(3, 5), 16) / 255,
-        parseInt(hex.slice(5, 7), 16) / 255,
-      ];
-    }
-    const cssVars = getComputedStyle(document.documentElement);
-    const palette = [
-      hexToRgb(cssVars.getPropertyValue('--topo-water')),
-      hexToRgb(cssVars.getPropertyValue('--topo-flat')),
-      hexToRgb(cssVars.getPropertyValue('--topo-hills')),
-      hexToRgb(cssVars.getPropertyValue('--topo-mountain')),
-    ];
-    const baseColor = [0.14, 0.14, 0.14]; // walls & base
-
-    for (let i = 0; i < numTris; i++) {
-      const i0 = t[i * 3], i1 = t[i * 3 + 1], i2 = t[i * 3 + 2];
-      posArray[i * 9]     = v[i0 * 3];     posArray[i * 9 + 1] = v[i0 * 3 + 1]; posArray[i * 9 + 2] = v[i0 * 3 + 2];
-      posArray[i * 9 + 3] = v[i1 * 3];     posArray[i * 9 + 4] = v[i1 * 3 + 1]; posArray[i * 9 + 5] = v[i1 * 3 + 2];
-      posArray[i * 9 + 6] = v[i2 * 3];     posArray[i * 9 + 7] = v[i2 * 3 + 1]; posArray[i * 9 + 8] = v[i2 * 3 + 2];
-
-      const c = meshData.triElevations[i] < 0 ? baseColor : palette[meshData.triColors[i]];
-      for (let j = 0; j < 3; j++) {
-        colorArray[i * 9 + j * 3]     = c[0];
-        colorArray[i * 9 + j * 3 + 1] = c[1];
-        colorArray[i * 9 + j * 3 + 2] = c[2];
-      }
-    }
-
-    geom.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
-    geom.setAttribute('color', new THREE.BufferAttribute(colorArray, 3));
-    geom.computeVertexNormals();
-
-    const mat = new THREE.MeshPhongMaterial({
-      vertexColors: true,
-      flatShading: false,
-      side: THREE.DoubleSide,
-    });
-
-    this.terrainMesh = new THREE.Mesh(geom, mat);
-    group.add(this.terrainMesh);
-
-    // Frame / cartouche objects (if enabled) — same model-space coordinates.
     try {
+      const { built } = ThreeMFExport._buildTerrainSolids(meshData);
+      const presentBands = [];
       const seen = [false, false, false, false];
       for (let i = 0; i < meshData.pixelBands.length; i++) seen[meshData.pixelBands[i]] = true;
-      const presentBands = [0,1,2,3].filter(b => seen[b]);
+      [0,1,2,3].forEach(b => { if (seen[b]) presentBands.push(b); });
+      for (const obj of built) addSolid(obj.solid, obj.hex);
       for (const obj of ThreeMFExport._buildFrameObjects(meshData, presentBands)) {
-        if (!obj.solid || !obj.solid.t.length) continue;
-        const fg = new THREE.BufferGeometry();
-        fg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(obj.solid.v), 3));
-        fg.setIndex(new THREE.BufferAttribute(new Uint32Array(obj.solid.t), 1));
-        fg.computeVertexNormals();
-        group.add(new THREE.Mesh(fg, new THREE.MeshPhongMaterial({
-          color: new THREE.Color(obj.hex), side: THREE.DoubleSide,
-        })));
+        if (obj.solid && obj.solid.t.length) addSolid(obj.solid, obj.hex);
       }
-    } catch (e) { console.warn('Frame preview failed:', e); }
+    } catch (e) { console.error('Preview build failed:', e); }
+    this.terrainMesh = group; // kept for compatibility
 
     // Center the whole group and frame the camera to it.
     const box = new THREE.Box3().setFromObject(group);
