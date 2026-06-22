@@ -145,6 +145,15 @@ header .header-actions { display: flex; align-items: center; gap: 8px; }
 .panel-section.collapsed h3::after { transform: rotate(-90deg); }
 .panel-section.collapsed .section-body { display: none; }
 .section-body { padding: 12px 14px 14px; }
+/* Pin the selection / Generate card to the bottom of the panel so the primary
+   action is always reachable without scrolling. */
+.panel-footer {
+  position: sticky;
+  bottom: -12px;            /* cancel the panel's bottom padding */
+  margin-top: auto;
+  z-index: 5;
+  box-shadow: 0 -6px 20px rgba(0,0,0,0.7), 0 2px 12px rgba(0,0,0,0.6);
+}
 
 /* ─── Form Controls ─── */
 label {
@@ -449,10 +458,6 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
           </div>
         </div>
         <div class="input-group" style="display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" id="water-detect" checked style="accent-color:var(--accent);width:16px;height:16px;">
-          <label for="water-detect" style="margin:0;cursor:pointer;">Detect water (ocean + lakes)</label>
-        </div>
-        <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:6px;">
           <input type="checkbox" id="step-mode" style="accent-color:var(--accent);width:16px;height:16px;" onchange="document.getElementById('step-interval-group').style.display=this.checked?'block':'none'">
           <label for="step-mode" style="margin:0;cursor:pointer;">Contour steps (terraced layers)</label>
         </div>
@@ -493,8 +498,16 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
             <span style="color:var(--text-muted)">above</span>
           </div>
         </div>
+      </div>
+    </div>
 
-        <!-- Advanced 8-colour hypsometric editor (hidden unless enabled) -->
+    <div class="panel-section collapsible collapsed">
+      <h3 onclick="this.parentElement.classList.toggle('collapsed')">Advanced Colors</h3>
+      <div class="section-body">
+        <label class="input-group" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px;">
+          <input type="checkbox" id="adv-colors-on" style="accent-color:var(--accent);width:16px;height:16px;" onchange="Advanced.toggle(this.checked)">
+          <span>Enable — hypsometric or photographic (4 / 8 colors)</span>
+        </label>
         <div id="adv-colors" style="display:none;">
           <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
             <label style="margin:0;">Colors</label>
@@ -579,12 +592,16 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
           </div>
           <button class="btn btn-sm btn-block" style="margin-top:8px;" onclick="Advanced.autofit()">Auto-fit thresholds to tile</button>
         </div>
+      </div>
+    </div>
 
-        <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:10px;">
-          <input type="checkbox" id="adv-colors-on" style="accent-color:var(--accent);width:16px;height:16px;" onchange="Advanced.toggle(this.checked)">
-          <label for="adv-colors-on" style="margin:0;cursor:pointer;">Advanced hypsometric colors (up to 8)</label>
-        </div>
-
+    <div class="panel-section">
+      <h3>Water</h3>
+      <div class="section-body">
+        <label class="input-group" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="water-detect" checked style="accent-color:var(--accent);width:16px;height:16px;">
+          <span>Detect water (ocean + lakes)</span>
+        </label>
         <div class="input-group" style="margin-top:10px;">
           <label>Water depth (mm)</label>
           <div class="range-row">
@@ -653,7 +670,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
       </div>
     </div>
 
-    <div class="panel-section">
+    <div class="panel-section panel-footer">
       <h3>Selected Area</h3>
       <div class="section-body" id="selection-info">
         <p style="font-size:12px;color:var(--text-muted);">Draw a rectangle on the map to select an area.</p>
@@ -3291,7 +3308,7 @@ const Paint = {
 const Advanced = {
   toggle(on) {
     document.getElementById('adv-colors').style.display = on ? 'block' : 'none';
-    document.getElementById('std-colors').style.display = on ? 'none' : 'block';
+    // Basic thresholds stay visible; advanced simply overrides them when enabled.
     if (on && !this._fitted) { this.autofit(); this._fitted = true; }
   },
 
