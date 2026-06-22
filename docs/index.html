@@ -497,15 +497,29 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
         <!-- Advanced 8-colour hypsometric editor (hidden unless enabled) -->
         <div id="adv-colors" style="display:none;">
           <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-            <input type="checkbox" id="sat-mode-on" style="accent-color:var(--accent);width:15px;height:15px;" onchange="const s=this.checked;document.getElementById('sat-note').style.display=s?'block':'none';document.getElementById('sat-detail-group').style.display=s?'block':'none';">
+            <input type="checkbox" id="sat-mode-on" style="accent-color:var(--accent);width:15px;height:15px;" onchange="const s=this.checked;['sat-note','sat-detail-group','sat-shell-group'].forEach(id=>document.getElementById(id).style.display=s?'block':'none');">
             <label for="sat-mode-on" style="margin:0;cursor:pointer;">Photographic (sample satellite imagery)</label>
           </div>
-          <p id="sat-note" style="display:none;font-size:11px;color:var(--text-muted);margin:0 0 8px;">Colors &amp; tints below are auto-derived from the satellite image on Generate. Elevation thresholds are ignored in this mode; each color region is printed full-height.</p>
+          <p id="sat-note" style="display:none;font-size:11px;color:var(--text-muted);margin:0 0 8px;">Colors &amp; tints below are auto-derived from the satellite image on Generate. The photo colors are printed only in the top "Color depth" mm; everything beneath prints in the single Base color.</p>
           <div id="sat-detail-group" class="input-group" style="display:none;">
             <label>Detail <span style="color:var(--text-muted);font-size:11px;">(sharper ↔ cleaner blocks)</span></label>
             <div class="range-row">
               <input type="range" id="sat-detail" min="1" max="10" step="1" value="5" oninput="document.getElementById('sat-detail-val').textContent=this.value">
               <span class="range-val" id="sat-detail-val">5</span>
+            </div>
+          </div>
+          <div id="sat-shell-group" style="display:none;">
+            <div class="input-group">
+              <label>Color depth (mm) <span style="color:var(--text-muted);font-size:11px;">(top photo shell)</span></label>
+              <div class="range-row">
+                <input type="range" id="sat-depth" min="0.6" max="8" step="0.1" value="2.5" oninput="document.getElementById('sat-depth-val').textContent=this.value+'mm'">
+                <span class="range-val" id="sat-depth-val">2.5mm</span>
+              </div>
+            </div>
+            <div class="threshold-row">
+              <input type="color" id="sat-base-color" value="#444444" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+              <span>Base</span>
+              <span style="color:var(--text-muted);font-size:11px;">under photo shell</span>
             </div>
           </div>
           <div class="threshold-row">
@@ -2163,12 +2177,27 @@ const ThreeMFExport = {
     const cfg = getBandConfig();
     const colors = cfg.colors;
 
-    // Photographic (satellite) mode: colours are arbitrary per-region (not elevation-
-    // ordered), so each band is its own full-height extruded region (per-triangle).
+    // Photographic (satellite) mode: top-shell colouring. A single full-footprint base
+    // solid carries the bulk in one colour; each photographic colour is a thin "cap"
+    // (top `capDepth` mm of its region) sitting on the base. Far fewer colour changes /
+    // less purge, and any per-region artifact is confined to the shell.
     if (mesh.satellite) {
+      const tz = gi => mesh.vertices[gi*3 + 2];
+      const capDepth = parseFloat(document.getElementById('sat-depth')?.value) || 2.5;
+      const baseHex = document.getElementById('sat-base-color')?.value || '#444444';
+
       const built = [], presentBands = [];
+      // Base: full footprint from z=0 up to terrain − capDepth (clamped ≥0).
+      const baseSolid = this._buildStackSolid(mesh, {
+        active: () => true,
+        floor:  () => 0,
+        ceil:   gi => Math.max(0, tz(gi) - capDepth),
+      });
+      if (baseSolid && baseSolid.t.length > 0) built.push({ name: 'Base', hex: baseHex, solid: baseSolid });
+
+      // Caps: thin top shell per present colour region.
       for (let bandIdx = 0; bandIdx < colors.length; bandIdx++) {
-        const solid = this._buildBandSolid(bandIdx, mesh);
+        const solid = this._buildBandSolid(bandIdx, mesh, capDepth);
         if (solid && solid.t.length > 0) {
           built.push({ name: colors[bandIdx].name, hex: colors[bandIdx].hex, solid });
           presentBands.push(bandIdx);
@@ -2292,11 +2321,12 @@ const ThreeMFExport = {
   },
 
   // Per-region extrusion (used in photographic mode): extrude every terrain triangle
-  // whose colour === bandIdx down to z=0, with directed-edge boundary walls. Colours
-  // are arbitrary regions (not elevation-ordered) so each is its own full-height solid.
-  // Watertight because triColors is smoothed + bowtie-cleaned in MeshGen. Honours the
-  // circle disc mask.
-  _buildBandSolid(bandIdx, mesh) {
+  // whose colour === bandIdx, with directed-edge boundary walls. Colours are arbitrary
+  // regions (not elevation-ordered) so each is its own solid. Watertight because
+  // triColors is smoothed + bowtie-cleaned in MeshGen. Honours the circle disc mask.
+  //   capDepth = null  → extrude full height to z=0 (full-height region)
+  //   capDepth = mm    → thin "cap": bottom at terrainZ − capDepth (clamped ≥0)
+  _buildBandSolid(bandIdx, mesh, capDepth = null) {
     const { gridW: gw, gridH: gh, vertices: mv, triangles: tri, triColors } = mesh;
     const sm = mesh.shapeMask;
     const numTerrainTris = 2 * (gw - 1) * (gh - 1);
@@ -2327,7 +2357,10 @@ const ThreeMFExport = {
     if (numTop === 0) return null;
 
     const allV = topV.slice();
-    for (let i = 0; i < numTop; i++) allV.push(topV[i*3], topV[i*3+1], 0);
+    for (let i = 0; i < numTop; i++) {
+      const z = capDepth == null ? 0 : Math.max(0, topV[i*3+2] - capDepth);
+      allV.push(topV[i*3], topV[i*3+1], z);
+    }
 
     const botT = [];
     for (let i = 0; i < topT.length; i += 3) {
