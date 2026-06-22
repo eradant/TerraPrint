@@ -496,6 +496,11 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 
         <!-- Advanced 8-colour hypsometric editor (hidden unless enabled) -->
         <div id="adv-colors" style="display:none;">
+          <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <input type="checkbox" id="sat-mode-on" style="accent-color:var(--accent);width:15px;height:15px;" onchange="document.getElementById('sat-note').style.display=this.checked?'block':'none'">
+            <label for="sat-mode-on" style="margin:0;cursor:pointer;">Photographic (sample satellite imagery)</label>
+          </div>
+          <p id="sat-note" style="display:none;font-size:11px;color:var(--text-muted);margin:0 0 8px;">Colors &amp; tints below are auto-derived from the satellite image on Generate. Elevation thresholds are ignored in this mode; each color region is printed full-height.</p>
           <div class="threshold-row">
             <input type="color" id="adv-color-0" value="#2D6ABF" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
             <span>Water</span>
@@ -934,6 +939,114 @@ const Elevation = {
 };
 
 // ═══════════════════════════════════════════════
+//  SATELLITE IMAGERY  (photographic colouring)
+// ═══════════════════════════════════════════════
+
+const SAT_TILE_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+
+const Satellite = {
+  // Composite Esri World Imagery for `bounds` into a resolution×resolution RGB grid,
+  // aligned pixel-for-pixel with the elevation grid (same zoom + bounds + resample).
+  // Returns { width, height, rgb: Uint8Array(w*h*3) } or null on failure.
+  async fetch(bounds, resolution) {
+    try {
+      const zoom = terrainZoomForBounds(bounds);
+      const sw = Elevation.latLonToTile(bounds.getSouth(), bounds.getWest(), zoom);
+      const ne = Elevation.latLonToTile(bounds.getNorth(), bounds.getEast(), zoom);
+      const minTX = Math.min(sw.x, ne.x), maxTX = Math.max(sw.x, ne.x);
+      const minTY = Math.min(sw.y, ne.y), maxTY = Math.max(sw.y, ne.y);
+      const tilesX = maxTX - minTX + 1, tilesY = maxTY - minTY + 1;
+
+      const tileSize = 256;
+      const canvas = document.createElement('canvas');
+      canvas.width = tilesX * tileSize;
+      canvas.height = tilesY * tileSize;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+      const total = tilesX * tilesY; let loaded = 0;
+      const loadTile = (tx, ty) => new Promise(resolve => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => { ctx.drawImage(img, (tx-minTX)*tileSize, (ty-minTY)*tileSize); loaded++; showLoading(`Fetching imagery… ${loaded}/${total}`); resolve(); };
+        img.onerror = () => { loaded++; resolve(); };
+        img.src = SAT_TILE_URL.replace('{z}', zoom).replace('{y}', ty).replace('{x}', tx);
+      });
+      const promises = [];
+      for (let ty = minTY; ty <= maxTY; ty++)
+        for (let tx = minTX; tx <= maxTX; tx++) promises.push(loadTile(tx, ty));
+      await Promise.all(promises);
+
+      const tl = Elevation.tileToBounds(minTX, minTY, zoom);
+      const fullNorth = tl.north, fullWest = tl.west;
+      const fullSouth = Elevation.tileToBounds(minTX, maxTY, zoom).south;
+      const fullEast  = Elevation.tileToBounds(maxTX, minTY, zoom).east;
+      const pxLeft   = Math.round((bounds.getWest()  - fullWest) / (fullEast - fullWest) * canvas.width);
+      const pxRight  = Math.round((bounds.getEast()  - fullWest) / (fullEast - fullWest) * canvas.width);
+      const pxTop    = Math.round((fullNorth - bounds.getNorth()) / (fullNorth - fullSouth) * canvas.height);
+      const pxBottom = Math.round((fullNorth - bounds.getSouth()) / (fullNorth - fullSouth) * canvas.height);
+      const cropW = Math.max(1, pxRight - pxLeft), cropH = Math.max(1, pxBottom - pxTop);
+      const img = ctx.getImageData(pxLeft, pxTop, cropW, cropH); // throws if CORS-tainted
+
+      const w = resolution, h = resolution;
+      const rgb = new Uint8Array(w * h * 3);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const sx = Math.min(Math.floor(x / w * cropW), cropW - 1);
+          const sy = Math.min(Math.floor(y / h * cropH), cropH - 1);
+          const s = (sy * cropW + sx) * 4, d = (y * w + x) * 3;
+          rgb[d] = img.data[s]; rgb[d+1] = img.data[s+1]; rgb[d+2] = img.data[s+2];
+        }
+      }
+      return { width: w, height: h, rgb };
+    } catch (e) {
+      console.warn('Satellite imagery fetch/read failed:', e);
+      return null;
+    }
+  },
+};
+
+// K-means on RGB samples (only where mask[i] truthy). Returns { centroids:[[r,g,b],…],
+// assign:Int16Array }. assign[i] = cluster index for masked pixels, -1 otherwise.
+function kmeansRGB(rgb, mask, n, k, iters) {
+  // Seed centroids from evenly-spaced masked samples (deterministic).
+  const idxs = [];
+  for (let i = 0; i < n; i++) if (mask[i]) idxs.push(i);
+  if (idxs.length === 0) return { centroids: [], assign: new Int16Array(n).fill(-1) };
+  const cents = [];
+  for (let c = 0; c < k; c++) {
+    const i = idxs[Math.floor((c + 0.5) / k * idxs.length)];
+    cents.push([rgb[i*3], rgb[i*3+1], rgb[i*3+2]]);
+  }
+  const assign = new Int16Array(n).fill(-1);
+  for (let it = 0; it < iters; it++) {
+    // Assign
+    for (const i of idxs) {
+      const r = rgb[i*3], g = rgb[i*3+1], b = rgb[i*3+2];
+      let best = 0, bd = Infinity;
+      for (let c = 0; c < k; c++) {
+        const dr = r-cents[c][0], dg = g-cents[c][1], db = b-cents[c][2];
+        const d = dr*dr + dg*dg + db*db;
+        if (d < bd) { bd = d; best = c; }
+      }
+      assign[i] = best;
+    }
+    // Update
+    const sum = Array.from({length:k}, () => [0,0,0,0]);
+    for (const i of idxs) { const c = assign[i]; sum[c][0]+=rgb[i*3]; sum[c][1]+=rgb[i*3+1]; sum[c][2]+=rgb[i*3+2]; sum[c][3]++; }
+    for (let c = 0; c < k; c++) if (sum[c][3]) cents[c] = [sum[c][0]/sum[c][3], sum[c][1]/sum[c][3], sum[c][2]/sum[c][3]];
+  }
+  // Sort clusters by luminance (low→high) so band order is stable & shaded.
+  const order = cents.map((c, i) => i).sort((a, b) =>
+    (0.299*cents[a][0]+0.587*cents[a][1]+0.114*cents[a][2]) -
+    (0.299*cents[b][0]+0.587*cents[b][1]+0.114*cents[b][2]));
+  const remap = new Int16Array(k);
+  order.forEach((old, neu) => { remap[old] = neu; });
+  const centroids = order.map(old => cents[old].map(v => Math.round(v)));
+  for (const i of idxs) assign[i] = remap[assign[i]];
+  return { centroids, assign };
+}
+
+// ═══════════════════════════════════════════════
 //  WATER DETECTION
 // ═══════════════════════════════════════════════
 
@@ -1183,7 +1296,8 @@ function getBandConfig() {
 const MeshGen = {
   // Generate mesh from elevation data.
   // lakeMask: optional Uint8Array (1=lake pixel), lakeElevMap: optional Float32Array.
-  generate(elevData, lakeMask = null, lakeElevMap = null) {
+  // satImage: optional { width, height, rgb } for photographic (satellite) colouring.
+  generate(elevData, lakeMask = null, lakeElevMap = null, satImage = null) {
     const printSize = parseFloat(document.getElementById('print-size').value) || 150;
     const vertExag = parseFloat(document.getElementById('vert-exag').value) || 2;
     const baseHeight = parseFloat(document.getElementById('base-height').value) || 4;
@@ -1411,8 +1525,48 @@ const MeshGen = {
       return b;
     };
     const pixelBands = new Uint8Array(w * h);
-    for (let i = 0; i < w * h; i++) {
-      pixelBands[i] = waterMask[i] ? 0 : bandOf(origData[i]);
+    let satellite = false;
+    if (satImage && satImage.width === w && satImage.height === h) {
+      // Photographic mode: cluster land (non-water) satellite colours into 7 tints.
+      satellite = true;
+      const landMask = new Uint8Array(w * h);
+      for (let i = 0; i < w * h; i++) landMask[i] = waterMask[i] ? 0 : 1;
+      const { centroids, assign } = kmeansRGB(satImage.rgb, landMask, w * h, 7, 12);
+      for (let i = 0; i < w * h; i++) {
+        pixelBands[i] = waterMask[i] ? 0 : (assign[i] >= 0 ? assign[i] + 1 : 1);
+      }
+      // Despeckle the clustered assignment (3×3 majority among land neighbours) so
+      // colour regions are coherent — cleaner blocks and fewer non-manifold seams.
+      for (let pass = 0; pass < 2; pass++) {
+        const src = pixelBands.slice();
+        for (let r = 0; r < h; r++) {
+          for (let c = 0; c < w; c++) {
+            const i = r * w + c;
+            if (waterMask[i]) continue; // water stays authoritative
+            const cnt = {};
+            for (let dr = -1; dr <= 1; dr++) {
+              for (let dc = -1; dc <= 1; dc++) {
+                const rr = r + dr, cc = c + dc;
+                if (rr < 0 || rr >= h || cc < 0 || cc >= w) continue;
+                const b = src[rr * w + cc];
+                if (b === 0) continue; // ignore water neighbours
+                cnt[b] = (cnt[b] || 0) + 1;
+              }
+            }
+            let best = src[i], bn = -1;
+            for (const k in cnt) if (cnt[k] > bn) { bn = cnt[k]; best = +k; }
+            pixelBands[i] = best;
+          }
+        }
+      }
+      // Write the derived palette into the advanced colour pickers (band 1..7).
+      const toHex = c => '#' + c.map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
+      for (let c = 0; c < centroids.length && c < 7; c++) {
+        const el = document.getElementById('adv-color-' + (c + 1));
+        if (el) el.value = toHex(centroids[c]);
+      }
+    } else {
+      for (let i = 0; i < w * h; i++) pixelBands[i] = waterMask[i] ? 0 : bandOf(origData[i]);
     }
 
     // Derive triColors from pixelBands (majority band among a triangle's terrain vertices)
@@ -1687,6 +1841,7 @@ const MeshGen = {
       vertices: vertexArray,
       triangles: triangleArray,
       shapeMask,
+      satellite,
       triColors,
       triElevations,
       triSlopes,
@@ -1989,6 +2144,21 @@ const ThreeMFExport = {
   _buildTerrainSolids(mesh) {
     const cfg = getBandConfig();
     const colors = cfg.colors;
+
+    // Photographic (satellite) mode: colours are arbitrary per-region (not elevation-
+    // ordered), so each band is its own full-height extruded region (per-triangle).
+    if (mesh.satellite) {
+      const built = [], presentBands = [];
+      for (let bandIdx = 0; bandIdx < colors.length; bandIdx++) {
+        const solid = this._buildBandSolid(bandIdx, mesh);
+        if (solid && solid.t.length > 0) {
+          built.push({ name: colors[bandIdx].name, hex: colors[bandIdx].hex, solid });
+          presentBands.push(bandIdx);
+        }
+      }
+      return { built, presentBands };
+    }
+
     const L = colors.length - 1; // number of land bands
     const toMM = m => (m - mesh.minElev) * mesh.elevScale + mesh.baseHeight;
     const waterDepth = parseFloat(document.getElementById('water-depth').value) || 2;
@@ -2101,6 +2271,61 @@ const ThreeMFExport = {
     }
 
     return { v: verts, t: tris };
+  },
+
+  // Per-region extrusion (used in photographic mode): extrude every terrain triangle
+  // whose colour === bandIdx down to z=0, with directed-edge boundary walls. Colours
+  // are arbitrary regions (not elevation-ordered) so each is its own full-height solid.
+  // Watertight because triColors is smoothed + bowtie-cleaned in MeshGen. Honours the
+  // circle disc mask.
+  _buildBandSolid(bandIdx, mesh) {
+    const { gridW: gw, gridH: gh, vertices: mv, triangles: tri, triColors } = mesh;
+    const sm = mesh.shapeMask;
+    const numTerrainTris = 2 * (gw - 1) * (gh - 1);
+    const STRIDE = gw * gh;
+
+    const localOf = new Map();
+    const topV = [];
+    let numTop = 0;
+    const getV = gi => {
+      let li = localOf.get(gi);
+      if (li !== undefined) return li;
+      li = numTop++;
+      topV.push(mv[gi*3], mv[gi*3+1], mv[gi*3+2]);
+      localOf.set(gi, li);
+      return li;
+    };
+
+    const topT = [];
+    const dirEdges = new Set();
+    for (let ti = 0; ti < numTerrainTris; ti++) {
+      if (triColors[ti] !== bandIdx) continue;
+      const g0 = tri[ti*3], g1 = tri[ti*3+1], g2 = tri[ti*3+2];
+      if (sm && !(sm[g0] && sm[g1] && sm[g2])) continue; // disc clip
+      const a = getV(g0), b = getV(g1), c = getV(g2);
+      topT.push(a, b, c);
+      dirEdges.add(a*STRIDE + b); dirEdges.add(b*STRIDE + c); dirEdges.add(c*STRIDE + a);
+    }
+    if (numTop === 0) return null;
+
+    const allV = topV.slice();
+    for (let i = 0; i < numTop; i++) allV.push(topV[i*3], topV[i*3+1], 0);
+
+    const botT = [];
+    for (let i = 0; i < topT.length; i += 3) {
+      botT.push(topT[i] + numTop, topT[i+2] + numTop, topT[i+1] + numTop);
+    }
+
+    const wallT = [];
+    for (const ab of dirEdges) {
+      const a = Math.floor(ab / STRIDE), b = ab % STRIDE;
+      if (dirEdges.has(b*STRIDE + a)) continue; // interior edge
+      const ba = a + numTop, bb = b + numTop;
+      wallT.push(a, ba, b);
+      wallT.push(b, ba, bb);
+    }
+
+    return { v: allV, t: topT.concat(botT, wallT) };
   },
 
   // ── Frame / cartouche geometry helpers ────────────────────────────────────
@@ -2629,9 +2854,18 @@ const UI = {
         }
       }
 
+      // Photographic (satellite) colouring — only in advanced mode with the box ticked.
+      let satImage = null;
+      if (document.getElementById('adv-colors-on')?.checked &&
+          document.getElementById('sat-mode-on')?.checked) {
+        showLoading('Fetching satellite imagery…');
+        satImage = await Satellite.fetch(State.selectedBounds, resolution);
+        if (!satImage) toast('Satellite imagery unavailable — using elevation colors.');
+      }
+
       showLoading('Generating mesh…');
       await new Promise(r => setTimeout(r, 50));
-      const rawMesh = MeshGen.generate(State.elevationData, lakeMask, lakeElevMap);
+      const rawMesh = MeshGen.generate(State.elevationData, lakeMask, lakeElevMap, satImage);
 
       showLoading('Checking mesh…');
       await new Promise(r => setTimeout(r, 20));
