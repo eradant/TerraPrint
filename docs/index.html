@@ -469,28 +469,87 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
     <div class="panel-section">
       <h3>Terrain Colors (3MF)</h3>
       <div class="section-body">
-        <div class="threshold-row">
-          <span class="swatch" style="background:#2D6ABF"></span>
-          <span>Water</span>
-          <span style="color:var(--text-muted);font-size:11px;">ocean + lakes</span>
+        <div id="std-colors">
+          <div class="threshold-row">
+            <span class="swatch" style="background:#2D6ABF"></span>
+            <span>Water</span>
+            <span style="color:var(--text-muted);font-size:11px;">ocean + lakes</span>
+          </div>
+          <div class="threshold-row">
+            <span class="swatch" style="background:var(--topo-flat)"></span>
+            <span>Lowland</span>
+            <span style="color:var(--text-muted)">below</span>
+            <input type="number" id="thresh-forest-lo" value="400" step="50"> <span style="color:var(--text-muted)">m</span>
+          </div>
+          <div class="threshold-row">
+            <span class="swatch" style="background:var(--topo-hills)"></span>
+            <span>Forest</span>
+            <span style="color:var(--text-muted)">to</span>
+            <input type="number" id="thresh-hills" value="1500" step="50"> <span style="color:var(--text-muted)">m</span>
+          </div>
+          <div class="threshold-row">
+            <span class="swatch" style="background:var(--topo-mountain)"></span>
+            <span>Alpine</span>
+            <span style="color:var(--text-muted)">above</span>
+          </div>
         </div>
-        <div class="threshold-row">
-          <span class="swatch" style="background:var(--topo-flat)"></span>
-          <span>Lowland</span>
-          <span style="color:var(--text-muted)">below</span>
-          <input type="number" id="thresh-forest-lo" value="400" step="50"> <span style="color:var(--text-muted)">m</span>
+
+        <!-- Advanced 8-colour hypsometric editor (hidden unless enabled) -->
+        <div id="adv-colors" style="display:none;">
+          <div class="threshold-row">
+            <input type="color" id="adv-color-0" value="#2D6ABF" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+            <span>Water</span>
+            <span style="color:var(--text-muted);font-size:11px;">ocean + lakes</span>
+          </div>
+          <div class="threshold-row">
+            <input type="color" id="adv-color-1" value="#2E7D32" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+            <span>Tint 1</span>
+            <span style="color:var(--text-muted)">low</span>
+          </div>
+          <div class="threshold-row">
+            <input type="color" id="adv-color-2" value="#6FA84B" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+            <span>Tint 2</span>
+            <span style="color:var(--text-muted)">≥</span>
+            <input type="number" id="adv-thresh-1" value="400" step="10"> <span style="color:var(--text-muted)">m</span>
+          </div>
+          <div class="threshold-row">
+            <input type="color" id="adv-color-3" value="#A7C24B" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+            <span>Tint 3</span>
+            <span style="color:var(--text-muted)">≥</span>
+            <input type="number" id="adv-thresh-2" value="800" step="10"> <span style="color:var(--text-muted)">m</span>
+          </div>
+          <div class="threshold-row">
+            <input type="color" id="adv-color-4" value="#D8C56B" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+            <span>Tint 4</span>
+            <span style="color:var(--text-muted)">≥</span>
+            <input type="number" id="adv-thresh-3" value="1200" step="10"> <span style="color:var(--text-muted)">m</span>
+          </div>
+          <div class="threshold-row">
+            <input type="color" id="adv-color-5" value="#BE8A4A" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+            <span>Tint 5</span>
+            <span style="color:var(--text-muted)">≥</span>
+            <input type="number" id="adv-thresh-4" value="1700" step="10"> <span style="color:var(--text-muted)">m</span>
+          </div>
+          <div class="threshold-row">
+            <input type="color" id="adv-color-6" value="#8A6E5A" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+            <span>Tint 6</span>
+            <span style="color:var(--text-muted)">≥</span>
+            <input type="number" id="adv-thresh-5" value="2200" step="10"> <span style="color:var(--text-muted)">m</span>
+          </div>
+          <div class="threshold-row">
+            <input type="color" id="adv-color-7" value="#ECECEC" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+            <span>Tint 7</span>
+            <span style="color:var(--text-muted)">≥</span>
+            <input type="number" id="adv-thresh-6" value="2700" step="10"> <span style="color:var(--text-muted)">m</span>
+          </div>
+          <button class="btn btn-sm btn-block" style="margin-top:8px;" onclick="Advanced.autofit()">Auto-fit thresholds to tile</button>
         </div>
-        <div class="threshold-row">
-          <span class="swatch" style="background:var(--topo-hills)"></span>
-          <span>Forest</span>
-          <span style="color:var(--text-muted)">to</span>
-          <input type="number" id="thresh-hills" value="1500" step="50"> <span style="color:var(--text-muted)">m</span>
+
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:10px;">
+          <input type="checkbox" id="adv-colors-on" style="accent-color:var(--accent);width:16px;height:16px;" onchange="Advanced.toggle(this.checked)">
+          <label for="adv-colors-on" style="margin:0;cursor:pointer;">Advanced hypsometric colors (up to 8)</label>
         </div>
-        <div class="threshold-row">
-          <span class="swatch" style="background:var(--topo-mountain)"></span>
-          <span>Alpine</span>
-          <span style="color:var(--text-muted)">above</span>
-        </div>
+
         <div class="input-group" style="margin-top:10px;">
           <label>Water depth (mm)</label>
           <div class="range-row">
@@ -1066,6 +1125,58 @@ function morphPass(src, w, h, r, isDilate) {
 }
 
 // ═══════════════════════════════════════════════
+//  BAND CONFIG  (single source of truth for terrain colours)
+// ═══════════════════════════════════════════════
+
+// Default 8-colour hypsometric palette: Water + 7 land tints (low → high).
+const ADV_DEFAULT_COLORS = [
+  '#2D6ABF', // Water
+  '#2E7D32', // deep green
+  '#6FA84B', // green
+  '#A7C24B', // yellow-green
+  '#D8C56B', // tan
+  '#BE8A4A', // brown
+  '#8A6E5A', // umber
+  '#ECECEC', // snow / white
+];
+
+// Returns { colors:[{name,hex},…], thresholds:[m1,…] }.
+//   colors[0] is always Water; colors[1..N-1] are land tints (low→high).
+//   thresholds has (colors.length - 2) ascending elevation values (metres).
+function getBandConfig() {
+  const adv = document.getElementById('adv-colors-on');
+  if (adv && adv.checked) {
+    const colors = [];
+    for (let i = 0; i < 8; i++) {
+      const el = document.getElementById('adv-color-' + i);
+      colors.push({
+        name: i === 0 ? 'Water' : 'Tint ' + i,
+        hex: (el && el.value) || ADV_DEFAULT_COLORS[i],
+      });
+    }
+    const thresholds = [];
+    for (let i = 1; i <= 6; i++) {
+      const el = document.getElementById('adv-thresh-' + i);
+      thresholds.push(parseFloat(el && el.value));
+    }
+    // Guard against blanks / out-of-order edits.
+    for (let i = 0; i < thresholds.length; i++) {
+      if (!isFinite(thresholds[i])) thresholds[i] = (i + 1) * 400;
+    }
+    thresholds.sort((a, b) => a - b);
+    return { colors, thresholds };
+  }
+  // Default = current 4-colour behaviour, unchanged.
+  return {
+    colors: ThreeMFExport.COLORS,
+    thresholds: [
+      parseFloat(document.getElementById('thresh-forest-lo').value) || 400,
+      parseFloat(document.getElementById('thresh-hills').value)     || 1500,
+    ],
+  };
+}
+
+// ═══════════════════════════════════════════════
 //  MESH GENERATION
 // ═══════════════════════════════════════════════
 
@@ -1076,8 +1187,10 @@ const MeshGen = {
     const printSize = parseFloat(document.getElementById('print-size').value) || 150;
     const vertExag = parseFloat(document.getElementById('vert-exag').value) || 2;
     const baseHeight = parseFloat(document.getElementById('base-height').value) || 4;
-    const threshMountain = parseFloat(document.getElementById('thresh-hills').value) || 1500;
-    const threshForestLo = parseFloat(document.getElementById('thresh-forest-lo').value) || 400;
+    // Elevation band thresholds (metres) — 4-colour default or advanced N-band.
+    const bandCfg = getBandConfig();
+    const landThresholds = bandCfg.thresholds; // (N-2) ascending values
+    const numColors = bandCfg.colors.length;
 
     const w = elevData.width;
     const h = elevData.height;
@@ -1291,12 +1404,15 @@ const MeshGen = {
       }
     }
 
+    // Land band = 1 + number of thresholds the elevation reaches (0 = Water).
+    const bandOf = elev => {
+      let b = 1;
+      for (let k = 0; k < landThresholds.length; k++) if (elev >= landThresholds[k]) b++;
+      return b;
+    };
     const pixelBands = new Uint8Array(w * h);
     for (let i = 0; i < w * h; i++) {
-      pixelBands[i] = waterMask[i] ? 0
-                    : origData[i] < threshForestLo ? 1
-                    : origData[i] < threshMountain  ? 2
-                    : 3;
+      pixelBands[i] = waterMask[i] ? 0 : bandOf(origData[i]);
     }
 
     // Derive triColors from pixelBands (majority band among a triangle's terrain vertices)
@@ -1305,7 +1421,7 @@ const MeshGen = {
     for (let i = 0; i < triElevations.length; i++) {
       if (triElevations[i] < 0) { triColors[i] = 0; continue; } // walls/base
       const ti = i * 3;
-      const counts = [0, 0, 0, 0];
+      const counts = new Array(numColors).fill(0);
       for (let k = 0; k < 3; k++) {
         const vi = triangles[ti + k];
         if (vi < terrainVertCount) counts[pixelBands[vi]]++;
@@ -1363,7 +1479,7 @@ const MeshGen = {
 
           if (comp.length < MIN_TRIS) {
             // Tally neighbor colors outside this component
-            const nbrCount = [0, 0, 0, 0];
+            const nbrCount = new Array(numColors).fill(0);
             for (const ti of comp) {
               for (const nbr of neighbors(ti)) {
                 if (triColors[nbr] !== color) nbrCount[triColors[nbr]]++;
@@ -1371,7 +1487,7 @@ const MeshGen = {
             }
             // Pick most common neighbor color (exclude wall/base color 0 unless it wins)
             let best = color, bestN = 0;
-            for (let k = 1; k < 4; k++) { if (nbrCount[k] > bestN) { bestN = nbrCount[k]; best = k; } }
+            for (let k = 1; k < numColors; k++) { if (nbrCount[k] > bestN) { bestN = nbrCount[k]; best = k; } }
             if (best === color && nbrCount[0] > 0) best = 0; // only fall back to water if nothing else
             if (best !== color) {
               for (const ti of comp) triColors[ti] = best;
@@ -1488,18 +1604,18 @@ const MeshGen = {
             // and reassign every other fan to a neighboring color.
             fans.sort((a, b) => b.length - a.length);
             for (let f = 1; f < fans.length; f++) {
-              const nbrCount = [0, 0, 0, 0];
+              const nbrCount = new Array(numColors).fill(0);
               for (const ti of fans[f]) {
                 for (const nb of neighbors(ti)) {
                   if (triColors[nb] !== color) nbrCount[triColors[nb]]++;
                 }
               }
               let best = -1, bestN = 0;
-              for (let k = 1; k < 4; k++) {
+              for (let k = 1; k < numColors; k++) {
                 if (nbrCount[k] > bestN) { bestN = nbrCount[k]; best = k; }
               }
               if (best === -1) {
-                for (let k = 0; k < 4; k++) {
+                for (let k = 0; k < numColors; k++) {
                   if (k !== color && nbrCount[k] > bestN) { bestN = nbrCount[k]; best = k; }
                 }
               }
@@ -1529,14 +1645,14 @@ const MeshGen = {
               }
             }
             if (comp.length < 4) {
-              const nbrCount = [0, 0, 0, 0];
+              const nbrCount = new Array(numColors).fill(0);
               for (const ti of comp) {
                 for (const nb of neighbors(ti)) {
                   if (triColors[nb] !== color) nbrCount[triColors[nb]]++;
                 }
               }
               let best = color, bestN = 0;
-              for (let k = 1; k < 4; k++) {
+              for (let k = 1; k < numColors; k++) {
                 if (nbrCount[k] > bestN) { bestN = nbrCount[k]; best = k; }
               }
               if (best === color && nbrCount[0] > 0) best = 0;
@@ -1866,30 +1982,32 @@ const ThreeMFExport = {
     return { blob, warnings: [] };
   },
 
-  // Build the four terrain colour-band solids (Water/Lowland/Forest/Alpine) as
-  // stacked horizontal slabs. Returns { built:[{name,hex,solid}], presentBands:[…] }.
-  // Used by both the 3MF export and the 3D preview so they always match.
+  // Build the terrain colour-band solids as stacked horizontal slabs, driven by
+  // getBandConfig() (4-colour default or advanced N-band). Band 0 = Water; bands
+  // 1..N-1 are land tints split by (N-2) elevation thresholds.
+  // Returns { built:[{name,hex,solid}], presentBands:[…] }.
   _buildTerrainSolids(mesh) {
+    const cfg = getBandConfig();
+    const colors = cfg.colors;
+    const L = colors.length - 1; // number of land bands
     const toMM = m => (m - mesh.minElev) * mesh.elevScale + mesh.baseHeight;
-    const threshForestLoM = parseFloat(document.getElementById('thresh-forest-lo').value) || 400;
-    const threshMountainM = parseFloat(document.getElementById('thresh-hills').value)     || 1500;
-    const E_lowToForest    = toMM(threshForestLoM);
-    const E_forestToAlpine = toMM(threshMountainM);
-    const fForest = Math.max(0, E_lowToForest);
-    const fAlpine = Math.max(0, E_forestToAlpine);
     const waterDepth = parseFloat(document.getElementById('water-depth').value) || 2;
+
+    // Land-band boundaries in model-space mm, clamped ≥0 so the lowest present band
+    // reaches the build plate (a threshold below the tile collapses its band).
+    const threshMM = cfg.thresholds.map(m => Math.max(0, toMM(m))); // length L-1
 
     const wm = mesh.waterMask;
     const tz = gi => mesh.vertices[gi*3 + 2];
     const isWater = gi => !!(wm && wm[gi]);
     const fillTop = gi => isWater(gi) ? Math.max(0, tz(gi) - waterDepth) : tz(gi);
 
-    const floorZ    = [0,       fForest,  fAlpine];
-    const upperCeil = [fForest, fAlpine,  Infinity];
+    const floorOf = k => k === 0 ? 0 : threshMM[k - 1];
+    const ceilOf  = k => k === L - 1 ? Infinity : threshMM[k];
     const landBand = k => ({
       active: () => true,
-      floor:  () => floorZ[k],
-      ceil:   gi => Math.min(fillTop(gi), upperCeil[k]),
+      floor:  () => floorOf(k),
+      ceil:   gi => Math.min(fillTop(gi), ceilOf(k)),
     });
 
     const bandSpecs = [
@@ -1898,16 +2016,14 @@ const ThreeMFExport = {
         floor:  gi => Math.max(0, tz(gi) - waterDepth),
         ceil:   gi => tz(gi),
       },
-      landBand(0), // Lowland
-      landBand(1), // Forest
-      landBand(2), // Alpine
     ];
+    for (let k = 0; k < L; k++) bandSpecs.push(landBand(k));
 
     const built = [], presentBands = [];
-    for (let bandIdx = 0; bandIdx < 4; bandIdx++) {
+    for (let bandIdx = 0; bandIdx < colors.length; bandIdx++) {
       const solid = this._buildStackSolid(mesh, bandSpecs[bandIdx]);
       if (solid && solid.t.length > 0) {
-        built.push({ name: this.COLORS[bandIdx].name, hex: this.COLORS[bandIdx].hex, solid });
+        built.push({ name: colors[bandIdx].name, hex: colors[bandIdx].hex, solid });
         presentBands.push(bandIdx);
       }
     }
@@ -2155,10 +2271,12 @@ const ThreeMFExport = {
     }
     // Legend: swatch (band colour) + label per present band.
     if (document.getElementById('frame-legend-on')?.checked) {
-      const present = presentBands && presentBands.length ? presentBands : [0,1,2,3];
+      const palette = getBandConfig().colors;
+      const present = presentBands && presentBands.length
+        ? presentBands : palette.map((_, i) => i);
       let sw = 6, gap = 2.5, lblH = 4.5, itemGap = 6;
       // Measure the row, then uniformly scale it down if it would overrun the panel.
-      const bmps = present.map(b => this._textBitmap(this.COLORS[b].name, 64, true));
+      const bmps = present.map(b => this._textBitmap(palette[b].name, 64, true));
       const rowW = () => present.reduce((s, _, i) =>
         s + sw + gap + lblH * (bmps[i].w / bmps[i].h) + itemGap, 0);
       const total = rowW();
@@ -2167,7 +2285,7 @@ const ThreeMFExport = {
       let lx = X0 + pad;
       const legendTop = cursorY;
       present.forEach((b, i) => {
-        const c = this.COLORS[b];
+        const c = palette[b];
         const st = [];
         this._rectTris(st, lx, legendTop - sw, lx + sw, legendTop);
         elems.push({ name: c.name + ' key', hex: c.hex, solid: this._extrudePrism(st, frameH - 0.3, swatchHigh) });
@@ -2376,10 +2494,13 @@ const Preview = {
 
     try {
       const { built } = ThreeMFExport._buildTerrainSolids(meshData);
+      const nColors = getBandConfig().colors.length;
+      const seen = new Array(nColors).fill(false);
+      for (let i = 0; i < meshData.pixelBands.length; i++) {
+        if (meshData.pixelBands[i] < nColors) seen[meshData.pixelBands[i]] = true;
+      }
       const presentBands = [];
-      const seen = [false, false, false, false];
-      for (let i = 0; i < meshData.pixelBands.length; i++) seen[meshData.pixelBands[i]] = true;
-      [0,1,2,3].forEach(b => { if (seen[b]) presentBands.push(b); });
+      for (let b = 0; b < nColors; b++) if (seen[b]) presentBands.push(b);
       for (const obj of built) addSolid(obj.solid, obj.hex);
       for (const obj of ThreeMFExport._buildFrameObjects(meshData, presentBands)) {
         if (obj.solid && obj.solid.t.length) addSolid(obj.solid, obj.hex);
@@ -2818,6 +2939,36 @@ const Paint = {
       }
     }
     this.redraw();
+  },
+};
+
+// ═══════════════════════════════════════════════
+//  ADVANCED HYPSOMETRIC COLORS
+// ═══════════════════════════════════════════════
+
+const Advanced = {
+  toggle(on) {
+    document.getElementById('adv-colors').style.display = on ? 'block' : 'none';
+    document.getElementById('std-colors').style.display = on ? 'none' : 'block';
+    if (on && !this._fitted) { this.autofit(); this._fitted = true; }
+  },
+
+  // Distribute the 6 land-tint thresholds across the current tile's elevation range.
+  autofit() {
+    let lo, hi;
+    if (State.meshData) { lo = State.meshData.minElev; hi = State.meshData.maxElev; }
+    else if (State.elevationData) {
+      lo = Infinity; hi = -Infinity;
+      const d = State.elevationData.data;
+      for (let i = 0; i < d.length; i++) { if (d[i] < lo) lo = d[i]; if (d[i] > hi) hi = d[i]; }
+    }
+    if (!isFinite(lo) || !isFinite(hi) || hi - lo < 1) { lo = 0; hi = 2800; } // sensible default
+    lo = Math.max(1, lo); // above sea level (water is its own band)
+    for (let i = 1; i <= 6; i++) {
+      const v = Math.round((lo + (i / 7) * (hi - lo)) / 10) * 10;
+      const el = document.getElementById('adv-thresh-' + i);
+      if (el) el.value = v;
+    }
   },
 };
 
