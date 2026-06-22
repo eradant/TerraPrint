@@ -497,6 +497,13 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
         <!-- Advanced 8-colour hypsometric editor (hidden unless enabled) -->
         <div id="adv-colors" style="display:none;">
           <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <label style="margin:0;">Colors</label>
+            <select id="adv-count" onchange="Advanced.setCount(this.value)" style="flex:0 0 auto;">
+              <option value="8" selected>8 — 2 AMS</option>
+              <option value="4">4 — 1 AMS</option>
+            </select>
+          </div>
+          <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
             <input type="checkbox" id="sat-mode-on" style="accent-color:var(--accent);width:15px;height:15px;" onchange="const s=this.checked;['sat-note','sat-detail-group','sat-shell-group'].forEach(id=>document.getElementById(id).style.display=s?'block':'none');">
             <label for="sat-mode-on" style="margin:0;cursor:pointer;">Photographic (sample satellite imagery)</label>
           </div>
@@ -544,29 +551,31 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
             <span style="color:var(--text-muted)">≥</span>
             <input type="number" id="adv-thresh-2" value="800" step="10"> <span style="color:var(--text-muted)">m</span>
           </div>
-          <div class="threshold-row">
-            <input type="color" id="adv-color-4" value="#D8C56B" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
-            <span>Tint 4</span>
-            <span style="color:var(--text-muted)">≥</span>
-            <input type="number" id="adv-thresh-3" value="1200" step="10"> <span style="color:var(--text-muted)">m</span>
-          </div>
-          <div class="threshold-row">
-            <input type="color" id="adv-color-5" value="#BE8A4A" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
-            <span>Tint 5</span>
-            <span style="color:var(--text-muted)">≥</span>
-            <input type="number" id="adv-thresh-4" value="1700" step="10"> <span style="color:var(--text-muted)">m</span>
-          </div>
-          <div class="threshold-row">
-            <input type="color" id="adv-color-6" value="#8A6E5A" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
-            <span>Tint 6</span>
-            <span style="color:var(--text-muted)">≥</span>
-            <input type="number" id="adv-thresh-5" value="2200" step="10"> <span style="color:var(--text-muted)">m</span>
-          </div>
-          <div class="threshold-row">
-            <input type="color" id="adv-color-7" value="#ECECEC" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
-            <span>Tint 7</span>
-            <span style="color:var(--text-muted)">≥</span>
-            <input type="number" id="adv-thresh-6" value="2700" step="10"> <span style="color:var(--text-muted)">m</span>
+          <div id="adv-extra">
+            <div class="threshold-row">
+              <input type="color" id="adv-color-4" value="#D8C56B" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+              <span>Tint 4</span>
+              <span style="color:var(--text-muted)">≥</span>
+              <input type="number" id="adv-thresh-3" value="1200" step="10"> <span style="color:var(--text-muted)">m</span>
+            </div>
+            <div class="threshold-row">
+              <input type="color" id="adv-color-5" value="#BE8A4A" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+              <span>Tint 5</span>
+              <span style="color:var(--text-muted)">≥</span>
+              <input type="number" id="adv-thresh-4" value="1700" step="10"> <span style="color:var(--text-muted)">m</span>
+            </div>
+            <div class="threshold-row">
+              <input type="color" id="adv-color-6" value="#8A6E5A" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+              <span>Tint 6</span>
+              <span style="color:var(--text-muted)">≥</span>
+              <input type="number" id="adv-thresh-5" value="2200" step="10"> <span style="color:var(--text-muted)">m</span>
+            </div>
+            <div class="threshold-row">
+              <input type="color" id="adv-color-7" value="#ECECEC" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+              <span>Tint 7</span>
+              <span style="color:var(--text-muted)">≥</span>
+              <input type="number" id="adv-thresh-6" value="2700" step="10"> <span style="color:var(--text-muted)">m</span>
+            </div>
           </div>
           <button class="btn btn-sm btn-block" style="margin-top:8px;" onclick="Advanced.autofit()">Auto-fit thresholds to tile</button>
         </div>
@@ -1280,8 +1289,11 @@ const ADV_DEFAULT_COLORS = [
 function getBandConfig() {
   const adv = document.getElementById('adv-colors-on');
   if (adv && adv.checked) {
+    // Palette size: 8 (2 AMS) or 4 (1 AMS).
+    const countSel = document.getElementById('adv-count');
+    const N = countSel && countSel.value === '4' ? 4 : 8;
     const colors = [];
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < N; i++) {
       const el = document.getElementById('adv-color-' + i);
       colors.push({
         name: i === 0 ? 'Water' : 'Tint ' + i,
@@ -1289,7 +1301,7 @@ function getBandConfig() {
       });
     }
     const thresholds = [];
-    for (let i = 1; i <= 6; i++) {
+    for (let i = 1; i <= N - 2; i++) {
       const el = document.getElementById('adv-thresh-' + i);
       thresholds.push(parseFloat(el && el.value));
     }
@@ -1552,7 +1564,8 @@ const MeshGen = {
       satellite = true;
       const landMask = new Uint8Array(w * h);
       for (let i = 0; i < w * h; i++) landMask[i] = waterMask[i] ? 0 : 1;
-      const { centroids, assign } = kmeansRGB(satImage.rgb, landMask, w * h, 7, 12);
+      const numLandTints = numColors - 1; // 7 (8 colours) or 3 (4 colours)
+      const { centroids, assign } = kmeansRGB(satImage.rgb, landMask, w * h, numLandTints, 12);
       for (let i = 0; i < w * h; i++) {
         pixelBands[i] = waterMask[i] ? 0 : (assign[i] >= 0 ? assign[i] + 1 : 1);
       }
@@ -1584,9 +1597,53 @@ const MeshGen = {
           }
         }
       }
-      // Write the derived palette into the advanced colour pickers (band 1..7).
+
+      // Island removal: a majority filter can't erase a blob bigger than its kernel,
+      // so flood-fill each land colour into connected components and merge any below
+      // a size threshold into its dominant neighbour. The threshold grows sharply as
+      // Detail drops, so Detail=1 yields large, simple colour blocks (few islands).
+      const minIsland = Math.round(Math.pow((10 - detail) / 9, 1.3) * 0.011 * w * h);
+      for (let pass = 0; pass < 6 && minIsland > 0; pass++) {
+        const lbl = new Int32Array(w * h).fill(-1);
+        let changedAny = false;
+        let comp = 0;
+        for (let s = 0; s < w * h; s++) {
+          if (lbl[s] !== -1 || waterMask[s]) continue;
+          const color = pixelBands[s];
+          const cells = [s]; lbl[s] = comp;
+          const stack = [s];
+          while (stack.length) {
+            const i = stack.pop();
+            const r = (i / w) | 0, c = i % w;
+            const nbrs = [r>0?i-w:-1, r<h-1?i+w:-1, c>0?i-1:-1, c<w-1?i+1:-1];
+            for (const j of nbrs) {
+              if (j >= 0 && lbl[j] === -1 && !waterMask[j] && pixelBands[j] === color) {
+                lbl[j] = comp; stack.push(j); cells.push(j);
+              }
+            }
+          }
+          comp++;
+          if (cells.length >= minIsland) continue;
+          // Merge this island into the most common neighbouring land colour.
+          const cnt = {};
+          for (const i of cells) {
+            const r = (i / w) | 0, c = i % w;
+            for (const j of [r>0?i-w:-1, r<h-1?i+w:-1, c>0?i-1:-1, c<w-1?i+1:-1]) {
+              if (j >= 0 && !waterMask[j] && pixelBands[j] !== color) {
+                cnt[pixelBands[j]] = (cnt[pixelBands[j]] || 0) + 1;
+              }
+            }
+          }
+          let best = color, bn = 0;
+          for (const k in cnt) if (cnt[k] > bn) { bn = cnt[k]; best = +k; }
+          if (best !== color) { for (const i of cells) pixelBands[i] = best; changedAny = true; }
+        }
+        if (!changedAny) break;
+      }
+
+      // Write the derived palette into the advanced colour pickers (land tints).
       const toHex = c => '#' + c.map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
-      for (let c = 0; c < centroids.length && c < 7; c++) {
+      for (let c = 0; c < centroids.length && c < numLandTints; c++) {
         const el = document.getElementById('adv-color-' + (c + 1));
         if (el) el.value = toHex(centroids[c]);
       }
@@ -3238,8 +3295,20 @@ const Advanced = {
     if (on && !this._fitted) { this.autofit(); this._fitted = true; }
   },
 
-  // Distribute the 6 land-tint thresholds across the current tile's elevation range.
+  // Palette size: '8' (2 AMS, Water + 7 tints) or '4' (1 AMS, Water + 3 tints).
+  setCount(val) {
+    document.getElementById('adv-extra').style.display = val === '4' ? 'none' : 'block';
+    this.autofit();
+  },
+
+  _count() {
+    const sel = document.getElementById('adv-count');
+    return sel && sel.value === '4' ? 4 : 8;
+  },
+
+  // Distribute the (N-2) land-tint thresholds across the current tile's elevation range.
   autofit() {
+    const N = this._count();
     let lo, hi;
     if (State.meshData) { lo = State.meshData.minElev; hi = State.meshData.maxElev; }
     else if (State.elevationData) {
@@ -3249,8 +3318,8 @@ const Advanced = {
     }
     if (!isFinite(lo) || !isFinite(hi) || hi - lo < 1) { lo = 0; hi = 2800; } // sensible default
     lo = Math.max(1, lo); // above sea level (water is its own band)
-    for (let i = 1; i <= 6; i++) {
-      const v = Math.round((lo + (i / 7) * (hi - lo)) / 10) * 10;
+    for (let i = 1; i <= N - 2; i++) {
+      const v = Math.round((lo + (i / (N - 1)) * (hi - lo)) / 10) * 10;
       const el = document.getElementById('adv-thresh-' + i);
       if (el) el.value = v;
     }
