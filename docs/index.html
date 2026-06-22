@@ -497,10 +497,17 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
         <!-- Advanced 8-colour hypsometric editor (hidden unless enabled) -->
         <div id="adv-colors" style="display:none;">
           <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-            <input type="checkbox" id="sat-mode-on" style="accent-color:var(--accent);width:15px;height:15px;" onchange="document.getElementById('sat-note').style.display=this.checked?'block':'none'">
+            <input type="checkbox" id="sat-mode-on" style="accent-color:var(--accent);width:15px;height:15px;" onchange="const s=this.checked;document.getElementById('sat-note').style.display=s?'block':'none';document.getElementById('sat-detail-group').style.display=s?'block':'none';">
             <label for="sat-mode-on" style="margin:0;cursor:pointer;">Photographic (sample satellite imagery)</label>
           </div>
           <p id="sat-note" style="display:none;font-size:11px;color:var(--text-muted);margin:0 0 8px;">Colors &amp; tints below are auto-derived from the satellite image on Generate. Elevation thresholds are ignored in this mode; each color region is printed full-height.</p>
+          <div id="sat-detail-group" class="input-group" style="display:none;">
+            <label>Detail <span style="color:var(--text-muted);font-size:11px;">(sharper ↔ cleaner blocks)</span></label>
+            <div class="range-row">
+              <input type="range" id="sat-detail" min="1" max="10" step="1" value="5" oninput="document.getElementById('sat-detail-val').textContent=this.value">
+              <span class="range-val" id="sat-detail-val">5</span>
+            </div>
+          </div>
           <div class="threshold-row">
             <input type="color" id="adv-color-0" value="#2D6ABF" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
             <span>Water</span>
@@ -1537,7 +1544,11 @@ const MeshGen = {
       }
       // Despeckle the clustered assignment (3×3 majority among land neighbours) so
       // colour regions are coherent — cleaner blocks and fewer non-manifold seams.
-      for (let pass = 0; pass < 2; pass++) {
+      // The Detail slider sets the pass count: high detail = sharp (few passes),
+      // low detail = heavy smoothing (clean poster-like blocks).
+      const detail = parseFloat(document.getElementById('sat-detail')?.value) || 5;
+      const despeckPasses = Math.max(0, Math.round((10 - detail) * 0.8)); // 1→7 … 10→0
+      for (let pass = 0; pass < despeckPasses; pass++) {
         const src = pixelBands.slice();
         for (let r = 0; r < h; r++) {
           for (let c = 0; c < w; c++) {
@@ -1695,11 +1706,15 @@ const MeshGen = {
         return out;
       };
 
-      // Detect and fix bowtie vertices.
+      // Detect and fix bowtie vertices. Reassigning a fan can create a new bowtie at
+      // an adjacent vertex, so repeat the sweep until stable (photographic per-region
+      // colouring needs several rounds; elevation banding usually settles in one).
       let anyBowtieFix = false;
       let bowtieFixes = 0;
 
-      for (let vr = 0; vr < h; vr++) {
+      for (let btSweep = 0; btSweep < 6; btSweep++) {
+       let sweepFixes = 0;
+       for (let vr = 0; vr < h; vr++) {
         for (let vc = 0; vc < w; vc++) {
           const v   = vr * w + vc;
           const inc = getIncident(vr, vc);
@@ -1777,10 +1792,13 @@ const MeshGen = {
                 for (const ti of fans[f]) triColors[ti] = best;
                 anyBowtieFix = true;
                 bowtieFixes++;
+                sweepFixes++;
               }
             }
           }
         }
+       }
+       if (sweepFixes === 0) break; // stable — no bowties left
       }
 
       if (anyBowtieFix) {
