@@ -532,6 +532,13 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
               <span class="range-val" id="sat-detail-val">5</span>
             </div>
           </div>
+          <div id="sat-cap-group" class="input-group" style="display:none;">
+            <label>Elevation cap <span style="color:var(--text-muted);font-size:11px;">(treeline — pushes shaded high slopes off low colors)</span></label>
+            <div class="range-row">
+              <input type="range" id="sat-cap" min="0" max="100" step="5" value="0" oninput="document.getElementById('sat-cap-val').textContent=this.value=='0'?'off':this.value+'%'">
+              <span class="range-val" id="sat-cap-val">off</span>
+            </div>
+          </div>
           <div id="sat-shell-group" style="display:none;">
             <div class="input-group">
               <label>Color depth (mm) <span style="color:var(--text-muted);font-size:11px;">(top photo shell)</span></label>
@@ -1679,6 +1686,53 @@ const MeshGen = {
         }
         const toHex = c => '#' + c.map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
         bandColors = centroids.map(toHex);
+
+        // Elevation cap ("treeline"): a shaded/north-facing high slope photographs dark
+        // and k-means lumps it with low forest, so a dark colour runs up the whole peak.
+        // Give each colour an elevation ceiling (a high percentile of its own pixels) and
+        // push any pixel above its ceiling UP to the existing colour that legitimately
+        // reaches that height. Only ever moves colours up — minimums are never touched.
+        const capStrength = parseFloat(document.getElementById('sat-cap')?.value) || 0;
+        if (capStrength > 0) {
+          const K = numLandTints;
+          const pct = 0.9 - (capStrength / 100) * 0.4;        // 0.9 gentle … 0.5 aggressive
+          const minSamples = Math.max(50, Math.round(0.002 * w * h));
+          const elevsByBand = Array.from({ length: K + 1 }, () => []);
+          for (let i = 0; i < w * h; i++) {
+            if (waterMask[i]) continue;
+            const b = pixelBands[i];
+            if (b >= 1 && b <= K) elevsByBand[b].push(origData[i]);
+          }
+          const ceil = new Float64Array(K + 1).fill(Infinity);
+          const med = new Float64Array(K + 1).fill(NaN);
+          for (let b = 1; b <= K; b++) {
+            const arr = elevsByBand[b];
+            if (arr.length === 0) continue;
+            arr.sort((x, y) => x - y);
+            med[b] = arr[Math.floor(arr.length * 0.5)];
+            if (arr.length >= minSamples) ceil[b] = arr[Math.min(arr.length - 1, Math.floor(arr.length * pct))];
+          }
+          // Land bands ordered low→high by typical (median) elevation.
+          const order = [];
+          for (let b = 1; b <= K; b++) if (!isNaN(med[b])) order.push(b);
+          order.sort((a, b) => med[a] - med[b]);
+          for (let i = 0; i < w * h; i++) {
+            if (waterMask[i]) continue;
+            const b = pixelBands[i];
+            if (b < 1 || b > K) continue;
+            const z = origData[i];
+            if (!(z > ceil[b])) continue;                     // at/below its ceiling → keep
+            let target = -1;
+            for (const cand of order) {                       // lowest higher band that reaches z
+              if (med[cand] <= med[b]) continue;
+              if (ceil[cand] >= z) { target = cand; break; }
+            }
+            if (target === -1) {                              // nothing reaches z → top tier
+              for (let k = order.length - 1; k >= 0; k--) { if (med[order[k]] > med[b]) { target = order[k]; break; } }
+            }
+            if (target !== -1) pixelBands[i] = target;
+          }
+        }
       } else {
         // Land cover (semantic): classify each land pixel into a land-cover class,
         // keep the most-common classes within the colour budget, merge the rest into
@@ -3530,6 +3584,8 @@ const Advanced = {
     ['sat-note', 'sat-detail-group', 'sat-shell-group'].forEach(id => {
       document.getElementById(id).style.display = perRegion ? 'block' : 'none';
     });
+    // Elevation cap is satellite-only (land cover is classified, no shading issue).
+    document.getElementById('sat-cap-group').style.display = (val === 'satellite') ? 'block' : 'none';
   },
 
   _count() {
