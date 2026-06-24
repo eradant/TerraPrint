@@ -651,6 +651,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-coords-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Coordinates</label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-legend-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Color key / legend</label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-scale-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Scale bar</label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-arch-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Arched top (circular maps)</label>
           </div>
           <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
             <input type="checkbox" id="frame-border-on" style="accent-color:var(--accent);width:15px;height:15px;" onchange="document.getElementById('frame-border-opts').style.display=this.checked?'flex':'none'">
@@ -2676,6 +2677,76 @@ const ThreeMFExport = {
     // Panel bottom: at least the requested height, but grown to contain content.
     const Y0 = Math.min(-(fw + ph), lowestY - pad);
 
+    const objs = [];
+    const archOn = mesh.shapeMask && document.getElementById('frame-arch-on')?.checked;
+
+    if (archOn) {
+      // ── Arched ("domed") frame for circular maps ────────────────────────────
+      // One grid at terrain spacing (aligned to the terrain grid inside the window)
+      // masked by: inside the arched outline AND not a full-disc (terrain) quad.
+      // Smooth dome on top, straight sides, rectangular cartouche; the inner circular
+      // edge uses the same shapeMask as the terrain, so it's flush (no seam ring).
+      const gw = mesh.gridW, gh = mesh.gridH, sm = mesh.shapeMask;
+      const cellX = meshW / (gw - 1), cellY = meshH / (gh - 1);
+      const cx = meshW / 2, cy = meshH / 2, R = meshW / 2, Ro = R + fw;
+
+      // Grid coordinates: terrain lattice (0..meshW / 0..meshH) extended to the margins.
+      const coords = (lo, hi, cell) => {
+        const out = [];
+        for (let v = 0; v > lo + 1e-9; v -= cell) out.push(v);
+        out.push(lo); out.reverse();                    // lo … -cell, 0
+        for (let v = cell; v < hi - 1e-9; v += cell) out.push(v);
+        out.push(hi);                                    // … <hi, hi
+        return out;
+      };
+      const xsA = coords(X0, X1, cellX), ysA = coords(Y0, Y1, cellY);
+
+      // Outline: dome above the equator, straight box below.
+      const inOutline = (x, y) => (y >= cy)
+        ? ((x-cx)*(x-cx) + (y-cy)*(y-cy) <= Ro*Ro + 1e-6)
+        : (x >= X0 - 1e-6 && x <= X1 + 1e-6 && y >= Y0 - 1e-6);
+      // Disc test via terrain shapeMask (exact flush match with the terrain cliff).
+      const discAt = (x, y) => {
+        if (x < -1e-6 || x > meshW + 1e-6 || y < -1e-6 || y > meshH + 1e-6) return false;
+        const col = Math.round(x / cellX), row = (gh - 1) - Math.round(y / cellY);
+        return (col >= 0 && col < gw && row >= 0 && row < gh) ? !!sm[row*gw + col] : false;
+      };
+      const allCorners = (fn, x0, y0, x1, y1) => fn(x0,y0) && fn(x1,y0) && fn(x0,y1) && fn(x1,y1);
+
+      const plateTris = [];
+      for (let i = 0; i < xsA.length - 1; i++) {
+        for (let j = 0; j < ysA.length - 1; j++) {
+          const x0 = xsA[i], x1 = xsA[i+1], y0 = ysA[j], y1 = ysA[j+1];
+          if (!allCorners(inOutline, x0, y0, x1, y1)) continue;     // outside the dome/box
+          if (allCorners(discAt, x0, y0, x1, y1)) continue;          // that's terrain
+          this._rectTris(plateTris, x0, y0, x1, y1);
+        }
+      }
+      objs.push({ name: 'Frame', hex: '#2B2B2B', solid: this._extrudePrism(plateTris, 0, frameH) });
+
+      // Raised rim following the arched outline (band of width rimW).
+      if (document.getElementById('frame-border-on')?.checked) {
+        const rimW = Math.min(parseFloat(document.getElementById('frame-rim-width')?.value) || 4, fw);
+        const rimH = parseFloat(document.getElementById('frame-rim-height')?.value) || 4;
+        const inInset = (x, y) => (y >= cy)
+          ? ((x-cx)*(x-cx) + (y-cy)*(y-cy) <= (Ro-rimW)*(Ro-rimW) + 1e-6)
+          : (x >= X0 + rimW - 1e-6 && x <= X1 - rimW + 1e-6 && y >= Y0 + rimW - 1e-6);
+        const rimTris = [];
+        for (let i = 0; i < xsA.length - 1; i++) {
+          for (let j = 0; j < ysA.length - 1; j++) {
+            const x0 = xsA[i], x1 = xsA[i+1], y0 = ysA[j], y1 = ysA[j+1];
+            if (!allCorners(inOutline, x0, y0, x1, y1)) continue;
+            if (allCorners(inInset, x0, y0, x1, y1)) continue;       // hollow interior
+            this._rectTris(rimTris, x0, y0, x1, y1);
+          }
+        }
+        objs.push({ name: 'Border', hex: '#1E1E1E', solid: this._extrudePrism(rimTris, frameH, frameH + rimH) });
+      }
+
+      return [...objs, ...elems];
+    }
+
+    // ── Rectangular frame (non-circular tiles, or arched top disabled) ──────────
     // Frame plate: outer rectangle minus the terrain window, as an aligned 3×3 grid
     // of cells (skipping the window) so all shared edges match — no T-junctions.
     const xs = [X0, 0, meshW, X1], ys = [Y0, 0, meshH, Y1];
@@ -2686,7 +2757,7 @@ const ThreeMFExport = {
         this._rectTris(frameTris, xs[ci], ys[ri], xs[ci+1], ys[ri+1]);
       }
     }
-    const objs = [{ name: 'Frame', hex: '#2B2B2B', solid: this._extrudePrism(frameTris, 0, frameH) }];
+    objs.push({ name: 'Frame', hex: '#2B2B2B', solid: this._extrudePrism(frameTris, 0, frameH) });
 
     // Circular tile: the card stays rectangular, so fill the square window's corners
     // (window square minus the disc) with card material. Built on the terrain grid so
