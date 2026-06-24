@@ -539,6 +539,14 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
               <span class="range-val" id="sat-cap-val">off</span>
             </div>
           </div>
+          <div id="sat-high-group" class="input-group" style="display:none;align-items:center;gap:8px;">
+            <label style="margin:0;">High-elevation tints <span style="color:var(--text-muted);font-size:11px;">(split rock into light + shadow)</span></label>
+            <select id="sat-high" style="flex:0 0 auto;">
+              <option value="0">Off</option>
+              <option value="2" selected>2</option>
+              <option value="3">3</option>
+            </select>
+          </div>
           <div id="sat-shell-group" style="display:none;">
             <div class="input-group">
               <label>Color depth (mm) <span style="color:var(--text-muted);font-size:11px;">(top photo shell)</span></label>
@@ -1680,12 +1688,47 @@ const MeshGen = {
 
       if (kind === 'photo') {
         // Photographic: cluster land satellite colours into the land tints.
-        const { centroids, assign } = kmeansRGB(colorImage.rgb, landMask, w * h, numLandTints, 12);
-        for (let i = 0; i < w * h; i++) {
-          pixelBands[i] = waterMask[i] ? 0 : (assign[i] >= 0 ? assign[i] + 1 : 1);
-        }
         const toHex = c => '#' + c.map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
-        bandColors = centroids.map(toHex);
+        // High-elevation split (8-colour only): rock is a small share of a tile's area,
+        // so global k-means leaves it one flat colour. Dedicate kHigh tints to a
+        // separately-clustered high-elevation tier so rock carries light/shadow detail.
+        const highCount = (numColors === 8)
+          ? (parseInt(document.getElementById('sat-high')?.value) || 0) : 0;
+        const assignGlobal = () => {
+          const { centroids, assign } = kmeansRGB(colorImage.rgb, landMask, w * h, numLandTints, 12);
+          for (let i = 0; i < w * h; i++) pixelBands[i] = waterMask[i] ? 0 : (assign[i] >= 0 ? assign[i] + 1 : 1);
+          bandColors = centroids.map(toHex);
+        };
+        if (highCount >= 2 && highCount < numLandTints) {
+          const kHigh = highCount, kLow = numLandTints - kHigh;
+          const landElevs = [];
+          for (let i = 0; i < w * h; i++) if (!waterMask[i]) landElevs.push(origData[i]);
+          landElevs.sort((a, b) => a - b);
+          const highFrac = 0.15;                          // high tier ≈ top 15% by area (the rock zone)
+          const tHigh = landElevs[Math.floor(landElevs.length * (1 - highFrac))];
+          const lowMask = new Uint8Array(w * h), highMask = new Uint8Array(w * h);
+          let highN = 0;
+          for (let i = 0; i < w * h; i++) {
+            if (waterMask[i]) continue;
+            if (origData[i] >= tHigh) { highMask[i] = 1; highN++; } else lowMask[i] = 1;
+          }
+          const minHigh = Math.max(kHigh * 30, Math.round(0.01 * w * h));
+          if (highN < minHigh) {
+            assignGlobal();                               // too sparse to split → global
+          } else {
+            const lo = kmeansRGB(colorImage.rgb, lowMask, w * h, kLow, 12);
+            const hi = kmeansRGB(colorImage.rgb, highMask, w * h, kHigh, 12);
+            for (let i = 0; i < w * h; i++) {
+              if (waterMask[i]) { pixelBands[i] = 0; continue; }
+              pixelBands[i] = highMask[i]
+                ? kLow + 1 + (hi.assign[i] >= 0 ? hi.assign[i] : 0)
+                : 1 + (lo.assign[i] >= 0 ? lo.assign[i] : 0);
+            }
+            bandColors = [...lo.centroids.map(toHex), ...hi.centroids.map(toHex)];
+          }
+        } else {
+          assignGlobal();
+        }
 
         // Elevation cap ("treeline"): a shaded/north-facing high slope photographs dark
         // and k-means lumps it with low forest, so a dark colour runs up the whole peak.
@@ -3574,6 +3617,7 @@ const Advanced = {
   // Palette size: '8' (2 AMS, Water + 7 tints) or '4' (1 AMS, Water + 3 tints).
   setCount(val) {
     document.getElementById('adv-extra').style.display = val === '4' ? 'none' : 'block';
+    this._updateSatHigh();
     this.autofit();
   },
 
@@ -3586,6 +3630,15 @@ const Advanced = {
     });
     // Elevation cap is satellite-only (land cover is classified, no shading issue).
     document.getElementById('sat-cap-group').style.display = (val === 'satellite') ? 'block' : 'none';
+    this._updateSatHigh();
+  },
+
+  // High-elevation tints selector applies only to satellite + 8-color.
+  _updateSatHigh() {
+    const src = document.getElementById('adv-source')?.value;
+    const cnt = document.getElementById('adv-count')?.value;
+    document.getElementById('sat-high-group').style.display =
+      (src === 'satellite' && cnt === '8') ? 'flex' : 'none';
   },
 
   _count() {
