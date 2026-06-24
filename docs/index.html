@@ -517,10 +517,14 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
             </select>
           </div>
           <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-            <input type="checkbox" id="sat-mode-on" style="accent-color:var(--accent);width:15px;height:15px;" onchange="const s=this.checked;['sat-note','sat-detail-group','sat-shell-group'].forEach(id=>document.getElementById(id).style.display=s?'block':'none');">
-            <label for="sat-mode-on" style="margin:0;cursor:pointer;">Photographic (sample satellite imagery)</label>
+            <label style="margin:0;">Color source</label>
+            <select id="adv-source" onchange="Advanced.setSource(this.value)" style="flex:1 1 auto;">
+              <option value="elevation" selected>Elevation bands</option>
+              <option value="satellite">Satellite photo</option>
+              <option value="landcover">Land cover (semantic)</option>
+            </select>
           </div>
-          <p id="sat-note" style="display:none;font-size:11px;color:var(--text-muted);margin:0 0 8px;">Colors &amp; tints below are auto-derived from the satellite image on Generate. The photo colors are printed only in the top "Color depth" mm; everything beneath prints in the single Base color.</p>
+          <p id="sat-note" style="display:none;font-size:11px;color:var(--text-muted);margin:0 0 8px;">Colors below are auto-derived on Generate (satellite = sampled photo; land cover = classified). They print only in the top "Color depth" mm; everything beneath prints in the single Base color.</p>
           <div id="sat-detail-group" class="input-group" style="display:none;">
             <label>Detail <span style="color:var(--text-muted);font-size:11px;">(sharper ↔ cleaner blocks)</span></label>
             <div class="range-row">
@@ -760,6 +764,7 @@ const State = {
   elevationData: null,     // {width, height, data: Float32Array, bounds}
   meshData: null,          // generated mesh
   waterOverride: null,     // { w, h, add:Uint8Array, remove:Uint8Array } manual paint edits
+  advNames: null,          // per-band names for the legend (land-cover mode)
 };
 
 // ═══════════════════════════════════════════════
@@ -1095,6 +1100,81 @@ function kmeansRGB(rgb, mask, n, k, iters) {
 }
 
 // ═══════════════════════════════════════════════
+//  LAND COVER  (semantic colouring — ESA WorldCover 10m)
+// ═══════════════════════════════════════════════
+
+// ESA WorldCover classes: name + standard palette hex (used to reverse-map the
+// colourised WMS PNG back to a class, and as the default band colours).
+const LANDCOVER_CLASSES = [
+  { name: 'Trees',     hex: '#006400' }, // 10 tree cover
+  { name: 'Shrubland', hex: '#ffbb22' }, // 20
+  { name: 'Grassland', hex: '#ffff4c' }, // 30
+  { name: 'Cropland',  hex: '#f096ff' }, // 40
+  { name: 'Built-up',  hex: '#fa0000' }, // 50
+  { name: 'Bare',      hex: '#b4b4b4' }, // 60
+  { name: 'Snow/Ice',  hex: '#f0f0f0' }, // 70
+  { name: 'Water',     hex: '#0064c8' }, // 80 — handled by water detection, excluded for land
+  { name: 'Wetland',   hex: '#0096a0' }, // 90
+  { name: 'Mangrove',  hex: '#00cf75' }, // 95
+  { name: 'Moss',      hex: '#fae6a0' }, // 100
+];
+const LC_RGB = LANDCOVER_CLASSES.map(c => [
+  parseInt(c.hex.slice(1,3),16), parseInt(c.hex.slice(3,5),16), parseInt(c.hex.slice(5,7),16),
+]);
+const LC_WATER = LANDCOVER_CLASSES.findIndex(c => c.name === 'Water');
+
+// Per-pixel nearest WorldCover class for an RGB grid.
+function classifyLandcover(rgb, n) {
+  const out = new Int16Array(n);
+  for (let i = 0; i < n; i++) {
+    const r = rgb[i*3], g = rgb[i*3+1], b = rgb[i*3+2];
+    let best = 0, bd = Infinity;
+    for (let c = 0; c < LC_RGB.length; c++) {
+      const dr = r-LC_RGB[c][0], dg = g-LC_RGB[c][1], db = b-LC_RGB[c][2];
+      const d = dr*dr + dg*dg + db*db;
+      if (d < bd) { bd = d; best = c; }
+    }
+    out[i] = best;
+  }
+  return out;
+}
+
+const Landcover = {
+  // ESA WorldCover via Terrascope WMS GetMap — one colourised PNG for the bbox at the
+  // grid resolution (lat/lon bbox = our bounds, so it aligns with the elevation grid).
+  // Returns { width, height, rgb } or null on failure (→ caller falls back gracefully).
+  async fetch(bounds, resolution) {
+    try {
+      showLoading('Fetching land cover…');
+      const s = bounds.getSouth(), w = bounds.getWest(), n = bounds.getNorth(), e = bounds.getEast();
+      const url = 'https://services.terrascope.be/wms/v2?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0'
+        + '&LAYERS=WORLDCOVER_2021_MAP&CRS=EPSG:4326&STYLES='
+        + `&BBOX=${s},${w},${n},${e}&WIDTH=${resolution}&HEIGHT=${resolution}&FORMAT=image/png`;
+      const img = await new Promise((resolve, reject) => {
+        const im = new Image();
+        im.crossOrigin = 'anonymous';
+        im.onload = () => resolve(im);
+        im.onerror = () => reject(new Error('land cover image load failed'));
+        im.src = url;
+      });
+      const cv = document.createElement('canvas');
+      cv.width = resolution; cv.height = resolution;
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, resolution, resolution);
+      const data = ctx.getImageData(0, 0, resolution, resolution).data; // throws if CORS-tainted
+      const rgb = new Uint8Array(resolution * resolution * 3);
+      for (let i = 0; i < resolution * resolution; i++) {
+        rgb[i*3] = data[i*4]; rgb[i*3+1] = data[i*4+1]; rgb[i*3+2] = data[i*4+2];
+      }
+      return { width: resolution, height: resolution, rgb };
+    } catch (e) {
+      console.warn('Land cover fetch/read failed:', e);
+      return null;
+    }
+  },
+};
+
+// ═══════════════════════════════════════════════
 //  WATER DETECTION
 // ═══════════════════════════════════════════════
 
@@ -1310,11 +1390,12 @@ function getBandConfig() {
     // Palette size: 8 (2 AMS) or 4 (1 AMS).
     const countSel = document.getElementById('adv-count');
     const N = countSel && countSel.value === '4' ? 4 : 8;
+    const names = State.advNames; // class names in land-cover mode, else null
     const colors = [];
     for (let i = 0; i < N; i++) {
       const el = document.getElementById('adv-color-' + i);
       colors.push({
-        name: i === 0 ? 'Water' : 'Tint ' + i,
+        name: (names && names[i]) || (i === 0 ? 'Water' : 'Tint ' + i),
         hex: (el && el.value) || ADV_DEFAULT_COLORS[i],
       });
     }
@@ -1347,8 +1428,9 @@ function getBandConfig() {
 const MeshGen = {
   // Generate mesh from elevation data.
   // lakeMask: optional Uint8Array (1=lake pixel), lakeElevMap: optional Float32Array.
-  // satImage: optional { width, height, rgb } for photographic (satellite) colouring.
-  generate(elevData, lakeMask = null, lakeElevMap = null, satImage = null) {
+  // colorImage: optional { kind:'photo'|'landcover', width, height, rgb } for per-region
+  // (top-shell) coloring from satellite photo (k-means) or land-cover classification.
+  generate(elevData, lakeMask = null, lakeElevMap = null, colorImage = null) {
     const printSize = parseFloat(document.getElementById('print-size').value) || 150;
     const vertExag = parseFloat(document.getElementById('vert-exag').value) || 2;
     const baseHeight = parseFloat(document.getElementById('base-height').value) || 4;
@@ -1576,18 +1658,61 @@ const MeshGen = {
       return b;
     };
     const pixelBands = new Uint8Array(w * h);
-    let satellite = false;
-    if (satImage && satImage.width === w && satImage.height === h) {
-      // Photographic mode: cluster land (non-water) satellite colours into 7 tints.
+    let satellite = false;        // per-region (top-shell) coloring flag
+    let advNames = null;          // class names for the legend (land-cover mode)
+    const kind = (colorImage && colorImage.width === w && colorImage.height === h)
+      ? colorImage.kind : null;
+    if (kind === 'photo' || kind === 'landcover') {
       satellite = true;
+      const numLandTints = numColors - 1; // 7 (8 colours) or 3 (4 colours)
       const landMask = new Uint8Array(w * h);
       for (let i = 0; i < w * h; i++) landMask[i] = waterMask[i] ? 0 : 1;
-      const numLandTints = numColors - 1; // 7 (8 colours) or 3 (4 colours)
-      const { centroids, assign } = kmeansRGB(satImage.rgb, landMask, w * h, numLandTints, 12);
-      for (let i = 0; i < w * h; i++) {
-        pixelBands[i] = waterMask[i] ? 0 : (assign[i] >= 0 ? assign[i] + 1 : 1);
+      let bandColors = []; // hex per land band 1..numLandTints
+
+      if (kind === 'photo') {
+        // Photographic: cluster land satellite colours into the land tints.
+        const { centroids, assign } = kmeansRGB(colorImage.rgb, landMask, w * h, numLandTints, 12);
+        for (let i = 0; i < w * h; i++) {
+          pixelBands[i] = waterMask[i] ? 0 : (assign[i] >= 0 ? assign[i] + 1 : 1);
+        }
+        const toHex = c => '#' + c.map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
+        bandColors = centroids.map(toHex);
+      } else {
+        // Land cover (semantic): classify each land pixel into a WorldCover class,
+        // keep the most-common classes within the colour budget, merge the rest into
+        // the nearest kept class. Water stays band 0 (detection). Names → legend.
+        const cls = classifyLandcover(colorImage.rgb, w * h);
+        const colDist = (a, b) => { const dr=LC_RGB[a][0]-LC_RGB[b][0], dg=LC_RGB[a][1]-LC_RGB[b][1], db=LC_RGB[a][2]-LC_RGB[b][2]; return dr*dr+dg*dg+db*db; };
+        const nearestNonWater = c => {
+          if (c !== LC_WATER) return c;
+          let best = 0, bd = Infinity;
+          for (let k = 0; k < LC_RGB.length; k++) { if (k === LC_WATER) continue; const d = colDist(c, k); if (d < bd) { bd = d; best = k; } }
+          return best;
+        };
+        const area = new Array(LANDCOVER_CLASSES.length).fill(0);
+        const landCls = new Int16Array(w * h);
+        for (let i = 0; i < w * h; i++) {
+          if (waterMask[i]) { landCls[i] = -1; continue; }
+          const c = nearestNonWater(cls[i]); landCls[i] = c; area[c]++;
+        }
+        const present = [];
+        for (let c = 0; c < LANDCOVER_CLASSES.length; c++) if (c !== LC_WATER && area[c] > 0) present.push(c);
+        present.sort((a, b) => area[b] - area[a]);
+        const kept = present.slice(0, numLandTints);
+        const classToBand = new Array(LANDCOVER_CLASSES.length).fill(1);
+        kept.forEach((c, idx) => { classToBand[c] = idx + 1; });
+        for (let c = 0; c < LANDCOVER_CLASSES.length; c++) {
+          if (c === LC_WATER || kept.indexOf(c) >= 0) continue;
+          let bestIdx = 1, bd = Infinity;
+          kept.forEach((k, idx) => { const d = colDist(c, k); if (d < bd) { bd = d; bestIdx = idx + 1; } });
+          classToBand[c] = bestIdx;
+        }
+        for (let i = 0; i < w * h; i++) pixelBands[i] = waterMask[i] ? 0 : classToBand[landCls[i]];
+        bandColors = kept.map(c => LANDCOVER_CLASSES[c].hex);
+        advNames = ['Water', ...kept.map(c => LANDCOVER_CLASSES[c].name)];
       }
-      // Despeckle the clustered assignment (3×3 majority among land neighbours) so
+
+      // Despeckle the assignment (3×3 majority among land neighbours) so
       // colour regions are coherent — cleaner blocks and fewer non-manifold seams.
       // The Detail slider sets the pass count: high detail = sharp (few passes),
       // low detail = heavy smoothing (clean poster-like blocks).
@@ -1660,13 +1785,14 @@ const MeshGen = {
       }
 
       // Write the derived palette into the advanced colour pickers (land tints).
-      const toHex = c => '#' + c.map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
-      for (let c = 0; c < centroids.length && c < numLandTints; c++) {
+      for (let c = 0; c < bandColors.length && c < numLandTints; c++) {
         const el = document.getElementById('adv-color-' + (c + 1));
-        if (el) el.value = toHex(centroids[c]);
+        if (el) el.value = bandColors[c];
       }
+      State.advNames = advNames; // class names for land-cover legend (else null)
     } else {
       for (let i = 0; i < w * h; i++) pixelBands[i] = waterMask[i] ? 0 : bandOf(origData[i]);
+      State.advNames = null;
     }
 
     // Derive triColors from pixelBands (majority band among a triangle's terrain vertices)
@@ -3050,18 +3176,24 @@ const UI = {
         }
       }
 
-      // Photographic (satellite) colouring — only in advanced mode with the box ticked.
-      let satImage = null;
-      if (document.getElementById('adv-colors-on')?.checked &&
-          document.getElementById('sat-mode-on')?.checked) {
+      // Per-region colouring source (advanced mode): satellite photo or land cover.
+      let colorImage = null;
+      const advOn = document.getElementById('adv-colors-on')?.checked;
+      const source = advOn ? (document.getElementById('adv-source')?.value || 'elevation') : 'elevation';
+      if (source === 'satellite') {
         showLoading('Fetching satellite imagery…');
-        satImage = await Satellite.fetch(State.selectedBounds, resolution);
-        if (!satImage) toast('Satellite imagery unavailable — using elevation colors.');
+        const img = await Satellite.fetch(State.selectedBounds, resolution);
+        if (img) colorImage = { kind: 'photo', ...img };
+        else toast('Satellite imagery unavailable — using elevation colors.');
+      } else if (source === 'landcover') {
+        const img = await Landcover.fetch(State.selectedBounds, resolution);
+        if (img) colorImage = { kind: 'landcover', ...img };
+        else toast('Land cover unavailable — using elevation colors.');
       }
 
       showLoading('Generating mesh…');
       await new Promise(r => setTimeout(r, 50));
-      const rawMesh = MeshGen.generate(State.elevationData, lakeMask, lakeElevMap, satImage);
+      const rawMesh = MeshGen.generate(State.elevationData, lakeMask, lakeElevMap, colorImage);
 
       showLoading('Checking mesh…');
       await new Promise(r => setTimeout(r, 20));
@@ -3387,6 +3519,15 @@ const Advanced = {
   setCount(val) {
     document.getElementById('adv-extra').style.display = val === '4' ? 'none' : 'block';
     this.autofit();
+  },
+
+  // Color source: 'elevation' | 'satellite' | 'landcover'. The latter two are
+  // per-region (top-shell) modes that share the Detail + Color depth + Base controls.
+  setSource(val) {
+    const perRegion = (val === 'satellite' || val === 'landcover');
+    ['sat-note', 'sat-detail-group', 'sat-shell-group'].forEach(id => {
+      document.getElementById(id).style.display = perRegion ? 'block' : 'none';
+    });
   },
 
   _count() {
