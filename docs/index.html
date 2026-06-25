@@ -547,6 +547,36 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
               <option value="3">3</option>
             </select>
           </div>
+          <div id="sat-fine-group" style="display:none;">
+            <div class="input-group">
+              <label>Region shape <span style="color:var(--text-muted);font-size:11px;">(edge-hug ↔ smooth)</span></label>
+              <div class="range-row">
+                <input type="range" id="sat-shape" min="5" max="40" step="1" value="10" oninput="document.getElementById('sat-shape-val').textContent=this.value">
+                <span class="range-val" id="sat-shape-val">10</span>
+              </div>
+            </div>
+            <div class="input-group">
+              <label>Texture smoothing <span style="color:var(--text-muted);font-size:11px;">(crisp ↔ clean)</span></label>
+              <div class="range-row">
+                <input type="range" id="sat-smooth" min="0" max="10" step="1" value="5" oninput="document.getElementById('sat-smooth-val').textContent=this.value">
+                <span class="range-val" id="sat-smooth-val">5</span>
+              </div>
+            </div>
+            <div class="input-group">
+              <label>Contrast</label>
+              <div class="range-row">
+                <input type="range" id="sat-contrast" min="-50" max="50" step="5" value="0" oninput="document.getElementById('sat-contrast-val').textContent=(this.value>0?'+':'')+this.value">
+                <span class="range-val" id="sat-contrast-val">0</span>
+              </div>
+            </div>
+            <div class="input-group">
+              <label>Brightness</label>
+              <div class="range-row">
+                <input type="range" id="sat-bright" min="-50" max="50" step="5" value="0" oninput="document.getElementById('sat-bright-val').textContent=(this.value>0?'+':'')+this.value">
+                <span class="range-val" id="sat-bright-val">0</span>
+              </div>
+            </div>
+          </div>
           <div id="sat-shell-group" style="display:none;">
             <div class="input-group">
               <label>Color depth (mm) <span style="color:var(--text-muted);font-size:11px;">(top photo shell)</span></label>
@@ -1132,6 +1162,18 @@ function rgbToLab(rgb, n) {
     out[i*3]   = 116 * y - 16;       // L
     out[i*3+1] = 500 * (x - y);      // a
     out[i*3+2] = 200 * (y - z);      // b
+  }
+  return out;
+}
+
+// Contrast/brightness adjust an RGB grid before colours are derived: v' = clamp((v-128)*
+// contrast + 128 + brightness). Returns the input unchanged when neutral (no copy) so the
+// default path is byte-identical.
+function adjustExposure(rgb, contrast, brightness) {
+  if (contrast === 1 && brightness === 0) return rgb;
+  const out = new Uint8Array(rgb.length);
+  for (let i = 0; i < rgb.length; i++) {
+    out[i] = Math.max(0, Math.min(255, (rgb[i] - 128) * contrast + 128 + brightness));
   }
   return out;
 }
@@ -1799,13 +1841,18 @@ const MeshGen = {
       if (kind === 'photo') {
         // Photographic: cluster land satellite colours into the land tints.
         const toHex = c => '#' + c.map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
+        // Exposure pre-adjust (Fine-tune sliders): contrast/brightness applied to the
+        // source image before colours are derived, so the palette reflects it too.
+        const cF = 1 + (parseFloat(document.getElementById('sat-contrast')?.value) || 0) / 100;
+        const bO = parseFloat(document.getElementById('sat-bright')?.value) || 0;
+        const srcRgb = adjustExposure(colorImage.rgb, cF, bO);
         // High-elevation split (8-colour only): rock is a small share of a tile's area,
         // so global k-means leaves it one flat colour. Dedicate kHigh tints to a
         // separately-clustered high-elevation tier so rock carries light/shadow detail.
         const highCount = (numColors === 8)
           ? (parseInt(document.getElementById('sat-high')?.value) || 0) : 0;
         const assignGlobal = () => {
-          const { centroids, assign } = kmeansRGB(colorImage.rgb, landMask, w * h, numLandTints, 12);
+          const { centroids, assign } = kmeansRGB(srcRgb, landMask, w * h, numLandTints, 12);
           for (let i = 0; i < w * h; i++) pixelBands[i] = waterMask[i] ? 0 : (assign[i] >= 0 ? assign[i] + 1 : 1);
           bandColors = centroids.map(toHex);
         };
@@ -1831,15 +1878,15 @@ const MeshGen = {
             // then assigned to their nearest centroid by COLOUR (not by a hard elevation
             // cut), so the rock's light/shadow tints follow real shading instead of
             // ringing the mountain at the cutoff elevation (which read as "banding").
-            const lo = kmeansRGB(colorImage.rgb, lowMask, w * h, kLow, 12);
-            const hi = kmeansRGB(colorImage.rgb, highMask, w * h, kHigh, 12);
+            const lo = kmeansRGB(srcRgb, lowMask, w * h, kLow, 12);
+            const hi = kmeansRGB(srcRgb, highMask, w * h, kHigh, 12);
             const cents = [...lo.centroids, ...hi.centroids];
             const lumOf = c => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
             const ord = cents.map((c, i) => i).sort((a, b) => lumOf(cents[a]) - lumOf(cents[b]));
             const pal = ord.map(i => cents[i]);             // dark→light, stable palette
             for (let i = 0; i < w * h; i++) {
               if (waterMask[i]) { pixelBands[i] = 0; continue; }
-              const r = colorImage.rgb[i*3], g = colorImage.rgb[i*3+1], b = colorImage.rgb[i*3+2];
+              const r = srcRgb[i*3], g = srcRgb[i*3+1], b = srcRgb[i*3+2];
               let best = 0, bd = Infinity;
               for (let c = 0; c < pal.length; c++) {
                 const dr = r-pal[c][0], dg = g-pal[c][1], db = b-pal[c][2];
@@ -1987,9 +2034,14 @@ const MeshGen = {
         // A bilateral pre-smooth first is essential — without it SLIC fragments on texture
         // noise; with it, region borders adhere to genuine edges.
         const regionArea = Math.round(70 + Math.pow((10 - detail) / 9, 1.4) * 360); // ~70 … ~430 px
-        const smooth = bilateralRGB(colorImage.rgb, w, h, 2, 30, 2);
+        const m = parseFloat(document.getElementById('sat-shape')?.value) || 10; // SLIC compactness
+        const sVal = parseFloat(document.getElementById('sat-smooth')?.value);
+        const smoothAmt = isFinite(sVal) ? sVal : 5;
+        const passes = smoothAmt <= 1 ? 1 : smoothAmt <= 6 ? 2 : 3;   // 5 → 2 (default)
+        const sigmaC = 15 + smoothAmt * 3;                            // 5 → 30 (default)
+        const smooth = bilateralRGB(srcRgb, w, h, 2, sigmaC, passes);
         const lab = rgbToLab(smooth, w * h);
-        const { labels, K } = slicLabels(lab, w, h, landMask, regionArea, 10, 10);
+        const { labels, K } = slicLabels(lab, w, h, landMask, regionArea, m, 10);
         if (K > 0) {
           const stride = numLandTints + 1;
           const counts = new Int32Array(K * stride);
@@ -3795,8 +3847,9 @@ const Advanced = {
     ['sat-note', 'sat-detail-group', 'sat-shell-group'].forEach(id => {
       document.getElementById(id).style.display = perRegion ? 'block' : 'none';
     });
-    // Elevation cap is satellite-only (land cover is classified, no shading issue).
+    // Elevation cap + fine-tune sliders are satellite-only (land cover is classified).
     document.getElementById('sat-cap-group').style.display = (val === 'satellite') ? 'block' : 'none';
+    document.getElementById('sat-fine-group').style.display = (val === 'satellite') ? 'block' : 'none';
     this._updateSatHigh();
   },
 
