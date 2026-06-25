@@ -1837,6 +1837,7 @@ const MeshGen = {
       const landMask = new Uint8Array(w * h);
       for (let i = 0; i < w * h; i++) landMask[i] = waterMask[i] ? 0 : 1;
       let bandColors = []; // hex per land band 1..numLandTints
+      let srcRgb = null;   // exposure-adjusted source image (photo); set below, used by SLIC
 
       if (kind === 'photo') {
         // Photographic: cluster land satellite colours into the land tints.
@@ -1845,7 +1846,7 @@ const MeshGen = {
         // source image before colours are derived, so the palette reflects it too.
         const cF = 1 + (parseFloat(document.getElementById('sat-contrast')?.value) || 0) / 100;
         const bO = parseFloat(document.getElementById('sat-bright')?.value) || 0;
-        const srcRgb = adjustExposure(colorImage.rgb, cF, bO);
+        srcRgb = adjustExposure(colorImage.rgb, cF, bO);
         // High-elevation split (8-colour only): rock is a small share of a tile's area,
         // so global k-means leaves it one flat colour. Dedicate kHigh tints to a
         // separately-clustered high-elevation tier so rock carries light/shadow detail.
