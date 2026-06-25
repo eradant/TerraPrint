@@ -1114,6 +1114,116 @@ function kmeansRGB(rgb, mask, n, k, iters) {
   return { centroids, assign };
 }
 
+// sRGB bytes → CIELAB (D65), as a Float32Array(3n): [L,a,b, L,a,b, …]. Perceptual
+// distance in LAB ≈ how different two colours look, which makes SLIC borders adhere to
+// edges humans actually see.
+function rgbToLab(rgb, n) {
+  const out = new Float32Array(3 * n);
+  const f = t => t > 0.008856 ? Math.cbrt(t) : (7.787 * t + 16 / 116);
+  for (let i = 0; i < n; i++) {
+    let r = rgb[i*3] / 255, g = rgb[i*3+1] / 255, b = rgb[i*3+2] / 255;
+    r = r > 0.04045 ? Math.pow((r + 0.055) / 1.055, 2.4) : r / 12.92;
+    g = g > 0.04045 ? Math.pow((g + 0.055) / 1.055, 2.4) : g / 12.92;
+    b = b > 0.04045 ? Math.pow((b + 0.055) / 1.055, 2.4) : b / 12.92;
+    // linear RGB → XYZ → normalise by D65 white
+    const x = f((r*0.4124 + g*0.3576 + b*0.1805) / 0.95047);
+    const y = f((r*0.2126 + g*0.7152 + b*0.0722) / 1.00000);
+    const z = f((r*0.0193 + g*0.1192 + b*0.9505) / 1.08883);
+    out[i*3]   = 116 * y - 16;       // L
+    out[i*3+1] = 500 * (x - y);      // a
+    out[i*3+2] = 200 * (y - z);      // b
+  }
+  return out;
+}
+
+// Edge-preserving bilateral smooth of an RGB grid. Averages each pixel with neighbours
+// weighted by spatial AND colour distance, so within-feature texture/noise is flattened
+// while real edges (large colour jumps) are kept. Run before SLIC so superpixels lock onto
+// genuine edges instead of fragmenting on noise. Returns a new Uint8Array(n*3).
+function bilateralRGB(rgb, w, h, radius, sigmaColor, passes) {
+  const n = w * h, sc2 = 2 * sigmaColor * sigmaColor, sp2 = 2 * radius * radius;
+  let cur = rgb;
+  for (let p = 0; p < passes; p++) {
+    const out = new Uint8Array(n * 3);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x, r0 = cur[i*3], g0 = cur[i*3+1], b0 = cur[i*3+2];
+        let wsum = 0, sr = 0, sg = 0, sb = 0;
+        const y0 = Math.max(0, y-radius), y1 = Math.min(h-1, y+radius);
+        const x0 = Math.max(0, x-radius), x1 = Math.min(w-1, x+radius);
+        for (let yy = y0; yy <= y1; yy++) {
+          for (let xx = x0; xx <= x1; xx++) {
+            const j = (yy*w + xx) * 3;
+            const dr = cur[j]-r0, dg = cur[j+1]-g0, db = cur[j+2]-b0;
+            const dx = xx-x, dy = yy-y;
+            const ws = Math.exp(-(dx*dx + dy*dy)/sp2 - (dr*dr + dg*dg + db*db)/sc2);
+            wsum += ws; sr += ws*cur[j]; sg += ws*cur[j+1]; sb += ws*cur[j+2];
+          }
+        }
+        out[i*3] = sr/wsum; out[i*3+1] = sg/wsum; out[i*3+2] = sb/wsum;
+      }
+    }
+    cur = out;
+  }
+  return cur;
+}
+
+// SLIC superpixels over the masked pixels. Over-segments the image into compact regions
+// whose borders adhere to colour edges; returns a label (superpixel id) per pixel, -1 for
+// masked-out pixels. `regionArea` ≈ pixels per superpixel (granularity); `m` = compactness
+// (higher → more regular/grid-like, lower → hugs edges more tightly).
+function slicLabels(lab, w, h, mask, regionArea, m, iters) {
+  const n = w * h;
+  const S = Math.max(2, Math.round(Math.sqrt(regionArea)));
+  // Seed centres on a regular grid, keeping only those that land on a masked pixel.
+  const cx = [], cy = [], cL = [], cA = [], cB = [];
+  for (let y = Math.floor(S / 2); y < h; y += S) {
+    for (let x = Math.floor(S / 2); x < w; x += S) {
+      const i = y * w + x;
+      if (!mask[i]) continue;
+      cx.push(x); cy.push(y); cL.push(lab[i*3]); cA.push(lab[i*3+1]); cB.push(lab[i*3+2]);
+    }
+  }
+  const K = cx.length;
+  const labels = new Int32Array(n).fill(-1);
+  if (K === 0) return { labels, K: 0 };
+  const dist = new Float32Array(n);
+  const invS2 = (m / S) * (m / S);   // spatial weight: D² = dLab² + (m/S)²·dxy²
+  for (let it = 0; it < iters; it++) {
+    dist.fill(Infinity);
+    for (let c = 0; c < K; c++) {
+      const x0 = Math.max(0, (cx[c] - S) | 0), x1 = Math.min(w - 1, (cx[c] + S) | 0);
+      const y0 = Math.max(0, (cy[c] - S) | 0), y1 = Math.min(h - 1, (cy[c] + S) | 0);
+      const Lc = cL[c], Ac = cA[c], Bc = cB[c], Xc = cx[c], Yc = cy[c];
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          const i = y * w + x;
+          if (!mask[i]) continue;
+          const dl = lab[i*3] - Lc, da = lab[i*3+1] - Ac, db = lab[i*3+2] - Bc;
+          const dx = x - Xc, dy = y - Yc;
+          const D = dl*dl + da*da + db*db + (dx*dx + dy*dy) * invS2;
+          if (D < dist[i]) { dist[i] = D; labels[i] = c; }
+        }
+      }
+    }
+    // Recompute centres as the mean of their members.
+    const sL = new Float64Array(K), sA = new Float64Array(K), sB = new Float64Array(K),
+          sX = new Float64Array(K), sY = new Float64Array(K), cnt = new Int32Array(K);
+    for (let i = 0; i < n; i++) {
+      const c = labels[i];
+      if (c < 0) continue;
+      sL[c] += lab[i*3]; sA[c] += lab[i*3+1]; sB[c] += lab[i*3+2];
+      sX[c] += i % w; sY[c] += (i / w) | 0; cnt[c]++;
+    }
+    for (let c = 0; c < K; c++) {
+      if (!cnt[c]) continue;
+      cL[c] = sL[c]/cnt[c]; cA[c] = sA[c]/cnt[c]; cB[c] = sB[c]/cnt[c];
+      cx[c] = sX[c]/cnt[c]; cy[c] = sY[c]/cnt[c];
+    }
+  }
+  return { labels, K };
+}
+
 // ═══════════════════════════════════════════════
 //  LAND COVER  (semantic colouring — Esri/Impact Observatory Sentinel-2 10m LULC)
 // ═══════════════════════════════════════════════
@@ -1825,76 +1935,119 @@ const MeshGen = {
         advNames = ['Water', ...kept.map(c => LANDCOVER_CLASSES[c].name)];
       }
 
-      // Despeckle the assignment (3×3 majority among land neighbours) so
-      // colour regions are coherent — cleaner blocks and fewer non-manifold seams.
-      // The Detail slider sets the pass count: high detail = sharp (few passes),
-      // low detail = heavy smoothing (clean poster-like blocks).
       const detail = parseFloat(document.getElementById('sat-detail')?.value) || 5;
-      const despeckPasses = Math.max(0, Math.round((10 - detail) * 0.8)); // 1→7 … 10→0
-      for (let pass = 0; pass < despeckPasses; pass++) {
-        const src = pixelBands.slice();
-        for (let r = 0; r < h; r++) {
-          for (let c = 0; c < w; c++) {
-            const i = r * w + c;
-            if (waterMask[i]) continue; // water stays authoritative
-            const cnt = {};
-            for (let dr = -1; dr <= 1; dr++) {
-              for (let dc = -1; dc <= 1; dc++) {
-                const rr = r + dr, cc = c + dc;
-                if (rr < 0 || rr >= h || cc < 0 || cc >= w) continue;
-                const b = src[rr * w + cc];
-                if (b === 0) continue; // ignore water neighbours
-                cnt[b] = (cnt[b] || 0) + 1;
-              }
-            }
-            let best = src[i], bn = -1;
-            for (const k in cnt) if (cnt[k] > bn) { bn = cnt[k]; best = +k; }
-            pixelBands[i] = best;
-          }
-        }
-      }
 
-      // Island removal: a majority filter can't erase a blob bigger than its kernel,
-      // so flood-fill each land colour into connected components and merge any below
-      // a size threshold into its dominant neighbour. The threshold grows sharply as
-      // Detail drops, so Detail=1 yields large, simple colour blocks (few islands).
-      const minIsland = Math.round(Math.pow((10 - detail) / 9, 1.3) * 0.011 * w * h);
-      for (let pass = 0; pass < 6 && minIsland > 0; pass++) {
-        const lbl = new Int32Array(w * h).fill(-1);
-        let changedAny = false;
-        let comp = 0;
-        for (let s = 0; s < w * h; s++) {
-          if (lbl[s] !== -1 || waterMask[s]) continue;
-          const color = pixelBands[s];
-          const cells = [s]; lbl[s] = comp;
-          const stack = [s];
-          while (stack.length) {
-            const i = stack.pop();
-            const r = (i / w) | 0, c = i % w;
-            const nbrs = [r>0?i-w:-1, r<h-1?i+w:-1, c>0?i-1:-1, c<w-1?i+1:-1];
-            for (const j of nbrs) {
-              if (j >= 0 && lbl[j] === -1 && !waterMask[j] && pixelBands[j] === color) {
-                lbl[j] = comp; stack.push(j); cells.push(j);
+      // Island removal: flood-fill each land colour into connected components and merge
+      // any below `minIsland` px into its dominant land neighbour. Used as a printability
+      // floor (photo) and as the Detail-scaled cleaner (land cover).
+      const removeIslands = (minIsland) => {
+        for (let pass = 0; pass < 6 && minIsland > 0; pass++) {
+          const lbl = new Int32Array(w * h).fill(-1);
+          let changedAny = false;
+          let comp = 0;
+          for (let s = 0; s < w * h; s++) {
+            if (lbl[s] !== -1 || waterMask[s]) continue;
+            const color = pixelBands[s];
+            const cells = [s]; lbl[s] = comp;
+            const stack = [s];
+            while (stack.length) {
+              const i = stack.pop();
+              const r = (i / w) | 0, c = i % w;
+              const nbrs = [r>0?i-w:-1, r<h-1?i+w:-1, c>0?i-1:-1, c<w-1?i+1:-1];
+              for (const j of nbrs) {
+                if (j >= 0 && lbl[j] === -1 && !waterMask[j] && pixelBands[j] === color) {
+                  lbl[j] = comp; stack.push(j); cells.push(j);
+                }
               }
             }
-          }
-          comp++;
-          if (cells.length >= minIsland) continue;
-          // Merge this island into the most common neighbouring land colour.
-          const cnt = {};
-          for (const i of cells) {
-            const r = (i / w) | 0, c = i % w;
-            for (const j of [r>0?i-w:-1, r<h-1?i+w:-1, c>0?i-1:-1, c<w-1?i+1:-1]) {
-              if (j >= 0 && !waterMask[j] && pixelBands[j] !== color) {
-                cnt[pixelBands[j]] = (cnt[pixelBands[j]] || 0) + 1;
+            comp++;
+            if (cells.length >= minIsland) continue;
+            const cnt = {};
+            for (const i of cells) {
+              const r = (i / w) | 0, c = i % w;
+              for (const j of [r>0?i-w:-1, r<h-1?i+w:-1, c>0?i-1:-1, c<w-1?i+1:-1]) {
+                if (j >= 0 && !waterMask[j] && pixelBands[j] !== color) {
+                  cnt[pixelBands[j]] = (cnt[pixelBands[j]] || 0) + 1;
+                }
               }
             }
+            let best = color, bn = 0;
+            for (const k in cnt) if (cnt[k] > bn) { bn = cnt[k]; best = +k; }
+            if (best !== color) { for (const i of cells) pixelBands[i] = best; changedAny = true; }
           }
-          let best = color, bn = 0;
-          for (const k in cnt) if (cnt[k] > bn) { bn = cnt[k]; best = +k; }
-          if (best !== color) { for (const i of cells) pixelBands[i] = best; changedAny = true; }
+          if (!changedAny) break;
         }
-        if (!changedAny) break;
+      };
+
+      if (kind === 'photo') {
+        // Snap the per-pixel bands onto SLIC superpixels so colour borders land on real
+        // image edges (forest/field, coastline, ridgeline) instead of k-means blobs.
+        // Detail sets superpixel granularity: high = small superpixels (tight edges, more
+        // small features survive); low = large superpixels (simple poster-like blocks).
+        // A bilateral pre-smooth first is essential — without it SLIC fragments on texture
+        // noise; with it, region borders adhere to genuine edges.
+        const regionArea = Math.round(70 + Math.pow((10 - detail) / 9, 1.4) * 360); // ~70 … ~430 px
+        const smooth = bilateralRGB(colorImage.rgb, w, h, 2, 30, 2);
+        const lab = rgbToLab(smooth, w * h);
+        const { labels, K } = slicLabels(lab, w, h, landMask, regionArea, 10, 10);
+        if (K > 0) {
+          const stride = numLandTints + 1;
+          const counts = new Int32Array(K * stride);
+          for (let i = 0; i < w * h; i++) {
+            const sp = labels[i];
+            if (sp < 0 || waterMask[i]) continue;
+            const b = pixelBands[i];
+            if (b >= 1 && b <= numLandTints) counts[sp * stride + b]++;
+          }
+          const spBand = new Int32Array(K);
+          for (let sp = 0; sp < K; sp++) {
+            let best = 1, bn = -1;
+            for (let b = 1; b <= numLandTints; b++) {
+              const v = counts[sp * stride + b];
+              if (v > bn) { bn = v; best = b; }
+            }
+            spBand[sp] = best;
+          }
+          for (let i = 0; i < w * h; i++) {
+            if (waterMask[i]) continue;
+            const sp = labels[i];
+            if (sp >= 0) pixelBands[i] = spBand[sp];
+          }
+        }
+        // Merge small regions: Detail-scaled (same curve as land cover) for simplification,
+        // floored at a ~1.5 mm printability minimum so high Detail can't emit specks. Merged
+        // borders fall onto neighbouring superpixel edges, so edge-adherence is preserved.
+        const pxMm2 = (meshW / w) * (meshH / h);
+        const minPrintPx = Math.max(0, Math.round((1.5 * 1.5) / Math.max(1e-6, pxMm2)));
+        const detailIsland = Math.round(Math.pow((10 - detail) / 9, 1.3) * 0.011 * w * h);
+        removeIslands(Math.max(minPrintPx, detailIsland));
+      } else {
+        // Land cover (classified raster, already edge-clean): keep the 3×3 despeckle +
+        // Detail-scaled island removal.
+        const despeckPasses = Math.max(0, Math.round((10 - detail) * 0.8)); // 1→7 … 10→0
+        for (let pass = 0; pass < despeckPasses; pass++) {
+          const src = pixelBands.slice();
+          for (let r = 0; r < h; r++) {
+            for (let c = 0; c < w; c++) {
+              const i = r * w + c;
+              if (waterMask[i]) continue; // water stays authoritative
+              const cnt = {};
+              for (let dr = -1; dr <= 1; dr++) {
+                for (let dc = -1; dc <= 1; dc++) {
+                  const rr = r + dr, cc = c + dc;
+                  if (rr < 0 || rr >= h || cc < 0 || cc >= w) continue;
+                  const b = src[rr * w + cc];
+                  if (b === 0) continue; // ignore water neighbours
+                  cnt[b] = (cnt[b] || 0) + 1;
+                }
+              }
+              let best = src[i], bn = -1;
+              for (const k in cnt) if (cnt[k] > bn) { bn = cnt[k]; best = +k; }
+              pixelBands[i] = best;
+            }
+          }
+        }
+        removeIslands(Math.round(Math.pow((10 - detail) / 9, 1.3) * 0.011 * w * h));
       }
 
       // Write the derived palette into the advanced colour pickers (land tints).
