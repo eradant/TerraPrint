@@ -1716,15 +1716,29 @@ const MeshGen = {
           if (highN < minHigh) {
             assignGlobal();                               // too sparse to split → global
           } else {
+            // Stratification only ALLOCATES colours — it guarantees the sparse rock zone
+            // gets its own centroids that global k-means would otherwise skip. Pixels are
+            // then assigned to their nearest centroid by COLOUR (not by a hard elevation
+            // cut), so the rock's light/shadow tints follow real shading instead of
+            // ringing the mountain at the cutoff elevation (which read as "banding").
             const lo = kmeansRGB(colorImage.rgb, lowMask, w * h, kLow, 12);
             const hi = kmeansRGB(colorImage.rgb, highMask, w * h, kHigh, 12);
+            const cents = [...lo.centroids, ...hi.centroids];
+            const lumOf = c => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+            const ord = cents.map((c, i) => i).sort((a, b) => lumOf(cents[a]) - lumOf(cents[b]));
+            const pal = ord.map(i => cents[i]);             // dark→light, stable palette
             for (let i = 0; i < w * h; i++) {
               if (waterMask[i]) { pixelBands[i] = 0; continue; }
-              pixelBands[i] = highMask[i]
-                ? kLow + 1 + (hi.assign[i] >= 0 ? hi.assign[i] : 0)
-                : 1 + (lo.assign[i] >= 0 ? lo.assign[i] : 0);
+              const r = colorImage.rgb[i*3], g = colorImage.rgb[i*3+1], b = colorImage.rgb[i*3+2];
+              let best = 0, bd = Infinity;
+              for (let c = 0; c < pal.length; c++) {
+                const dr = r-pal[c][0], dg = g-pal[c][1], db = b-pal[c][2];
+                const d = dr*dr + dg*dg + db*db;
+                if (d < bd) { bd = d; best = c; }
+              }
+              pixelBands[i] = best + 1;
             }
-            bandColors = [...lo.centroids.map(toHex), ...hi.centroids.map(toHex)];
+            bandColors = pal.map(toHex);
           }
         } else {
           assignGlobal();
