@@ -521,12 +521,10 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
             <select id="adv-source" onchange="Advanced.setSource(this.value)" style="flex:1 1 auto;">
               <option value="elevation" selected>Elevation bands</option>
               <option value="satellite">Satellite photo</option>
-              <option value="hybrid">Hybrid (land cover × photo)</option>
               <option value="landcover">Land cover (semantic)</option>
             </select>
           </div>
-          <p id="sat-note" style="display:none;font-size:11px;color:var(--text-muted);margin:0 0 8px;">Colors below are auto-derived on Generate (satellite / hybrid = sampled photo; land cover = classified). They print only in the top "Color depth" mm; everything beneath prints in the single Base color.</p>
-          <!-- Region shaping — how the colour bands are segmented -->
+          <p id="sat-note" style="display:none;font-size:11px;color:var(--text-muted);margin:0 0 8px;">Colors below are auto-derived on Generate (satellite = sampled photo; land cover = classified). They print only in the top "Color depth" mm; everything beneath prints in the single Base color.</p>
           <div id="sat-detail-group" class="input-group" style="display:none;">
             <label>Detail <span style="color:var(--text-muted);font-size:11px;">(sharper ↔ cleaner blocks)</span></label>
             <div class="range-row">
@@ -534,7 +532,22 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
               <span class="range-val" id="sat-detail-val">5</span>
             </div>
           </div>
-          <div id="sat-shape-group" style="display:none;">
+          <div id="sat-cap-group" class="input-group" style="display:none;">
+            <label>Elevation cap <span style="color:var(--text-muted);font-size:11px;">(treeline — pushes shaded high slopes off low colors)</span></label>
+            <div class="range-row">
+              <input type="range" id="sat-cap" min="0" max="100" step="5" value="0" oninput="document.getElementById('sat-cap-val').textContent=this.value=='0'?'off':this.value+'%'">
+              <span class="range-val" id="sat-cap-val">off</span>
+            </div>
+          </div>
+          <div id="sat-high-group" class="input-group" style="display:none;align-items:center;gap:8px;">
+            <label style="margin:0;">High-elevation tints <span style="color:var(--text-muted);font-size:11px;">(split rock into light + shadow)</span></label>
+            <select id="sat-high" style="flex:0 0 auto;">
+              <option value="0">Off</option>
+              <option value="2" selected>2</option>
+              <option value="3">3</option>
+            </select>
+          </div>
+          <div id="sat-fine-group" style="display:none;">
             <div class="input-group">
               <label>Region shape <span style="color:var(--text-muted);font-size:11px;">(edge-hug ↔ smooth)</span></label>
               <div class="range-row">
@@ -547,23 +560,6 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
               <div class="range-row">
                 <input type="range" id="sat-smooth" min="0" max="10" step="1" value="5" oninput="document.getElementById('sat-smooth-val').textContent=this.value">
                 <span class="range-val" id="sat-smooth-val">5</span>
-              </div>
-            </div>
-          </div>
-          <div id="sat-feather-group" class="input-group" style="display:none;">
-            <label>Edge feather <span style="color:var(--text-muted);font-size:11px;">(off ↔ stippled transitions)</span></label>
-            <div class="range-row">
-              <input type="range" id="sat-feather" min="0" max="5" step="1" value="0" oninput="document.getElementById('sat-feather-val').textContent=this.value=='0'?'off':this.value">
-              <span class="range-val" id="sat-feather-val">off</span>
-            </div>
-          </div>
-          <!-- Photo adjust — applied to the source image before clustering -->
-          <div id="sat-photo-group" style="display:none;">
-            <div class="input-group">
-              <label>Saturation <span style="color:var(--text-muted);font-size:11px;">(separate ↔ muted)</span></label>
-              <div class="range-row">
-                <input type="range" id="sat-satur" min="-50" max="80" step="5" value="0" oninput="document.getElementById('sat-satur-val').textContent=(this.value>0?'+':'')+this.value">
-                <span class="range-val" id="sat-satur-val">0</span>
               </div>
             </div>
             <div class="input-group">
@@ -580,22 +576,6 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
                 <span class="range-val" id="sat-bright-val">0</span>
               </div>
             </div>
-          </div>
-          <!-- Satellite-photo-only refinements -->
-          <div id="sat-cap-group" class="input-group" style="display:none;">
-            <label>Elevation cap <span style="color:var(--text-muted);font-size:11px;">(treeline — pushes shaded high slopes off low colors)</span></label>
-            <div class="range-row">
-              <input type="range" id="sat-cap" min="0" max="100" step="5" value="0" oninput="document.getElementById('sat-cap-val').textContent=this.value=='0'?'off':this.value+'%'">
-              <span class="range-val" id="sat-cap-val">off</span>
-            </div>
-          </div>
-          <div id="sat-high-group" class="input-group" style="display:none;align-items:center;gap:8px;">
-            <label style="margin:0;">High-elevation tints <span style="color:var(--text-muted);font-size:11px;">(split rock into light + shadow)</span></label>
-            <select id="sat-high" style="flex:0 0 auto;">
-              <option value="0">Off</option>
-              <option value="2" selected>2</option>
-              <option value="3">3</option>
-            </select>
           </div>
           <div id="sat-shell-group" style="display:none;">
             <div class="input-group">
@@ -696,17 +676,6 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
           <label for="frame-enable" style="margin:0;cursor:pointer;">Add display frame</label>
         </div>
         <div id="frame-opts" style="display:none;margin-top:8px;">
-          <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-            <label style="margin:0;">Frame style</label>
-            <select id="frame-style" onchange="applyFramePreset(this.value)" style="flex:1 1 auto;">
-              <option value="custom" selected>Custom</option>
-              <option value="museum">Museum (recessed + lip)</option>
-              <option value="field">Field map (flat, full data)</option>
-              <option value="tray">Display tray (deep recess)</option>
-              <option value="medallion">Medallion (circular)</option>
-              <option value="minimal">Minimal slab</option>
-            </select>
-          </div>
           <div class="input-group">
             <label>Title</label>
             <input type="text" id="frame-title" placeholder="e.g. Mount Hood, OR" value="">
@@ -724,10 +693,6 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
               <label>Panel (mm)</label>
               <input type="number" id="frame-panel" value="30" min="10" max="120" step="2">
             </div>
-          </div>
-          <div class="input-group" style="margin-top:6px;">
-            <label>Inset depth (mm) <span style="color:var(--text-muted);font-size:11px;">(0 = flush · &gt;0 = terrain recessed in a well)</span></label>
-            <input type="number" id="frame-inset" value="0" min="0" max="20" step="0.5">
           </div>
           <div style="margin-top:8px;display:flex;flex-direction:column;gap:5px;">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-title-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Title text</label>
@@ -1122,28 +1087,12 @@ const Satellite = {
 
       const w = resolution, h = resolution;
       const rgb = new Uint8Array(w * h * 3);
-      // Box-average downsample, not point-sample. The native crop is usually much larger than
-      // the grid (e.g. ~1800px → 512), so the old nearest-neighbour grab took ONE native pixel
-      // per cell and discarded the rest — aliasing that fed k-means/SLIC a speckled, unrepresentative
-      // image (a big source of the "blobby" result). Averaging every native pixel a cell covers
-      // gives the true mean colour per cell: clean input, accurate region tints. Cost is ~linear
-      // in native pixels. When the grid is finer than the crop the block collapses to 1px (= nearest).
-      const ex = x => Math.min(cropW, Math.max(0, Math.round(x / w * cropW)));
-      const ey = y => Math.min(cropH, Math.max(0, Math.round(y / h * cropH)));
       for (let y = 0; y < h; y++) {
-        const sy0 = ey(y), sy1 = Math.max(sy0 + 1, ey(y + 1));
         for (let x = 0; x < w; x++) {
-          const sx0 = ex(x), sx1 = Math.max(sx0 + 1, ex(x + 1));
-          let r = 0, g = 0, b = 0, cnt = 0;
-          for (let yy = sy0; yy < sy1 && yy < cropH; yy++) {
-            const row = yy * cropW;
-            for (let xx = sx0; xx < sx1 && xx < cropW; xx++) {
-              const s = (row + xx) * 4;
-              r += img.data[s]; g += img.data[s+1]; b += img.data[s+2]; cnt++;
-            }
-          }
-          const d = (y * w + x) * 3;
-          if (cnt) { rgb[d] = (r / cnt) | 0; rgb[d+1] = (g / cnt) | 0; rgb[d+2] = (b / cnt) | 0; }
+          const sx = Math.min(Math.floor(x / w * cropW), cropW - 1);
+          const sy = Math.min(Math.floor(y / h * cropH), cropH - 1);
+          const s = (sy * cropW + sx) * 4, d = (y * w + x) * 3;
+          rgb[d] = img.data[s]; rgb[d+1] = img.data[s+1]; rgb[d+2] = img.data[s+2];
         }
       }
       return { width: w, height: h, rgb };
@@ -1157,72 +1106,40 @@ const Satellite = {
 // K-means on RGB samples (only where mask[i] truthy). Returns { centroids:[[r,g,b],…],
 // assign:Int16Array }. assign[i] = cluster index for masked pixels, -1 otherwise.
 function kmeansRGB(rgb, mask, n, k, iters) {
-  // Collect masked sample indices.
+  // Seed centroids from evenly-spaced masked samples (deterministic).
   const idxs = [];
   for (let i = 0; i < n; i++) if (mask[i]) idxs.push(i);
   if (idxs.length === 0) return { centroids: [], assign: new Int16Array(n).fill(-1) };
-  if (k < 1) k = 1;
-
-  // Cluster in CIELAB, not RGB. Perceptual distance ≈ how different two colours LOOK, so the
-  // splits land along boundaries a person actually sees (snow ↔ rock ↔ forest ↔ shadow)
-  // instead of along raw RGB distance, which over-weights brightness and smears olive rock
-  // into dark forest. This is most of the "natural separation" win.
-  const lab = rgbToLab(rgb, n);
-  const d2 = (i, c) => { const dl=lab[i*3]-c[0], da=lab[i*3+1]-c[1], db=lab[i*3+2]-c[2]; return dl*dl+da*da+db*db; };
-
-  // k-means++ seeding: first centre = first masked sample (deterministic), then each further
-  // centre is pulled from the points *farthest* from the centres chosen so far (∝ squared
-  // LAB distance). The old evenly-indexed seeding picked starting colours by pixel position,
-  // which routinely collapsed two tints into near-duplicates → muddy, low-contrast palettes.
-  const cents = [[lab[idxs[0]*3], lab[idxs[0]*3+1], lab[idxs[0]*3+2]]];
-  const dmin = new Float64Array(idxs.length).fill(Infinity);
-  for (let c = 1; c < k; c++) {
-    let sum = 0;
-    for (let s = 0; s < idxs.length; s++) {
-      const dd = d2(idxs[s], cents[c-1]);
-      if (dd < dmin[s]) dmin[s] = dd;
-      sum += dmin[s];
-    }
-    if (sum <= 0) { cents.push(cents[c-1].slice()); continue; } // remaining points identical
-    // Deterministic weighted pick (golden-ratio offset into the cumulative D² mass) — keeps
-    // output stable across Generate clicks while still favouring far-apart seeds.
-    const target = sum * ((c * 0.6180339887498949) % 1);
-    let acc = 0, pick = idxs[0];
-    for (let s = 0; s < idxs.length; s++) { acc += dmin[s]; if (acc >= target) { pick = idxs[s]; break; } }
-    cents.push([lab[pick*3], lab[pick*3+1], lab[pick*3+2]]);
+  const cents = [];
+  for (let c = 0; c < k; c++) {
+    const i = idxs[Math.floor((c + 0.5) / k * idxs.length)];
+    cents.push([rgb[i*3], rgb[i*3+1], rgb[i*3+2]]);
   }
-
-  // Lloyd iterations in LAB.
   const assign = new Int16Array(n).fill(-1);
   for (let it = 0; it < iters; it++) {
+    // Assign
     for (const i of idxs) {
+      const r = rgb[i*3], g = rgb[i*3+1], b = rgb[i*3+2];
       let best = 0, bd = Infinity;
-      for (let c = 0; c < k; c++) { const dd = d2(i, cents[c]); if (dd < bd) { bd = dd; best = c; } }
+      for (let c = 0; c < k; c++) {
+        const dr = r-cents[c][0], dg = g-cents[c][1], db = b-cents[c][2];
+        const d = dr*dr + dg*dg + db*db;
+        if (d < bd) { bd = d; best = c; }
+      }
       assign[i] = best;
     }
-    const sum = Array.from({length:k}, () => [0,0,0,0]); // L,a,b,count
-    for (const i of idxs) { const c = assign[i]; sum[c][0]+=lab[i*3]; sum[c][1]+=lab[i*3+1]; sum[c][2]+=lab[i*3+2]; sum[c][3]++; }
+    // Update
+    const sum = Array.from({length:k}, () => [0,0,0,0]);
+    for (const i of idxs) { const c = assign[i]; sum[c][0]+=rgb[i*3]; sum[c][1]+=rgb[i*3+1]; sum[c][2]+=rgb[i*3+2]; sum[c][3]++; }
     for (let c = 0; c < k; c++) if (sum[c][3]) cents[c] = [sum[c][0]/sum[c][3], sum[c][1]/sum[c][3], sum[c][2]/sum[c][3]];
   }
-
-  // The colour we PRINT for each band is the mean *RGB* of its members (the true average
-  // surface colour), accumulated separately from the LAB centres used for clustering.
-  let gr=0, gg=0, gb=0;
-  const rgbSum = Array.from({length:k}, () => [0,0,0,0]);
-  for (const i of idxs) {
-    const c = assign[i];
-    rgbSum[c][0]+=rgb[i*3]; rgbSum[c][1]+=rgb[i*3+1]; rgbSum[c][2]+=rgb[i*3+2]; rgbSum[c][3]++;
-    gr+=rgb[i*3]; gg+=rgb[i*3+1]; gb+=rgb[i*3+2];
-  }
-  const gm = [gr/idxs.length, gg/idxs.length, gb/idxs.length]; // fallback for empty clusters
-  const rgbCent = rgbSum.map(s => s[3] ? [s[0]/s[3], s[1]/s[3], s[2]/s[3]] : gm.slice());
-
   // Sort clusters by luminance (low→high) so band order is stable & shaded.
-  const lumOf = c => 0.299*c[0]+0.587*c[1]+0.114*c[2];
-  const order = rgbCent.map((c, i) => i).sort((a, b) => lumOf(rgbCent[a]) - lumOf(rgbCent[b]));
+  const order = cents.map((c, i) => i).sort((a, b) =>
+    (0.299*cents[a][0]+0.587*cents[a][1]+0.114*cents[a][2]) -
+    (0.299*cents[b][0]+0.587*cents[b][1]+0.114*cents[b][2]));
   const remap = new Int16Array(k);
   order.forEach((old, neu) => { remap[old] = neu; });
-  const centroids = order.map(old => rgbCent[old].map(v => Math.round(v)));
+  const centroids = order.map(old => cents[old].map(v => Math.round(v)));
   for (const i of idxs) assign[i] = remap[assign[i]];
   return { centroids, assign };
 }
@@ -1252,26 +1169,11 @@ function rgbToLab(rgb, n) {
 // Contrast/brightness adjust an RGB grid before colours are derived: v' = clamp((v-128)*
 // contrast + 128 + brightness). Returns the input unchanged when neutral (no copy) so the
 // default path is byte-identical.
-function adjustExposure(rgb, contrast, brightness, saturation) {
-  const sat = (saturation == null) ? 1 : saturation;
-  if (contrast === 1 && brightness === 0 && sat === 1) return rgb;
+function adjustExposure(rgb, contrast, brightness) {
+  if (contrast === 1 && brightness === 0) return rgb;
   const out = new Uint8Array(rgb.length);
-  for (let i = 0; i < rgb.length; i += 3) {
-    let r = (rgb[i]   - 128) * contrast + 128 + brightness;
-    let g = (rgb[i+1] - 128) * contrast + 128 + brightness;
-    let b = (rgb[i+2] - 128) * contrast + 128 + brightness;
-    if (sat !== 1) {
-      // Push each channel away from (or toward) its luminance. Boosting saturation here pulls
-      // green / brown / blue apart before k-means runs, so the derived tints separate more —
-      // and de-muddies them, since cluster means otherwise average toward grey.
-      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-      r = lum + (r - lum) * sat;
-      g = lum + (g - lum) * sat;
-      b = lum + (b - lum) * sat;
-    }
-    out[i]   = Math.max(0, Math.min(255, r));
-    out[i+1] = Math.max(0, Math.min(255, g));
-    out[i+2] = Math.max(0, Math.min(255, b));
+  for (let i = 0; i < rgb.length; i++) {
+    out[i] = Math.max(0, Math.min(255, (rgb[i] - 128) * contrast + 128 + brightness));
   }
   return out;
 }
@@ -1688,30 +1590,6 @@ function getBandConfig() {
   };
 }
 
-// Frame style presets — set the frame controls to a coherent look in one click. "Custom"
-// leaves everything as-is. Each preset bundles margin/panel/inset, the raised outer lip,
-// arched top, and which cartouche elements appear, so a name maps to a finished aesthetic.
-function applyFramePreset(style) {
-  const P = {
-    //          margin panel inset border  rimW rimH  arch  title  sub   coords legend scale
-    museum:    { margin:10, panel:34, inset:3, border:true,  rimW:5,   rimH:6, arch:false, title:true, sub:true,  coords:true,  legend:true,  scale:false },
-    field:     { margin:8,  panel:36, inset:0, border:true,  rimW:2.5, rimH:2, arch:false, title:true, sub:true,  coords:true,  legend:true,  scale:true  },
-    tray:      { margin:12, panel:30, inset:5, border:false, rimW:4,   rimH:4, arch:false, title:true, sub:false, coords:true,  legend:false, scale:false },
-    medallion: { margin:9,  panel:26, inset:2, border:true,  rimW:4,   rimH:5, arch:true,  title:true, sub:false, coords:true,  legend:false, scale:false },
-    minimal:   { margin:4,  panel:22, inset:0, border:false, rimW:4,   rimH:4, arch:false, title:true, sub:false, coords:false, legend:false, scale:false },
-  };
-  const p = P[style];
-  if (!p) return; // 'custom' → leave the user's settings untouched
-  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
-  const chk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = v; };
-  set('frame-width', p.margin); set('frame-panel', p.panel); set('frame-inset', p.inset);
-  chk('frame-border-on', p.border); set('frame-rim-width', p.rimW); set('frame-rim-height', p.rimH);
-  const bo = document.getElementById('frame-border-opts'); if (bo) bo.style.display = p.border ? 'flex' : 'none';
-  chk('frame-arch-on', p.arch);
-  chk('frame-title-on', p.title); chk('frame-subtitle-on', p.sub);
-  chk('frame-coords-on', p.coords); chk('frame-legend-on', p.legend); chk('frame-scale-on', p.scale);
-}
-
 // ═══════════════════════════════════════════════
 //  MESH GENERATION
 // ═══════════════════════════════════════════════
@@ -1953,7 +1831,7 @@ const MeshGen = {
     let advNames = null;          // class names for the legend (land-cover mode)
     const kind = (colorImage && colorImage.width === w && colorImage.height === h)
       ? colorImage.kind : null;
-    if (kind === 'photo' || kind === 'landcover' || kind === 'hybrid') {
+    if (kind === 'photo' || kind === 'landcover') {
       satellite = true;
       const numLandTints = numColors - 1; // 7 (8 colours) or 3 (4 colours)
       const landMask = new Uint8Array(w * h);
@@ -1968,8 +1846,7 @@ const MeshGen = {
         // source image before colours are derived, so the palette reflects it too.
         const cF = 1 + (parseFloat(document.getElementById('sat-contrast')?.value) || 0) / 100;
         const bO = parseFloat(document.getElementById('sat-bright')?.value) || 0;
-        const sF = 1 + (parseFloat(document.getElementById('sat-satur')?.value) || 0) / 100;
-        srcRgb = adjustExposure(colorImage.rgb, cF, bO, sF);
+        srcRgb = adjustExposure(colorImage.rgb, cF, bO);
         // High-elevation split (8-colour only): rock is a small share of a tile's area,
         // so global k-means leaves it one flat colour. Dedicate kHigh tints to a
         // separately-clustered high-elevation tier so rock carries light/shadow detail.
@@ -2071,78 +1948,11 @@ const MeshGen = {
             if (target !== -1) pixelBands[i] = target;
           }
         }
-      } else if (kind === 'hybrid') {
-        // HYBRID: land cover decides WHICH regions exist and roughly where (semantic
-        // allocation — the colour budget spans terrain types instead of pooling in the
-        // dominant forest); the photo supplies each region's TINT and, via SLIC below, its
-        // boundaries. The photo also arbitrates snow, the one class the annual land-cover
-        // composite is least reliable on over peaks.
-        const cF = 1 + (parseFloat(document.getElementById('sat-contrast')?.value) || 0) / 100;
-        const bO = parseFloat(document.getElementById('sat-bright')?.value) || 0;
-        const sF = 1 + (parseFloat(document.getElementById('sat-satur')?.value) || 0) / 100;
-        srcRgb = adjustExposure(colorImage.rgb, cF, bO, sF);
-
-        const LC_SNOW  = LANDCOVER_CLASSES.findIndex(c => c.name === 'Snow/Ice');
-        const LC_BARE  = LANDCOVER_CLASSES.findIndex(c => c.name === 'Bare');
-        const LC_RANGE = LANDCOVER_CLASSES.findIndex(c => c.name === 'Rangeland');
-        const colDist = (a, b) => { const dr=LC_RGB[a][0]-LC_RGB[b][0], dg=LC_RGB[a][1]-LC_RGB[b][1], db=LC_RGB[a][2]-LC_RGB[b][2]; return dr*dr+dg*dg+db*db; };
-        const nearestNonWater = c => {
-          if (c !== LC_WATER) return c;
-          let best = 0, bd = Infinity;
-          for (let k = 0; k < LC_RGB.length; k++) { if (k === LC_WATER) continue; const d = colDist(c, k); if (d < bd) { bd = d; best = k; } }
-          return best;
-        };
-        const cls = classifyLandcover(colorImage.lcRgb, w * h);
-
-        // Snow arbitration thresholds from the photo: a brightness cutoff (snow photographs
-        // far brighter than rock/forest) and a treeline elevation (alpine candidate zone).
-        const lumAt = i => 0.299*srcRgb[i*3] + 0.587*srcRgb[i*3+1] + 0.114*srcRgb[i*3+2];
-        let lsum = 0, lsq = 0, ln = 0; const landElevs = [];
-        for (let i = 0; i < w * h; i++) { if (waterMask[i]) continue; const L = lumAt(i); lsum += L; lsq += L*L; ln++; landElevs.push(origData[i]); }
-        let treelineElev = Infinity, brightThr = Infinity;
-        if (ln > 0) {
-          const mean = lsum/ln, std = Math.sqrt(Math.max(0, lsq/ln - mean*mean));
-          brightThr = Math.max(150, Math.min(235, mean + 0.6*std));
-          landElevs.sort((a, b) => a - b);
-          treelineElev = landElevs[Math.floor(landElevs.length * 0.70)]; // top ~30% by elevation
-        }
-
-        // Adjusted per-pixel class: photo ADDS snow on bright high pixels (recovers a
-        // permanent snowfield the composite under-called) and REMOVES it where the photo is
-        // dark (demote seasonal/ghost snow to rock). Allocation below then counts the result,
-        // so snow earns a slot only when it's really present.
-        const adjCls = new Int16Array(w * h);
-        for (let i = 0; i < w * h; i++) {
-          if (waterMask[i]) { adjCls[i] = -1; continue; }
-          let c = nearestNonWater(cls[i]);
-          const high = origData[i] >= treelineElev, bright = lumAt(i) >= brightThr;
-          if (LC_SNOW >= 0 && high && bright) c = LC_SNOW;
-          else if (c === LC_SNOW && !(high && bright)) c = (LC_BARE >= 0 ? LC_BARE : LC_RANGE);
-          adjCls[i] = c;
-        }
-
-        // Allocate the land-tint budget to the largest-area classes; merge the rest into the
-        // nearest kept class by palette colour. (Same scheme as land-cover mode.)
-        const area = new Array(LANDCOVER_CLASSES.length).fill(0);
-        for (let i = 0; i < w * h; i++) if (adjCls[i] >= 0) area[adjCls[i]]++;
-        const present = [];
-        for (let c = 0; c < LANDCOVER_CLASSES.length; c++) if (c !== LC_WATER && area[c] > 0) present.push(c);
-        present.sort((a, b) => area[b] - area[a]);
-        const kept = present.slice(0, numLandTints);
-        const classToBand = new Array(LANDCOVER_CLASSES.length).fill(1);
-        kept.forEach((c, idx) => { classToBand[c] = idx + 1; });
-        for (let c = 0; c < LANDCOVER_CLASSES.length; c++) {
-          if (c === LC_WATER || kept.indexOf(c) >= 0) continue;
-          let bestIdx = 1, bd = Infinity;
-          kept.forEach((k, idx) => { const d = colDist(c, k); if (d < bd) { bd = d; bestIdx = idx + 1; } });
-          classToBand[c] = bestIdx;
-        }
-        for (let i = 0; i < w * h; i++) pixelBands[i] = waterMask[i] ? 0 : classToBand[adjCls[i]];
-        // Placeholder palette (land-cover reference hexes); replaced post-SLIC by the mean
-        // PHOTO colour of each final region, so the print uses naturalistic tints.
-        bandColors = kept.map(c => LANDCOVER_CLASSES[c].hex);
-        advNames = ['Water', ...kept.map(c => LANDCOVER_CLASSES[c].name)];
       } else {
+        // Land cover (semantic): classify each land pixel into a land-cover class,
+        // keep the most-common classes within the colour budget, merge the rest into
+        // the nearest kept class. Water stays band 0 (detection). Names → legend.
+        const cls = classifyLandcover(colorImage.rgb, w * h);
         const colDist = (a, b) => { const dr=LC_RGB[a][0]-LC_RGB[b][0], dg=LC_RGB[a][1]-LC_RGB[b][1], db=LC_RGB[a][2]-LC_RGB[b][2]; return dr*dr+dg*dg+db*db; };
         const nearestNonWater = c => {
           if (c !== LC_WATER) return c;
@@ -2217,14 +2027,14 @@ const MeshGen = {
         }
       };
 
-      if (kind === 'photo' || kind === 'hybrid') {
+      if (kind === 'photo') {
         // Snap the per-pixel bands onto SLIC superpixels so colour borders land on real
         // image edges (forest/field, coastline, ridgeline) instead of k-means blobs.
         // Detail sets superpixel granularity: high = small superpixels (tight edges, more
         // small features survive); low = large superpixels (simple poster-like blocks).
         // A bilateral pre-smooth first is essential — without it SLIC fragments on texture
         // noise; with it, region borders adhere to genuine edges.
-        const regionArea = Math.round(34 + Math.pow((10 - detail) / 9, 1.4) * 396); // ~34 … ~430 px
+        const regionArea = Math.round(70 + Math.pow((10 - detail) / 9, 1.4) * 360); // ~70 … ~430 px
         const m = parseFloat(document.getElementById('sat-shape')?.value) || 10; // SLIC compactness
         const sVal = parseFloat(document.getElementById('sat-smooth')?.value);
         const smoothAmt = isFinite(sVal) ? sVal : 5;
@@ -2264,22 +2074,6 @@ const MeshGen = {
         const minPrintPx = Math.max(0, Math.round((1.5 * 1.5) / Math.max(1e-6, pxMm2)));
         const detailIsland = Math.round(Math.pow((10 - detail) / 9, 1.3) * 0.011 * w * h);
         removeIslands(Math.max(minPrintPx, detailIsland));
-
-        // Hybrid: now that regions are final, set each band's printed colour to the MEAN
-        // PHOTO colour of its pixels (exposure/saturation-adjusted srcRgb). Land cover chose
-        // the regions; the photo chooses the tints — naturalistic, not the canned LULC hexes.
-        if (kind === 'hybrid') {
-          const sum = Array.from({ length: numLandTints + 1 }, () => [0, 0, 0, 0]);
-          for (let i = 0; i < w * h; i++) {
-            const b = pixelBands[i];
-            if (waterMask[i] || b < 1 || b > numLandTints) continue;
-            sum[b][0] += srcRgb[i*3]; sum[b][1] += srcRgb[i*3+1]; sum[b][2] += srcRgb[i*3+2]; sum[b][3]++;
-          }
-          const toHex = c => '#' + c.map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
-          for (let b = 1; b <= numLandTints && b - 1 < bandColors.length; b++) {
-            if (sum[b][3]) bandColors[b-1] = toHex([sum[b][0]/sum[b][3], sum[b][1]/sum[b][3], sum[b][2]/sum[b][3]]);
-          }
-        }
       } else {
         // Land cover (classified raster, already edge-clean): keep the 3×3 despeckle +
         // Detail-scaled island removal.
@@ -2318,67 +2112,6 @@ const MeshGen = {
     } else {
       for (let i = 0; i < w * h; i++) pixelBands[i] = waterMask[i] ? 0 : bandOf(origData[i]);
       State.advNames = null;
-    }
-
-    // ── Optional boundary stippling (banded modes only) ──────────────────────
-    // Feather hard band edges with an ordered (Bayer) dither: sprinkle ≥~1 mm dots of a
-    // neighbouring band into the strip just inside each boundary, denser near the edge and
-    // thinning with distance, so the transition reads as a gradient rather than a razor line.
-    // Interiors (no other band within reach) and the true per-cell edge are left untouched, as
-    // is water (shorelines stay crisp). Dots are floored to a printable block; and because the
-    // slicer groups same-colour regions per layer, these add no filament swaps — only a little
-    // travel. Off by default.
-    const stipple = satellite ? (parseInt(document.getElementById('sat-feather')?.value) || 0) : 0;
-    if (stipple > 0) {
-      const BAYER4 = [0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5].map(v => (v + 0.5) / 16);
-      const cellMmX = meshW / w, cellMmY = meshH / h;
-      const Gx = Math.max(1, Math.round(1.0 / Math.max(1e-6, cellMmX))); // ≥~1 mm printable dot
-      const Gy = Math.max(1, Math.round(1.0 / Math.max(1e-6, cellMmY)));
-      const BW = Math.ceil(w / Gx), BH = Math.ceil(h / Gy);
-      const mask = new Int32Array(BW * BH);   // bitmask of land bands present in the block
-      const uni  = new Int16Array(BW * BH);   // single land band if block is uniform, else -1
-      for (let by = 0; by < BH; by++) for (let bx = 0; bx < BW; bx++) {
-        let m = 0, land = 0, total = 0;
-        for (let cy = by*Gy; cy < Math.min(h, (by+1)*Gy); cy++)
-          for (let cx = bx*Gx; cx < Math.min(w, (bx+1)*Gx); cx++) {
-            const i = cy*w + cx; total++;
-            if (waterMask[i]) continue;
-            const b = pixelBands[i];
-            if (b >= 1 && b <= 31) { m |= (1 << b); land++; }
-          }
-        const bi = by*BW + bx;
-        mask[bi] = m;
-        // Uniform only if exactly one bit set and the block is mostly land.
-        uni[bi] = (land >= total * 0.6 && m && (m & (m - 1)) === 0) ? Math.log2(m) | 0 : -1;
-      }
-      const Rb = stipple; // feather radius in blocks (1…5)
-      const out = pixelBands.slice();
-      for (let by = 0; by < BH; by++) for (let bx = 0; bx < BW; bx++) {
-        const b0 = uni[by*BW + bx];
-        if (b0 < 1) continue;                       // mixed / water / none → keep real edge + interiors
-        let bestD = Infinity, bN = -1;
-        for (let dy = -Rb; dy <= Rb; dy++) for (let dx = -Rb; dx <= Rb; dx++) {
-          const nx = bx+dx, ny = by+dy;
-          if (nx < 0 || ny < 0 || nx >= BW || ny >= BH) continue;
-          const nm = mask[ny*BW + nx];
-          if (!nm || (nm & ~(1 << b0)) === 0) continue; // no band other than b0 present
-          const d = Math.hypot(dx, dy);
-          if (d < bestD) {                            // nearest differing band
-            bestD = d;
-            let om = nm & ~(1 << b0); bN = 0; while (!(om & 1)) { om >>= 1; bN++; }
-          }
-        }
-        if (bN < 1 || bestD > Rb) continue;           // interior → untouched
-        const flipFrac = (1 - bestD / Rb) * 0.5;      // up to ~50% feather right at the edge
-        if (BAYER4[(by & 3) * 4 + (bx & 3)] < flipFrac) {
-          for (let cy = by*Gy; cy < Math.min(h, (by+1)*Gy); cy++)
-            for (let cx = bx*Gx; cx < Math.min(w, (bx+1)*Gx); cx++) {
-              const i = cy*w + cx;
-              if (!waterMask[i]) out[i] = bN;          // dot of neighbour colour; water stays crisp
-            }
-        }
-      }
-      pixelBands.set(out);
     }
 
     // Derive triColors from pixelBands (majority band among a triangle's terrain vertices)
@@ -3436,25 +3169,6 @@ const ThreeMFExport = {
       }
       objs.push({ name: 'Frame', hex: '#2B2B2B', solid: this._extrudePrism(plateTris, 0, frameH) });
 
-      // Recessed terrain ("shadow box") for the arched frame: lift the annular margin that
-      // hugs the disc — and the dome margin above it — into a well of depth `inset`, while the
-      // cartouche box below the terrain (y < 0) stays flat for its text. Same mask as the plate,
-      // restricted to y ≥ 0. Purely additive; the terrain disc is untouched.
-      const inset = parseFloat(document.getElementById('frame-inset')?.value) || 0;
-      if (inset > 0) {
-        const recTris = [];
-        for (let i = 0; i < xsA.length - 1; i++) {
-          for (let j = 0; j < ysA.length - 1; j++) {
-            const x0 = xsA[i], x1 = xsA[i+1], y0 = ysA[j], y1 = ysA[j+1];
-            if (y0 < -1e-6) continue;                                // cartouche side → stay flat
-            if (!allCorners(inOutline, x0, y0, x1, y1)) continue;    // outside dome/box
-            if (allCorners(discAt, x0, y0, x1, y1)) continue;        // that's terrain
-            this._rectTris(recTris, x0, y0, x1, y1);
-          }
-        }
-        if (recTris.length) objs.push({ name: 'Recess wall', hex: '#2B2B2B', solid: this._extrudePrism(recTris, frameH, frameH + inset) });
-      }
-
       // Raised rim following the arched outline (band of width rimW).
       if (document.getElementById('frame-border-on')?.checked) {
         const rimW = Math.min(parseFloat(document.getElementById('frame-rim-width')?.value) || 4, fw);
@@ -3489,20 +3203,6 @@ const ThreeMFExport = {
       }
     }
     objs.push({ name: 'Frame', hex: '#2B2B2B', solid: this._extrudePrism(frameTris, 0, frameH) });
-
-    // Optional recessed terrain ("shadow box"): raise the margin around the terrain into a
-    // well of depth `inset` so the relief sits inside the frame instead of on top of it. Only
-    // the left / top / right margin cells lift; the bottom (cartouche) row stays at plate level
-    // so its text keeps a flat surface. No terrain-mesh change — purely additive frame geometry.
-    const inset = parseFloat(document.getElementById('frame-inset')?.value) || 0;
-    if (inset > 0) {
-      const recTris = [];
-      for (let ci = 0; ci < 3; ci++) for (let ri = 1; ri < 3; ri++) { // ri≥1 skips the cartouche row
-        if (ci === 1 && ri === 1) continue;                            // skip the terrain window
-        this._rectTris(recTris, xs[ci], ys[ri], xs[ci+1], ys[ri+1]);
-      }
-      objs.push({ name: 'Recess wall', hex: '#2B2B2B', solid: this._extrudePrism(recTris, frameH, frameH + inset) });
-    }
 
     // Circular tile: the card stays rectangular, so fill the square window's corners
     // (window square minus the disc) with card material. Built on the terrain grid so
@@ -3804,19 +3504,6 @@ const UI = {
         const img = await Satellite.fetch(State.selectedBounds, resolution);
         if (img) colorImage = { kind: 'photo', ...img };
         else toast('Satellite imagery unavailable — using elevation colors.');
-      } else if (source === 'hybrid') {
-        // Hybrid needs BOTH rasters: land cover defines the regions, the photo colours them.
-        showLoading('Fetching satellite imagery…');
-        const photo = await Satellite.fetch(State.selectedBounds, resolution);
-        const lc = photo ? await Landcover.fetch(State.selectedBounds, resolution) : null;
-        if (photo && lc) {
-          colorImage = { kind: 'hybrid', width: photo.width, height: photo.height, rgb: photo.rgb, lcRgb: lc.rgb };
-        } else if (photo) {
-          colorImage = { kind: 'photo', ...photo };          // land cover failed → plain satellite
-          toast('Land cover unavailable — using satellite photo only.');
-        } else {
-          toast('Imagery unavailable — using elevation colors.');
-        }
       } else if (source === 'landcover') {
         const img = await Landcover.fetch(State.selectedBounds, resolution);
         if (img) colorImage = { kind: 'landcover', ...img };
@@ -4157,16 +3844,13 @@ const Advanced = {
   // Color source: 'elevation' | 'satellite' | 'landcover'. The latter two are
   // per-region (top-shell) modes that share the Detail + Color depth + Base controls.
   setSource(val) {
-    const perRegion = (val === 'satellite' || val === 'landcover' || val === 'hybrid');
-    ['sat-note', 'sat-detail-group', 'sat-feather-group', 'sat-shell-group'].forEach(id => {
+    const perRegion = (val === 'satellite' || val === 'landcover');
+    ['sat-note', 'sat-detail-group', 'sat-shell-group'].forEach(id => {
       document.getElementById(id).style.display = perRegion ? 'block' : 'none';
     });
-    // Region-shaping (SLIC) + photo adjust apply to any photo-driven mode (satellite/hybrid).
-    // Elevation cap is satellite-k-means-only. Land cover is classified, so it gets neither.
-    const photoMode = (val === 'satellite' || val === 'hybrid');
-    document.getElementById('sat-shape-group').style.display = photoMode ? 'block' : 'none';
-    document.getElementById('sat-photo-group').style.display = photoMode ? 'block' : 'none';
+    // Elevation cap + fine-tune sliders are satellite-only (land cover is classified).
     document.getElementById('sat-cap-group').style.display = (val === 'satellite') ? 'block' : 'none';
+    document.getElementById('sat-fine-group').style.display = (val === 'satellite') ? 'block' : 'none';
     this._updateSatHigh();
   },
 
