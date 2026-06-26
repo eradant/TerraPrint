@@ -460,6 +460,19 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
   <div class="panel" id="side-panel">
 
     <div class="panel-section">
+      <h3>Base Imagery</h3>
+      <div class="section-body">
+        <div class="input-group" style="margin-bottom:0;">
+          <label>Source <span style="color:var(--text-muted);font-size:11px;">(map + photo colors)</span></label>
+          <select id="imagery-source" onchange="setBaseImagery(this.value)">
+            <option value="eox" selected>Sentinel-2 cloudless — global, clean</option>
+            <option value="naip">NAIP / USGS — US only, high-res</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-section">
       <h3>Model Settings</h3>
       <div class="section-body">
         <div class="input-group">
@@ -900,6 +913,30 @@ function terrainZoomForBounds(bounds) {
   return 11;
 }
 
+// ─── Base imagery sources ───
+// Both are keyless and CORS-enabled (so the colour extractor can read pixels via
+// getImageData) and serve standard {z}/{y}/{x} web-mercator tiles. The selected source
+// drives BOTH the map basemap and the photographic colour extraction, so what you see ≈
+// what prints. `maxZoom` caps native tiles per source; Satellite.fetch aligns by
+// geographic bounds, so capping imagery zoom below the elevation zoom is safe.
+const IMAGERY_SOURCES = {
+  eox: {
+    name: 'Sentinel-2 cloudless',
+    // Cloud-free, colour-consistent 10m global mosaic — the cleanest input for clustering.
+    url: 'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2023_3857/default/GoogleMapsCompatible/{z}/{y}/{x}.jpg',
+    maxZoom: 14, // 10m native; higher just upsamples
+    attribution: 'Sentinel-2 cloudless 2023 by <a href="https://cloudless.eox.at">EOX</a> (modified Copernicus Sentinel data 2023)',
+  },
+  naip: {
+    name: 'NAIP / USGS (US)',
+    // NAIP-derived US orthoimagery (~0.6–1m). US coverage only.
+    url: 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}',
+    maxZoom: 16,
+    attribution: 'Imagery: <a href="https://basemap.nationalmap.gov">USGS The National Map</a> (NAIP)',
+  },
+};
+let currentImagerySource = 'eox';
+
 // ═══════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════
@@ -948,6 +985,23 @@ function downloadBlob(blob, filename) {
 // ═══════════════════════════════════════════════
 
 let map, drawnItems, drawControl;
+let baseImageryLayer = null, labelLayer = null;
+
+// Swap the map's base imagery to `key` (IMAGERY_SOURCES). Keeps place-name labels on top
+// and points the colour-extraction source at the same imagery. Called on init and when the
+// Base Imagery selector changes.
+function setBaseImagery(key) {
+  if (!IMAGERY_SOURCES[key]) key = 'eox';
+  currentImagerySource = key;
+  const src = IMAGERY_SOURCES[key];
+  if (baseImageryLayer) map.removeLayer(baseImageryLayer);
+  baseImageryLayer = L.tileLayer(src.url, {
+    attribution: src.attribution,
+    maxZoom: 19,                 // allow over-zoom for navigation…
+    maxNativeZoom: src.maxZoom,  // …upscaling past the source's native resolution
+  }).addTo(map);
+  baseImageryLayer.bringToBack();      // stay beneath the place-name labels
+}
 
 const MapModule = {
   init() {
@@ -958,14 +1012,11 @@ const MapModule = {
       preferCanvas: true,
     });
 
-    // Satellite imagery base layer (Esri World Imagery)
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      attribution: 'Imagery &copy; <a href="https://www.esri.com/">Esri</a>, Maxar, Earthstar Geographics',
-      maxZoom: 19,
-    }).addTo(map);
+    // Satellite imagery base layer — kept in sync with the colour-extraction source.
+    setBaseImagery(currentImagerySource);
 
     // Place-name & boundary labels on top so the satellite view stays legible
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', {
+    labelLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', {
       attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
       maxZoom: 19,
     }).addTo(map);
@@ -1181,15 +1232,16 @@ const Elevation = {
 //  SATELLITE IMAGERY  (photographic colouring)
 // ═══════════════════════════════════════════════
 
-const SAT_TILE_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-
 const Satellite = {
-  // Composite Esri World Imagery for `bounds` into a resolution×resolution RGB grid,
-  // aligned pixel-for-pixel with the elevation grid (same zoom + bounds + resample).
-  // Returns { width, height, rgb: Uint8Array(w*h*3) } or null on failure.
+  // Composite the selected base imagery (IMAGERY_SOURCES[currentImagerySource]) for `bounds`
+  // into a resolution×resolution RGB grid, aligned with the elevation grid (same bounds +
+  // resample). Returns { width, height, rgb: Uint8Array(w*h*3) } or null on failure.
   async fetch(bounds, resolution) {
     try {
-      const zoom = terrainZoomForBounds(bounds);
+      const src = IMAGERY_SOURCES[currentImagerySource] || IMAGERY_SOURCES.eox;
+      // Cap at the source's native zoom — alignment is by geographic bounds, not by matching
+      // the elevation zoom, so a lower imagery zoom still composites correctly.
+      const zoom = Math.min(terrainZoomForBounds(bounds), src.maxZoom);
       const sw = Elevation.latLonToTile(bounds.getSouth(), bounds.getWest(), zoom);
       const ne = Elevation.latLonToTile(bounds.getNorth(), bounds.getEast(), zoom);
       const minTX = Math.min(sw.x, ne.x), maxTX = Math.max(sw.x, ne.x);
@@ -1208,7 +1260,7 @@ const Satellite = {
         img.crossOrigin = 'anonymous';
         img.onload = () => { ctx.drawImage(img, (tx-minTX)*tileSize, (ty-minTY)*tileSize); loaded++; showLoading(`Fetching imagery… ${loaded}/${total}`); resolve(); };
         img.onerror = () => { loaded++; resolve(); };
-        img.src = SAT_TILE_URL.replace('{z}', zoom).replace('{y}', ty).replace('{x}', tx);
+        img.src = src.url.replace('{z}', zoom).replace('{y}', ty).replace('{x}', tx);
       });
       const promises = [];
       for (let ty = minTY; ty <= maxTY; ty++)
