@@ -2009,7 +2009,7 @@ const MeshGen = {
   // lakeMask: optional Uint8Array (1=lake pixel), lakeElevMap: optional Float32Array.
   // colorImage: optional { kind:'photo'|'landcover', width, height, rgb } for per-region
   // (top-shell) coloring from satellite photo (k-means) or land-cover classification.
-  generate(elevData, lakeMask = null, lakeElevMap = null, colorImage = null, buildings = null) {
+  generate(elevData, lakeMask = null, lakeElevMap = null, colorImage = null, buildings = null, lcWaterMask = null) {
     const printSize = parseFloat(document.getElementById('print-size').value) || 150;
     const vertExag = parseFloat(document.getElementById('vert-exag').value) || 2;
     const baseHeight = parseFloat(document.getElementById('base-height').value) || 4;
@@ -2198,12 +2198,17 @@ const MeshGen = {
       return Math.sqrt(dEdx*dEdx + dEdy*dEdy);
     };
 
+    // Still-water seed = OSM lakes ∪ imagery (land-cover Water class). Either source
+    // marks water; both are held to the same gentle-slope gate below so water the
+    // imagery sees is always represented, without painting hillside shadows blue.
+    const stillSeed = i => (lakeMask && lakeMask[i]) || (lcWaterMask && lcWaterMask[i]);
+    const hasSeed = !!(lakeMask || lcWaterMask);
     const waterMask = new Uint8Array(w * h);
     for (let i = 0; i < w * h; i++) {
       if (!useWaterDetect) continue;
       if (origData[i] <= 0) {
         waterMask[i] = 1; // ocean — flat at sea level, always water
-      } else if (lakeMask && lakeMask[i]) {
+      } else if (stillSeed(i)) {
         // Lake/river: keep only where terrain is gentle enough to hold water.
         const col = i % w, row = (i / w) | 0;
         if (slopeTanAt(col, row) <= tanMaxSlope) waterMask[i] = 1;
@@ -2211,13 +2216,13 @@ const MeshGen = {
     }
 
     // Bridge intermittent rivers: a small morphological closing (dilate→erode)
-    // constrained to the OSM water footprint. This rejoins slope-dropped pixels
+    // constrained to the detected water footprint. This rejoins slope-dropped pixels
     // that sit in small gaps between kept water — without inventing water on dry
     // land or refilling a large dropped blob (its interior is far from kept water).
-    if (useWaterDetect && lakeMask) {
+    if (useWaterDetect && hasSeed) {
       const dil = morphPass(waterMask, w, h, 3, true);
       const clo = morphPass(dil,       w, h, 3, false);
-      for (let i = 0; i < w * h; i++) if (clo[i] && lakeMask[i]) waterMask[i] = 1;
+      for (let i = 0; i < w * h; i++) if (clo[i] && stillSeed(i)) waterMask[i] = 1;
     }
 
     // Manual paint corrections win over everything: forced-add pixels become water
@@ -4150,9 +4155,31 @@ const UI = {
         if (!buildings.length) toast('No OSM buildings found in this area.');
       }
 
+      // Imagery water seed: the Sentinel-2 land-cover Water class. Guarantees water the
+      // imagery sees is represented in every colour mode (still subject to the slope gate
+      // in MeshGen). Reuses the raster already fetched for land-cover/hybrid; photo and
+      // standard-elevation modes fetch it once just for this. Failure → null (falls back
+      // to ocean + OSM detection).
+      let lcWaterMask = null;
+      if (document.getElementById('water-detect').checked) {
+        let lcRgb = colorImage?.kind === 'landcover' ? colorImage.rgb
+                  : colorImage?.kind === 'hybrid'    ? colorImage.lcRgb : null;
+        if (!lcRgb) {
+          showLoading('Detecting water (land cover)…');
+          const lc = await Landcover.fetch(State.selectedBounds, resolution);
+          if (lc) lcRgb = lc.rgb;
+        }
+        if (lcRgb) {
+          const n = resolution * resolution;
+          const cls = classifyLandcover(lcRgb, n);
+          lcWaterMask = new Uint8Array(n);
+          for (let i = 0; i < n; i++) if (cls[i] === LC_WATER) lcWaterMask[i] = 1;
+        }
+      }
+
       showLoading('Generating mesh…');
       await new Promise(r => setTimeout(r, 50));
-      const rawMesh = MeshGen.generate(State.elevationData, lakeMask, lakeElevMap, colorImage, buildings);
+      const rawMesh = MeshGen.generate(State.elevationData, lakeMask, lakeElevMap, colorImage, buildings, lcWaterMask);
 
       showLoading('Checking mesh…');
       await new Promise(r => setTimeout(r, 20));
