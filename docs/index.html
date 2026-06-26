@@ -236,6 +236,36 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 #map { height: 100%; width: 100%; }
 .leaflet-container { background: var(--bg-deep); }
 
+/* ─── Place search overlay ─── */
+#map-search {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 700;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  background: rgba(5,5,5,0.92);
+  border: 1px solid rgba(77,159,255,0.18);
+  border-radius: 9px;
+  padding: 5px 6px 5px 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.02) inset;
+  backdrop-filter: blur(12px);
+}
+#map-search svg { color: var(--text-muted); flex-shrink: 0; }
+#map-search input {
+  width: 240px;
+  background: transparent;
+  border: none;
+  padding: 3px 2px;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+#map-search input::placeholder { color: var(--text-muted); }
+#map-search .btn { padding: 5px 11px; }
+
 /* ─── 3D Preview ─── */
 #preview-panel {
   display: none;
@@ -689,6 +719,35 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
     </div>
 
     <div class="panel-section">
+      <h3>Buildings (OSM)</h3>
+      <div class="section-body">
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" id="buildings-enable" style="accent-color:var(--accent);width:16px;height:16px;" onchange="document.getElementById('buildings-opts').style.display=this.checked?'block':'none'">
+          <label for="buildings-enable" style="margin:0;cursor:pointer;">Add OSM buildings</label>
+        </div>
+        <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0;">Extrudes OpenStreetMap building footprints onto the terrain. Best for cities at small selections (high zoom). Off by default.</p>
+        <div id="buildings-opts" style="display:none;margin-top:10px;">
+          <div class="threshold-row">
+            <input type="color" id="building-color" value="#9A9A9A" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+            <span>Building color</span>
+            <span style="color:var(--text-muted);font-size:11px;">3MF</span>
+          </div>
+          <div class="input-group" style="margin-top:10px;">
+            <label>Height scale</label>
+            <div class="range-row">
+              <input type="range" id="building-height-scale" min="0.25" max="3" step="0.25" value="1" oninput="document.getElementById('building-height-scale-val').textContent=this.value+'×'">
+              <span class="range-val" id="building-height-scale-val">1×</span>
+            </div>
+          </div>
+          <div class="input-group" style="margin-top:10px;">
+            <label>Default height (m) <span style="color:var(--text-muted);font-size:11px;">(untagged footprints)</span></label>
+            <input type="number" id="building-min-height" value="6" min="2" max="100" step="1">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-section">
       <h3>Frame &amp; Cartouche (3MF)</h3>
       <div class="section-body">
         <div class="input-group" style="display:flex;align-items:center;gap:8px;">
@@ -766,6 +825,14 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
   <!-- ─── Map Area ─── -->
   <div id="map-container">
     <div id="map"></div>
+    <div id="map-search">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>
+      </svg>
+      <input type="text" id="search-input" placeholder="Search a place — city, mountain, address…"
+             onkeydown="if(event.key==='Enter')Geocode.search()" autocomplete="off" spellcheck="false">
+      <button class="btn btn-sm btn-primary" onclick="Geocode.search()">Go</button>
+    </div>
     <div id="loading-overlay">
       <div class="spinner"></div>
       <div id="loading-text">Fetching elevation data…</div>
@@ -932,6 +999,45 @@ const MapModule = {
       State.customRect = null;
       UI.updateSelectionInfo();
     });
+  }
+};
+
+// ═══════════════════════════════════════════════
+//  GEOCODE  (place search via OSM Nominatim)
+// ═══════════════════════════════════════════════
+
+const Geocode = {
+  busy: false,
+
+  // Fly the map to the first Nominatim match for the search box query. On-submit
+  // only (Enter / Go button) to respect Nominatim's ~1 req/sec usage policy.
+  async search() {
+    if (this.busy) return;
+    const input = document.getElementById('search-input');
+    const q = input.value.trim();
+    if (!q) return;
+    this.busy = true;
+    try {
+      const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q='
+        + encodeURIComponent(q);
+      const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const results = await resp.json();
+      if (!results.length) { toast('Location not found'); return; }
+      const r = results[0];
+      // boundingbox = [south, north, west, east] as strings
+      if (r.boundingbox) {
+        const [s, n, w, e] = r.boundingbox.map(parseFloat);
+        map.fitBounds([[s, w], [n, e]]);
+      } else {
+        map.flyTo([parseFloat(r.lat), parseFloat(r.lon)], 12);
+      }
+    } catch (err) {
+      console.warn('Geocode failed:', err);
+      toast('Search failed — try again');
+    } finally {
+      this.busy = false;
+    }
   }
 };
 
@@ -1632,6 +1738,188 @@ function morphPass(src, w, h, r, isDilate) {
   return out;
 }
 
+// Ear-clipping triangulation of a simple polygon (no holes). `pts` is an array of
+// [x,y]; returns an array of [i,j,k] index triples into `pts`, wound CCW. Robust
+// enough for OSM building footprints (small, mostly convex, occasionally concave).
+function triangulatePolygon(pts) {
+  const n = pts.length;
+  if (n < 3) return [];
+  // Signed area → ensure CCW order so ear tests are consistent.
+  let area2 = 0;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    area2 += pts[j][0] * pts[i][1] - pts[i][0] * pts[j][1];
+  }
+  const idx = area2 < 0 ? [...Array(n).keys()].reverse() : [...Array(n).keys()];
+
+  const cross = (a, b, c) =>
+    (pts[b][0] - pts[a][0]) * (pts[c][1] - pts[a][1]) -
+    (pts[b][1] - pts[a][1]) * (pts[c][0] - pts[a][0]);
+  const inTri = (a, b, c, p) => {
+    const d1 = cross(a, b, p), d2 = cross(b, c, p), d3 = cross(c, a, p);
+    const hasNeg = d1 < 0 || d2 < 0 || d3 < 0;
+    const hasPos = d1 > 0 || d2 > 0 || d3 > 0;
+    return !(hasNeg && hasPos);
+  };
+
+  const tris = [];
+  const V = idx.slice();
+  let guard = 0;
+  while (V.length > 3 && guard++ < n * n) {
+    let clipped = false;
+    for (let i = 0; i < V.length; i++) {
+      const a = V[(i - 1 + V.length) % V.length], b = V[i], c = V[(i + 1) % V.length];
+      if (cross(a, b, c) <= 0) continue; // reflex or degenerate
+      let ear = true;
+      for (let k = 0; k < V.length; k++) {
+        const p = V[k];
+        if (p === a || p === b || p === c) continue;
+        if (inTri(a, b, c, p)) { ear = false; break; }
+      }
+      if (ear) {
+        tris.push([a, b, c]);
+        V.splice(i, 1);
+        clipped = true;
+        break;
+      }
+    }
+    if (!clipped) break; // fall through on degenerate geometry
+  }
+  if (V.length === 3) tris.push([V[0], V[1], V[2]]);
+  return tris;
+}
+
+// ═══════════════════════════════════════════════
+//  BUILDINGS  (OSM footprints → extruded prisms, opt-in)
+// ═══════════════════════════════════════════════
+
+const Buildings = {
+  // Fetch OSM building footprints within bounds via Overpass.
+  // Returns [{ ring:[{lat,lon}…], heightMeters }] or [] on failure.
+  async fetch(bounds) {
+    try {
+      const s = bounds.getSouth(), w = bounds.getWest();
+      const n = bounds.getNorth(), e = bounds.getEast();
+      const query = `[out:json][timeout:30];(
+        way["building"](${s},${w},${n},${e});
+        relation["building"](${s},${w},${n},${e});
+      );out geom;`;
+
+      const resp = await fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'data=' + encodeURIComponent(query),
+      });
+      if (!resp.ok) throw new Error('Overpass HTTP ' + resp.status);
+      const data = await resp.json();
+
+      const minH = parseFloat(document.getElementById('building-min-height').value) || 6;
+      const heightOf = (tags) => {
+        if (!tags) return minH;
+        const h = parseFloat(tags.height ?? tags['building:height']);
+        if (h > 0) return h;
+        const lv = parseFloat(tags['building:levels']);
+        if (lv > 0) return lv * 3;
+        return minH;
+      };
+
+      const out = [];
+      for (const el of (data.elements || [])) {
+        const heightMeters = heightOf(el.tags);
+        if (el.type === 'way' && el.geometry) {
+          const ring = el.geometry.map(p => ({ lat: p.lat, lon: p.lon }));
+          if (ring.length >= 3) out.push({ ring, heightMeters });
+        } else if (el.type === 'relation') {
+          // Use outer rings only (interior courtyards ignored for v1).
+          for (const m of (el.members || [])) {
+            if (m.role === 'outer' && m.geometry && m.geometry.length >= 3) {
+              out.push({ ring: m.geometry.map(p => ({ lat: p.lat, lon: p.lon })), heightMeters });
+            }
+          }
+        }
+      }
+      return out;
+    } catch (err) {
+      console.warn('Building fetch failed:', err);
+      return [];
+    }
+  },
+
+  // Extrude footprints into closed prisms seated on the terrain surface. Returns
+  // { v:Float32Array-like number[], t:number[] } with triangle indices local to v.
+  // ctx: { data, w, h, bounds, meshW, meshH, minElev, elevScale, baseHeight }.
+  // `data` is the clamped elevation grid used for terrain geometry (mm-z source).
+  extrude(buildings, ctx) {
+    const { data, w, h, bounds, meshW, meshH, minElev, elevScale, baseHeight } = ctx;
+    const heightScale = parseFloat(document.getElementById('building-height-scale').value) || 1;
+    const west = bounds.west, east = bounds.east, south = bounds.south, north = bounds.north;
+
+    const v = [], t = [];
+    const zOf = (elev) => (Math.max(elev, 0) - minElev) * elevScale + baseHeight;
+    const groundElevAt = (lon, lat) => {
+      const col = Math.round((lon - west) / (east - west) * (w - 1));
+      const row = Math.round((north - lat) / (north - south) * (h - 1));
+      const c = Math.min(w - 1, Math.max(0, col));
+      const r = Math.min(h - 1, Math.max(0, row));
+      return data[r * w + c];
+    };
+
+    for (const b of buildings) {
+      let ring = b.ring;
+      // Drop a duplicated closing vertex if present.
+      if (ring.length > 1) {
+        const a = ring[0], z = ring[ring.length - 1];
+        if (Math.abs(a.lat - z.lat) < 1e-9 && Math.abs(a.lon - z.lon) < 1e-9) ring = ring.slice(0, -1);
+      }
+      if (ring.length < 3) continue;
+
+      // Skip footprints whose centroid falls outside the tile (Overpass returns
+      // whole footprints that may straddle the bbox edge).
+      let cLon = 0, cLat = 0;
+      for (const p of ring) { cLon += p.lon; cLat += p.lat; }
+      cLon /= ring.length; cLat /= ring.length;
+      if (cLon < west || cLon > east || cLat < south || cLat > north) continue;
+
+      // Seat the base below the lowest ground under the footprint so the prism
+      // overlaps the terrain on every side (printable union, no floating/buried gap).
+      let minGround = Infinity, sumGround = 0;
+      const xy = ring.map(p => {
+        const g = groundElevAt(p.lon, p.lat);
+        minGround = Math.min(minGround, g);
+        sumGround += g;
+        const mx = (p.lon - west) / (east - west) * meshW;
+        const my = (p.lat - south) / (north - south) * meshH;
+        return [mx, my];
+      });
+      const baseZ = zOf(minGround) - 0.8;
+      const topZ = zOf(sumGround / ring.length) + b.heightMeters * elevScale * heightScale;
+      if (topZ - baseZ < 0.4) continue; // too short to bother
+
+      const tris = triangulatePolygon(xy);
+      if (!tris.length) continue;
+
+      const base0 = v.length / 3;        // first base vertex index
+      const N = xy.length;
+      // Base ring vertices, then top ring vertices.
+      for (const [x, y] of xy) v.push(x, y, baseZ);
+      for (const [x, y] of xy) v.push(x, y, topZ);
+      const top0 = base0 + N;
+
+      // Top cap (CCW → +z up).
+      for (const [a, bI, c] of tris) t.push(top0 + a, top0 + bI, top0 + c);
+      // Bottom cap (reverse winding → -z down).
+      for (const [a, bI, c] of tris) t.push(base0 + a, base0 + c, base0 + bI);
+      // Side walls.
+      for (let i = 0; i < N; i++) {
+        const j = (i + 1) % N;
+        const b0 = base0 + i, b1 = base0 + j, t1 = top0 + j, t0 = top0 + i;
+        t.push(b0, b1, t1);
+        t.push(b0, t1, t0);
+      }
+    }
+    return { v, t };
+  },
+};
+
 // ═══════════════════════════════════════════════
 //  BAND CONFIG  (single source of truth for terrain colours)
 // ═══════════════════════════════════════════════
@@ -1721,7 +2009,7 @@ const MeshGen = {
   // lakeMask: optional Uint8Array (1=lake pixel), lakeElevMap: optional Float32Array.
   // colorImage: optional { kind:'photo'|'landcover', width, height, rgb } for per-region
   // (top-shell) coloring from satellite photo (k-means) or land-cover classification.
-  generate(elevData, lakeMask = null, lakeElevMap = null, colorImage = null) {
+  generate(elevData, lakeMask = null, lakeElevMap = null, colorImage = null, buildings = null) {
     const printSize = parseFloat(document.getElementById('print-size').value) || 150;
     const vertExag = parseFloat(document.getElementById('vert-exag').value) || 2;
     const baseHeight = parseFloat(document.getElementById('base-height').value) || 4;
@@ -2656,9 +2944,23 @@ const MeshGen = {
       }
     }
 
+    // Optional OSM buildings: extrude footprints into closed prisms seated on the
+    // terrain surface. Stored as a standalone solid (own colour) — _buildTerrainSolids
+    // appends it for the preview / 3MF / circular-STL, and STLExport merges it for the
+    // rectangular STL. The slicer unions these overlapping prisms with the terrain.
+    let buildingSolid = null;
+    if (buildings && buildings.length) {
+      const geom = Buildings.extrude(buildings, {
+        data, w, h, bounds: elevData.bounds, meshW, meshH, minElev, elevScale, baseHeight,
+      });
+      if (geom.t.length) buildingSolid = geom;
+    }
+
     return {
       vertices: vertexArray,
       triangles: triangleArray,
+      buildings: buildingSolid,
+      buildingHex: document.getElementById('building-color')?.value || '#9A9A9A',
       shapeMask,
       satellite,
       triColors,
@@ -2807,8 +3109,16 @@ const STLExport = {
     // build the STL from the disc-clipped terrain band solids instead.
     let v, t;
     if (mesh.shapeMask) {
+      // Circular tiles build from the band solids, which already include buildings.
       const { built } = ThreeMFExport._buildTerrainSolids(mesh);
       const c = this._combine(built.map(b => b.solid));
+      v = c.v; t = c.t;
+    } else if (mesh.buildings && mesh.buildings.t.length) {
+      // Rectangular tile: merge the terrain mesh with the building prisms.
+      const c = this._combine([
+        { v: mesh.vertices, t: mesh.triangles },
+        mesh.buildings,
+      ]);
       v = c.v; t = c.t;
     } else {
       v = mesh.vertices; t = mesh.triangles;
@@ -2990,6 +3300,7 @@ const ThreeMFExport = {
           presentBands.push(bandIdx);
         }
       }
+      this._appendBuildings(mesh, built);
       return { built, presentBands };
     }
 
@@ -3031,7 +3342,15 @@ const ThreeMFExport = {
         presentBands.push(bandIdx);
       }
     }
+    this._appendBuildings(mesh, built);
     return { built, presentBands };
+  },
+
+  // Append the extruded OSM building solid (if any) as its own coloured object.
+  _appendBuildings(mesh, built) {
+    if (mesh.buildings && mesh.buildings.t && mesh.buildings.t.length) {
+      built.push({ name: 'Buildings', hex: mesh.buildingHex || '#9A9A9A', solid: mesh.buildings });
+    }
   },
 
   // Build a closed manifold slab from a band spec:
@@ -3823,9 +4142,17 @@ const UI = {
         else toast('Land cover unavailable — using elevation colors.');
       }
 
+      // Optional OSM buildings (opt-in). Failure is tolerated — never aborts the model.
+      let buildings = null;
+      if (document.getElementById('buildings-enable')?.checked) {
+        showLoading('Fetching buildings…');
+        buildings = await Buildings.fetch(State.selectedBounds);
+        if (!buildings.length) toast('No OSM buildings found in this area.');
+      }
+
       showLoading('Generating mesh…');
       await new Promise(r => setTimeout(r, 50));
-      const rawMesh = MeshGen.generate(State.elevationData, lakeMask, lakeElevMap, colorImage);
+      const rawMesh = MeshGen.generate(State.elevationData, lakeMask, lakeElevMap, colorImage, buildings);
 
       showLoading('Checking mesh…');
       await new Promise(r => setTimeout(r, 20));
