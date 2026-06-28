@@ -2090,9 +2090,30 @@ const MeshGen = {
     // detection still uses the raw origData below.)
     for (let i = 0; i < data.length; i++) if (data[i] < 0) data[i] = 0;
 
+    // Optional disc mask (circle selection): 1 = inside the inscribed circle.
+    // The grid is square (resolution×resolution) and a circle selection yields a
+    // square model, so a grid-space disc maps to a model-space disc. Built here (before
+    // the elevation range) so the masked-off corners don't drag minElev down — otherwise
+    // a circle whose lowest terrain sits in the cropped corners inflates the base.
+    let shapeMask = null;
+    if (State.selectionShape === 'circle') {
+      shapeMask = new Uint8Array(w * h);
+      const cx = (w - 1) / 2, cy = (h - 1) / 2, R = Math.min(w, h) / 2;
+      const R2 = R * R;
+      for (let row = 0; row < h; row++) {
+        for (let col = 0; col < w; col++) {
+          const dx = col - cx, dy = row - cy;
+          shapeMask[row * w + col] = (dx*dx + dy*dy) <= R2 ? 1 : 0;
+        }
+      }
+    }
+
     // Elevation range of the clamped geometry — drives the z mapping and band heights.
+    // Restricted to the rendered region (inside the disc) so the base sits at exactly
+    // `baseHeight` under the model's true lowest point.
     let minElev = Infinity, maxElev = -Infinity;
     for (let i = 0; i < data.length; i++) {
+      if (shapeMask && !shapeMask[i]) continue;
       if (data[i] < minElev) minElev = data[i];
       if (data[i] > maxElev) maxElev = data[i];
     }
@@ -2985,21 +3006,7 @@ const MeshGen = {
     const vertexArray = new Float32Array(positions);
     const triangleArray = new Uint32Array(triangles);
 
-    // Optional disc mask (circle selection): 1 = inside the inscribed circle.
-    // The grid is square (resolution×resolution) and a circle selection yields a
-    // square model, so a grid-space disc maps to a model-space disc.
-    let shapeMask = null;
-    if (State.selectionShape === 'circle') {
-      shapeMask = new Uint8Array(w * h);
-      const cx = (w - 1) / 2, cy = (h - 1) / 2, R = Math.min(w, h) / 2;
-      const R2 = R * R;
-      for (let row = 0; row < h; row++) {
-        for (let col = 0; col < w; col++) {
-          const dx = col - cx, dy = row - cy;
-          shapeMask[row * w + col] = (dx*dx + dy*dy) <= R2 ? 1 : 0;
-        }
-      }
-    }
+    // (shapeMask for circle selections is built earlier, before the elevation range.)
 
     // Optional OSM buildings: extrude footprints into closed prisms seated on the
     // terrain surface. Stored as a standalone solid (own colour) — _buildTerrainSolids
