@@ -3245,6 +3245,12 @@ const STLExport = {
 //  3MF EXPORT
 // ═══════════════════════════════════════════════
 
+// Baked sub-surface overlap (mm) between adjacent colour solids. Each region's bottom
+// boundary flares outward toward its differing-colour neighbour by this much, so the two
+// solids interlock below the surface and the slicer unions them with no hairline gap.
+// Top surfaces and the outer silhouette are untouched. 0 = old (coincident-face) behaviour.
+const COLOR_OVERLAP_MM = 0.15;
+
 const ThreeMFExport = {
   COLORS: [
     { name: 'Water',   hex: '#2D6ABF' },
@@ -3330,6 +3336,30 @@ const ThreeMFExport = {
     return { blob, warnings: [] };
   },
 
+  // Outward XY offset (model-space mm) for grid vertex `gi` within band `bandIdx`, aimed at
+  // its 4-neighbours of a DIFFERENT in-mask band. Returns [dx,dy], or null when the vertex
+  // isn't on a colour interface (interior, or it only borders the outer model edge — so the
+  // footprint, circular cliff and frame stay flush). Used to flare each region's bottom so
+  // neighbouring colours overlap below the surface (see COLOR_OVERLAP_MM).
+  _flareOffset(mesh, gi, bandIdx) {
+    if (bandIdx == null || COLOR_OVERLAP_MM <= 0) return null;
+    const gw = mesh.gridW, gh = mesh.gridH, pb = mesh.pixelBands, sm = mesh.shapeMask;
+    const r = (gi / gw) | 0, c = gi % gw;
+    let dx = 0, dy = 0, hit = false;
+    // model XY layout (MeshGen): +col → +x, +row(south) → −y
+    const look = (rr, cc, ox, oy) => {
+      if (rr < 0 || rr >= gh || cc < 0 || cc >= gw) return; // off-grid = outer boundary
+      const ni = rr * gw + cc;
+      if (sm && !sm[ni]) return;                            // outside disc = outer boundary
+      if (pb[ni] !== bandIdx) { dx += ox; dy += oy; hit = true; }
+    };
+    look(r, c + 1, 1, 0); look(r, c - 1, -1, 0);
+    look(r - 1, c, 0, 1); look(r + 1, c, 0, -1);
+    if (!hit) return null;
+    const L = Math.hypot(dx, dy) || 1;
+    return [dx / L * COLOR_OVERLAP_MM, dy / L * COLOR_OVERLAP_MM];
+  },
+
   // Build the terrain colour-band solids as stacked horizontal slabs, driven by
   // getBandConfig() (4-colour default or advanced N-band). Band 0 = Water; bands
   // 1..N-1 are land tints split by (N-2) elevation thresholds.
@@ -3349,11 +3379,12 @@ const ThreeMFExport = {
 
       const built = [], presentBands = [];
       // Base: full footprint from z=0 up to terrain − capDepth (clamped ≥0).
+      // bandIdx=null → no flare (single full-footprint colour, sits under the caps).
       const baseSolid = this._buildStackSolid(mesh, {
         active: () => true,
         floor:  () => 0,
         ceil:   gi => Math.max(0, tz(gi) - capDepth),
-      });
+      }, null);
       if (baseSolid && baseSolid.t.length > 0) built.push({ name: 'Base', hex: baseHex, solid: baseSolid });
 
       // Caps: thin top shell per present colour region.
@@ -3400,7 +3431,7 @@ const ThreeMFExport = {
 
     const built = [], presentBands = [];
     for (let bandIdx = 0; bandIdx < colors.length; bandIdx++) {
-      const solid = this._buildStackSolid(mesh, bandSpecs[bandIdx]);
+      const solid = this._buildStackSolid(mesh, bandSpecs[bandIdx], bandIdx);
       if (solid && solid.t.length > 0) {
         built.push({ name: colors[bandIdx].name, hex: colors[bandIdx].hex, solid });
         presentBands.push(bandIdx);
@@ -3427,7 +3458,7 @@ const ThreeMFExport = {
   // floor == Lowland's clamped ceil), so adjacent colors meet flush with no vertical
   // seam walls. Each slab is independently watertight; coincident interface planes
   // between separate 3MF objects are fine for multi-object printing.
-  _buildStackSolid(mesh, spec) {
+  _buildStackSolid(mesh, spec, bandIdx = null) {
     const gw = mesh.gridW, gh = mesh.gridH, mv = mesh.vertices;
     const sm = mesh.shapeMask; // disc clip (circle selection); null = full rectangle
     const T = (r, c) => r * gw + c;
@@ -3445,7 +3476,13 @@ const ThreeMFExport = {
     };
     const addT = (a, b, c) => { if (a !== b && b !== c && a !== c) tris.push(a, b, c); };
     const top = gi => addV(mv[gi*3], mv[gi*3+1], spec.ceil(gi));
-    const bot = gi => addV(mv[gi*3], mv[gi*3+1], spec.floor(gi));
+    // Flare the bottom outward at colour interfaces so neighbouring solids overlap below the
+    // surface (deterministic per gi → walls and bottom cap dedup to the same flared vertex).
+    const bot = gi => {
+      const off = this._flareOffset(mesh, gi, bandIdx);
+      const x = mv[gi*3] + (off ? off[0] : 0), y = mv[gi*3+1] + (off ? off[1] : 0);
+      return addV(x, y, spec.floor(gi));
+    };
 
     const fwd = new Set(); // directed grid edges of the top surface
     let any = false;
@@ -3526,10 +3563,16 @@ const ThreeMFExport = {
     }
     if (numTop === 0) return null;
 
+    // Reverse map local-index → grid vertex, to flare each bottom vertex outward at colour
+    // interfaces (top ring stays put; only the sub-surface bottom overlaps the neighbour).
+    const giOf = new Array(numTop);
+    for (const [gi, li] of localOf) giOf[li] = gi;
+
     const allV = topV.slice();
     for (let i = 0; i < numTop; i++) {
       const z = capDepth == null ? 0 : Math.max(0, topV[i*3+2] - capDepth);
-      allV.push(topV[i*3], topV[i*3+1], z);
+      const off = this._flareOffset(mesh, giOf[i], bandIdx);
+      allV.push(topV[i*3] + (off ? off[0] : 0), topV[i*3+1] + (off ? off[1] : 0), z);
     }
 
     const botT = [];
