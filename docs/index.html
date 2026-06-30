@@ -515,6 +515,31 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
     </div>
 
     <div class="panel-section">
+      <h3>Tiling (split area)</h3>
+      <div class="section-body">
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" id="tiling-enable" style="accent-color:var(--accent);width:16px;height:16px;" onchange="UI.toggleTiling(this.checked)">
+          <label for="tiling-enable" style="margin:0;cursor:pointer;">Split into tiles</label>
+        </div>
+        <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0;">Print a large area in high detail by breaking it into a grid of tiles — each meshed at full resolution. Rectangle selection only.</p>
+        <div id="tiling-opts" style="display:none;margin-top:10px;">
+          <div class="input-row">
+            <div>
+              <label>Rows</label>
+              <input type="number" id="tile-rows" value="2" min="1" max="8" step="1" oninput="UI.onTileGridChange()">
+            </div>
+            <div>
+              <label>Columns</label>
+              <input type="number" id="tile-cols" value="2" min="1" max="8" step="1" oninput="UI.onTileGridChange()">
+            </div>
+          </div>
+          <p id="tiling-info" style="font-size:11px;color:var(--text-secondary);margin:2px 0 0;"></p>
+          <button class="btn btn-primary btn-block" style="margin-top:10px;" onclick="UI.generateTiles()">⬇ Generate Tiles (ZIP)</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-section">
       <h3>Terrain Colors (3MF)</h3>
       <div class="section-body">
         <div id="std-colors">
@@ -985,7 +1010,7 @@ function downloadBlob(blob, filename) {
 // ═══════════════════════════════════════════════
 
 let map, drawnItems, drawControl;
-let baseImageryLayer = null, labelLayer = null;
+let baseImageryLayer = null, labelLayer = null, tileGridLayer = null;
 
 // Swap the map's base imagery to `key` (IMAGERY_SOURCES). Keeps place-name labels on top
 // and points the colour-extraction source at the same imagery. Called on init and when the
@@ -1043,15 +1068,40 @@ const MapModule = {
       State.selectionShape = e.layerType === 'circle' ? 'circle' : 'rect';
       State.customRect = e.layer;
       UI.updateSelectionInfo();
+      drawTileGrid();
     });
     map.on(L.Draw.Event.DELETED, () => {
       State.selectedBounds = null;
       State.selectionShape = 'rect';
       State.customRect = null;
       UI.updateSelectionInfo();
+      drawTileGrid();
     });
+
+    tileGridLayer = L.layerGroup().addTo(map);
   }
 };
+
+// Draw the R×C tiling grid inside the current rectangle selection (cleared when tiling is
+// off, nothing is selected, or a circle is selected). Reused on selection / rows / cols change.
+function drawTileGrid() {
+  if (!tileGridLayer) return;
+  tileGridLayer.clearLayers();
+  const on = document.getElementById('tiling-enable')?.checked;
+  if (!on || !State.selectedBounds || State.selectionShape !== 'rect') return;
+  const rows = Math.max(1, Math.min(8, parseInt(document.getElementById('tile-rows')?.value) || 1));
+  const cols = Math.max(1, Math.min(8, parseInt(document.getElementById('tile-cols')?.value) || 1));
+  const b = State.selectedBounds;
+  const w = b.getWest(), e = b.getEast(), s = b.getSouth(), n = b.getNorth();
+  const dLon = (e - w) / cols, dLat = (n - s) / rows;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      L.rectangle([[s + r*dLat, w + c*dLon], [s + (r+1)*dLat, w + (c+1)*dLon]], {
+        color: '#f0b429', weight: 1, fill: false, interactive: false,
+      }).addTo(tileGridLayer);
+    }
+  }
+}
 
 // ═══════════════════════════════════════════════
 //  GEOCODE  (place search via OSM Nominatim)
@@ -2061,7 +2111,7 @@ const MeshGen = {
   // lakeMask: optional Uint8Array (1=lake pixel), lakeElevMap: optional Float32Array.
   // colorImage: optional { kind:'photo'|'landcover', width, height, rgb } for per-region
   // (top-shell) coloring from satellite photo (k-means) or land-cover classification.
-  generate(elevData, lakeMask = null, lakeElevMap = null, colorImage = null, buildings = null, lcWaterMask = null) {
+  generate(elevData, lakeMask = null, lakeElevMap = null, colorImage = null, buildings = null, lcWaterMask = null, tileScale = null) {
     const printSize = parseFloat(document.getElementById('print-size').value) || 150;
     const vertExag = parseFloat(document.getElementById('vert-exag').value) || 2;
     const baseHeight = parseFloat(document.getElementById('base-height').value) || 4;
@@ -2139,12 +2189,24 @@ const MeshGen = {
     }
 
     // Elevation to mm: scale the elevation range to a reasonable height
-    const elevRange = maxElev - minElev;
+    let elevRange = maxElev - minElev;
     // Target max terrain height: proportional to print size, scaled by exaggeration
     // A 150mm tile of Oregon mountains (~3000m over ~100km) at 2× exag:
     // real ratio = 3000/100000 = 0.03 → 150 * 0.03 * 2 = 9mm terrain height
     const realWorldSpanM = Math.max(geoW, geoH) * 111320; // approximate meters of larger dimension
-    const elevScale = (printSize / realWorldSpanM) * vertExag; // mm per meter of elevation
+    let elevScale = (printSize / realWorldSpanM) * vertExag; // mm per meter of elevation
+
+    // Tiling: force one shared coordinate system across all tiles (same vertical datum, vertical
+    // scale, and tile size) so the printed pieces assemble into a continuous model. Without this,
+    // each tile would compute its own minElev/elevScale/size and the edges wouldn't line up.
+    if (tileScale) {
+      if (tileScale.minElev  != null) minElev  = tileScale.minElev;
+      if (tileScale.maxElev  != null) maxElev  = tileScale.maxElev;
+      if (tileScale.meshW    != null) meshW    = tileScale.meshW;
+      if (tileScale.meshH    != null) meshH    = tileScale.meshH;
+      if (tileScale.elevScale != null) elevScale = tileScale.elevScale;
+      elevRange = maxElev - minElev;
+    }
 
     // Generate vertices for the terrain surface
     // vertex layout: (w * h) terrain vertices
@@ -3263,7 +3325,7 @@ const ThreeMFExport = {
   // Each pixel is assigned to exactly one band via pixelBands[]. Solids fit
   // together using split walls: at any inter-band edge, each band generates only
   // its share of the wall so there are no duplicate coplanar faces (no seams/holes).
-  async generate(mesh) {
+  async generate(mesh, opts = {}) {
     const zip = new JSZip();
     zip.file('[Content_Types].xml',
       '<?xml version="1.0" encoding="UTF-8"?>\n' +
@@ -3283,8 +3345,11 @@ const ThreeMFExport = {
     const { built, presentBands } = this._buildTerrainSolids(mesh);
 
     // Optional frame / cartouche (border, title, coordinates, legend, scale bar).
-    for (const obj of this._buildFrameObjects(mesh, presentBands)) {
-      if (obj.solid && obj.solid.t.length > 0) built.push(obj);
+    // Skipped for tiling — a frame on every tile would be wrong.
+    if (!opts.skipFrame) {
+      for (const obj of this._buildFrameObjects(mesh, presentBands)) {
+        if (obj.solid && obj.solid.t.length > 0) built.push(obj);
+      }
     }
 
     const xmlParts = [
@@ -3744,10 +3809,20 @@ const ThreeMFExport = {
     const fw = parseFloat(document.getElementById('frame-width')?.value) || 8;   // border width
     const ph = parseFloat(document.getElementById('frame-panel')?.value) || 30;  // min cartouche height
 
+    // Raised outer border (read up-front so the cartouche layout can clear it). The lip is a
+    // full-perimeter ring of width rimW raised rimH above the plate; if cartouche content sat
+    // under it, the tall lip would bury the short text — so `pad` below keeps text clear of it.
+    const borderOn = document.getElementById('frame-border-on')?.checked;
+    const rimW = borderOn ? Math.min(parseFloat(document.getElementById('frame-rim-width')?.value) || 4, fw) : 0;
+    const rimH = borderOn ? (parseFloat(document.getElementById('frame-rim-height')?.value) || 4) : 0;
+
     const X0 = -fw, X1 = meshW + fw;
     const Y1 = meshH + fw;          // top of frame
     const Yc = -fw;                 // top edge of cartouche panel (just below terrain border)
-    const pad = Math.min(fw, 6);
+    // Content inset from the plate edge: the usual padding, but never less than the raised
+    // border width plus a small gap, so the lip can't overlap the title/legend/scale text.
+    const BORDER_GAP = 1.5;
+    const pad = Math.max(Math.min(fw, 6), borderOn ? rimW + BORDER_GAP : 0);
 
     let cursorY = Yc - pad;
     let lowestY = cursorY;
@@ -3916,9 +3991,7 @@ const ThreeMFExport = {
       }
 
       // Raised rim following the arched outline (band of width rimW).
-      if (document.getElementById('frame-border-on')?.checked) {
-        const rimW = Math.min(parseFloat(document.getElementById('frame-rim-width')?.value) || 4, fw);
-        const rimH = parseFloat(document.getElementById('frame-rim-height')?.value) || 4;
+      if (borderOn) {
         const inInset = (x, y) => (y >= cy)
           ? ((x-cx)*(x-cx) + (y-cy)*(y-cy) <= (Ro-rimW)*(Ro-rimW) + 1e-6)
           : (x >= X0 + rimW - 1e-6 && x <= X1 - rimW + 1e-6 && y >= Y0 + rimW - 1e-6);
@@ -3985,9 +4058,7 @@ const ThreeMFExport = {
     // Optional raised outer border (a rim around the whole plate perimeter, sitting
     // on top of the frame plate edge — a shadow-box lip). Built as a ring (outer
     // rect minus an inset inner rect) so it's watertight, extruded above the plate.
-    if (document.getElementById('frame-border-on')?.checked) {
-      const rimW = Math.min(parseFloat(document.getElementById('frame-rim-width')?.value) || 4, fw);
-      const rimH = parseFloat(document.getElementById('frame-rim-height')?.value) || 4;
+    if (borderOn) {
       const rxs = [X0, X0 + rimW, X1 - rimW, X1];
       const rys = [Y0, Y0 + rimW, Y1 - rimW, Y1];
       const rimTris = [];
@@ -4234,92 +4305,101 @@ const UI = {
     el.innerHTML = html;
   },
 
+  // Fetch every layer for `bounds` (elevation, water, colour source, buildings, land-cover water
+  // seed) and build + repair the mesh. `tileScale` forces a shared coordinate system (tiling).
+  // Returns { meshData, elevationData }. Pure builder — no preview / State writes / UI text.
+  async _buildMeshForBounds(bounds, resolution, tileScale = null) {
+    showLoading('Fetching elevation data…');
+    const elevationData = await Elevation.fetchElevation(bounds, resolution);
+
+    let lakeMask = null, lakeElevMap = null;
+    if (document.getElementById('water-detect').checked) {
+      const result = await WaterDetection.detect(bounds, resolution);
+      lakeMask = result.lakeMask;            // all water → coloured as water
+      if (lakeMask) {
+        // Flatten only still water; rivers/streams keep following the terrain.
+        lakeElevMap = WaterDetection.flattenLakes(elevationData, result.flattenMask);
+      }
+    }
+
+    // Per-region colouring source (advanced mode): satellite photo or land cover.
+    let colorImage = null;
+    const advOn = document.getElementById('adv-colors-on')?.checked;
+    const source = advOn ? (document.getElementById('adv-source')?.value || 'elevation') : 'elevation';
+    if (source === 'satellite') {
+      showLoading('Fetching satellite imagery…');
+      const img = await Satellite.fetch(bounds, resolution);
+      if (img) colorImage = { kind: 'photo', ...img };
+      else toast('Satellite imagery unavailable — using elevation colors.');
+    } else if (source === 'hybrid') {
+      // Hybrid needs BOTH rasters: land cover defines the regions, the photo colours them.
+      showLoading('Fetching satellite imagery…');
+      const photo = await Satellite.fetch(bounds, resolution);
+      const lc = photo ? await Landcover.fetch(bounds, resolution) : null;
+      if (photo && lc) {
+        colorImage = { kind: 'hybrid', width: photo.width, height: photo.height, rgb: photo.rgb, lcRgb: lc.rgb };
+      } else if (photo) {
+        colorImage = { kind: 'photo', ...photo };          // land cover failed → plain satellite
+        toast('Land cover unavailable — using satellite photo only.');
+      } else {
+        toast('Imagery unavailable — using elevation colors.');
+      }
+    } else if (source === 'landcover') {
+      const img = await Landcover.fetch(bounds, resolution);
+      if (img) colorImage = { kind: 'landcover', ...img };
+      else toast('Land cover unavailable — using elevation colors.');
+    }
+
+    // Optional OSM buildings (opt-in). Failure is tolerated — never aborts the model.
+    let buildings = null;
+    if (document.getElementById('buildings-enable')?.checked) {
+      showLoading('Fetching buildings…');
+      buildings = await Buildings.fetch(bounds);
+      if (!buildings.length) toast('No OSM buildings found in this area.');
+    }
+
+    // Imagery water seed: the Sentinel-2 land-cover Water class. Guarantees water the
+    // imagery sees is represented in every colour mode (still subject to the slope gate
+    // in MeshGen). Reuses the raster already fetched for land-cover/hybrid; photo and
+    // standard-elevation modes fetch it once just for this. Failure → null (falls back
+    // to ocean + OSM detection).
+    let lcWaterMask = null;
+    if (document.getElementById('water-detect').checked) {
+      let lcRgb = colorImage?.kind === 'landcover' ? colorImage.rgb
+                : colorImage?.kind === 'hybrid'    ? colorImage.lcRgb : null;
+      if (!lcRgb) {
+        showLoading('Detecting water (land cover)…');
+        const lc = await Landcover.fetch(bounds, resolution);
+        if (lc) lcRgb = lc.rgb;
+      }
+      if (lcRgb) {
+        const n = resolution * resolution;
+        const cls = classifyLandcover(lcRgb, n);
+        lcWaterMask = new Uint8Array(n);
+        for (let i = 0; i < n; i++) if (cls[i] === LC_WATER) lcWaterMask[i] = 1;
+      }
+    }
+
+    showLoading('Generating mesh…');
+    await new Promise(r => setTimeout(r, 50));
+    const rawMesh = MeshGen.generate(elevationData, lakeMask, lakeElevMap, colorImage, buildings, lcWaterMask, tileScale);
+
+    showLoading('Checking mesh…');
+    await new Promise(r => setTimeout(r, 20));
+    const meshData = MeshRepair.repair(rawMesh);
+    return { meshData, elevationData };
+  },
+
   async generateModel() {
     if (!State.selectedBounds) {
       toast('Draw a rectangle on the map first.');
       return;
     }
-
     const resolution = parseInt(document.getElementById('mesh-res').value) || 512;
     try {
-      showLoading('Fetching elevation data…');
-      State.elevationData = await Elevation.fetchElevation(State.selectedBounds, resolution);
-
-      let lakeMask = null, lakeElevMap = null;
-      if (document.getElementById('water-detect').checked) {
-        const result = await WaterDetection.detect(State.selectedBounds, resolution);
-        lakeMask = result.lakeMask;            // all water → coloured as water
-        if (lakeMask) {
-          // Flatten only still water; rivers/streams keep following the terrain.
-          lakeElevMap = WaterDetection.flattenLakes(State.elevationData, result.flattenMask);
-        }
-      }
-
-      // Per-region colouring source (advanced mode): satellite photo or land cover.
-      let colorImage = null;
-      const advOn = document.getElementById('adv-colors-on')?.checked;
-      const source = advOn ? (document.getElementById('adv-source')?.value || 'elevation') : 'elevation';
-      if (source === 'satellite') {
-        showLoading('Fetching satellite imagery…');
-        const img = await Satellite.fetch(State.selectedBounds, resolution);
-        if (img) colorImage = { kind: 'photo', ...img };
-        else toast('Satellite imagery unavailable — using elevation colors.');
-      } else if (source === 'hybrid') {
-        // Hybrid needs BOTH rasters: land cover defines the regions, the photo colours them.
-        showLoading('Fetching satellite imagery…');
-        const photo = await Satellite.fetch(State.selectedBounds, resolution);
-        const lc = photo ? await Landcover.fetch(State.selectedBounds, resolution) : null;
-        if (photo && lc) {
-          colorImage = { kind: 'hybrid', width: photo.width, height: photo.height, rgb: photo.rgb, lcRgb: lc.rgb };
-        } else if (photo) {
-          colorImage = { kind: 'photo', ...photo };          // land cover failed → plain satellite
-          toast('Land cover unavailable — using satellite photo only.');
-        } else {
-          toast('Imagery unavailable — using elevation colors.');
-        }
-      } else if (source === 'landcover') {
-        const img = await Landcover.fetch(State.selectedBounds, resolution);
-        if (img) colorImage = { kind: 'landcover', ...img };
-        else toast('Land cover unavailable — using elevation colors.');
-      }
-
-      // Optional OSM buildings (opt-in). Failure is tolerated — never aborts the model.
-      let buildings = null;
-      if (document.getElementById('buildings-enable')?.checked) {
-        showLoading('Fetching buildings…');
-        buildings = await Buildings.fetch(State.selectedBounds);
-        if (!buildings.length) toast('No OSM buildings found in this area.');
-      }
-
-      // Imagery water seed: the Sentinel-2 land-cover Water class. Guarantees water the
-      // imagery sees is represented in every colour mode (still subject to the slope gate
-      // in MeshGen). Reuses the raster already fetched for land-cover/hybrid; photo and
-      // standard-elevation modes fetch it once just for this. Failure → null (falls back
-      // to ocean + OSM detection).
-      let lcWaterMask = null;
-      if (document.getElementById('water-detect').checked) {
-        let lcRgb = colorImage?.kind === 'landcover' ? colorImage.rgb
-                  : colorImage?.kind === 'hybrid'    ? colorImage.lcRgb : null;
-        if (!lcRgb) {
-          showLoading('Detecting water (land cover)…');
-          const lc = await Landcover.fetch(State.selectedBounds, resolution);
-          if (lc) lcRgb = lc.rgb;
-        }
-        if (lcRgb) {
-          const n = resolution * resolution;
-          const cls = classifyLandcover(lcRgb, n);
-          lcWaterMask = new Uint8Array(n);
-          for (let i = 0; i < n; i++) if (cls[i] === LC_WATER) lcWaterMask[i] = 1;
-        }
-      }
-
-      showLoading('Generating mesh…');
-      await new Promise(r => setTimeout(r, 50));
-      const rawMesh = MeshGen.generate(State.elevationData, lakeMask, lakeElevMap, colorImage, buildings, lcWaterMask);
-
-      showLoading('Checking mesh…');
-      await new Promise(r => setTimeout(r, 20));
-      State.meshData = MeshRepair.repair(rawMesh);
+      const { meshData, elevationData } = await this._buildMeshForBounds(State.selectedBounds, resolution);
+      State.elevationData = elevationData;
+      State.meshData = meshData;
 
       showLoading('Building preview…');
       await new Promise(r => setTimeout(r, 50));
@@ -4334,6 +4414,96 @@ const UI = {
       hideLoading();
       console.error(e);
       toast('Error generating model: ' + e.message);
+    }
+  },
+
+  toggleTiling(on) {
+    document.getElementById('tiling-opts').style.display = on ? 'block' : 'none';
+    this._updateTileInfo();
+    drawTileGrid();
+  },
+
+  onTileGridChange() {
+    this._updateTileInfo();
+    drawTileGrid();
+  },
+
+  _updateTileInfo() {
+    const el = document.getElementById('tiling-info');
+    if (!el) return;
+    const rows = Math.max(1, Math.min(8, parseInt(document.getElementById('tile-rows')?.value) || 1));
+    const cols = Math.max(1, Math.min(8, parseInt(document.getElementById('tile-cols')?.value) || 1));
+    const ps = parseFloat(document.getElementById('print-size')?.value) || 150;
+    el.textContent = `${rows*cols} tiles · each ${ps}mm · assembled ≈ ${(cols*ps)|0}×${(rows*ps)|0} mm`;
+  },
+
+  // Tiling: split the rectangle selection into rows×cols high-detail tiles that share one
+  // coordinate system, exported as a single ZIP of per-tile 3MF files (flat butt-edges).
+  async generateTiles() {
+    if (!State.selectedBounds) { toast('Draw a rectangle on the map first.'); return; }
+    if (State.selectionShape !== 'rect') { toast('Tiling needs a rectangle selection (not a circle).'); return; }
+
+    const rows = Math.max(1, Math.min(8, parseInt(document.getElementById('tile-rows').value) || 1));
+    const cols = Math.max(1, Math.min(8, parseInt(document.getElementById('tile-cols').value) || 1));
+    const resolution = parseInt(document.getElementById('mesh-res').value) || 512;
+
+    const advOn = document.getElementById('adv-colors-on')?.checked;
+    const source = advOn ? (document.getElementById('adv-source')?.value || 'elevation') : 'elevation';
+    if (source === 'satellite' || source === 'hybrid') {
+      toast('Photo colors cluster per tile → seams. Use Elevation or Land cover for seamless tiles.', 6000);
+    }
+
+    const b = State.selectedBounds;
+    const west = b.getWest(), east = b.getEast(), south = b.getSouth(), north = b.getNorth();
+    const dLon = (east - west) / cols, dLat = (north - south) / rows;
+
+    try {
+      // Shared datum + scale across all tiles, computed once from a whole-area pass so the
+      // pieces assemble into one continuous model (see MeshGen.generate `tileScale`).
+      showLoading('Measuring area…');
+      const whole = await Elevation.fetchElevation(b, Math.min(resolution, 512));
+      let minElev = Infinity, maxElev = -Infinity;
+      for (let i = 0; i < whole.data.length; i++) {
+        const z = Math.max(0, whole.data[i]);   // clamp sub-sea like MeshGen
+        if (z < minElev) minElev = z;
+        if (z > maxElev) maxElev = z;
+      }
+      const printSize = parseFloat(document.getElementById('print-size').value) || 150;
+      const vertExag = parseFloat(document.getElementById('vert-exag').value) || 2;
+      const midLat = (north + south) / 2, cosLat = Math.cos(midLat * Math.PI / 180);
+      const geoW = dLon * cosLat, geoH = dLat;        // one tile's normalized extent
+      const aspect = geoW / geoH;
+      const meshW = aspect >= 1 ? printSize : printSize * aspect;
+      const meshH = aspect >= 1 ? printSize / aspect : printSize;
+      const elevScale = (printSize / (Math.max(geoW, geoH) * 111320)) * vertExag;
+      const tileScale = { minElev, maxElev, meshW, meshH, elevScale };
+
+      const zip = new JSZip();
+      const total = rows * cols;
+      let k = 0;
+      // Row 0 = north (top); filenames read top-left → bottom-right.
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          k++;
+          showLoading(`Tile ${k}/${total} (r${r + 1} c${c + 1})…`);
+          const ts = north - (r + 1) * dLat, tn = north - r * dLat;
+          const tw = west + c * dLon, te = west + (c + 1) * dLon;
+          const tb = L.latLngBounds([[ts, tw], [tn, te]]);
+          const { meshData } = await this._buildMeshForBounds(tb, resolution, tileScale);
+          const { blob } = await ThreeMFExport.generate(meshData, { skipFrame: true });
+          zip.file(`tile_r${r + 1}_c${c + 1}.3mf`, blob);
+        }
+      }
+
+      showLoading('Packaging ZIP…');
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      downloadBlob(zipBlob, `terraprint_tiles_${rows}x${cols}.zip`);
+      hideLoading();
+      toast(`${total} tiles exported · assemble ${cols}×${rows} (${(cols*printSize)|0}×${(rows*printSize)|0} mm)`);
+    } catch (e) {
+      hideLoading();
+      console.error(e);
+      toast('Error generating tiles: ' + e.message);
     }
   },
 
