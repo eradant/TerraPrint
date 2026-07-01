@@ -4842,8 +4842,10 @@ const Paint = {
   _toGrid(clientX, clientY) {
     const cv = document.getElementById('paint-canvas');
     const r = cv.getBoundingClientRect();
-    return { gx: Math.floor((clientX - r.left) / r.width  * State.waterOverride.w),
-             gy: Math.floor((clientY - r.top)  / r.height * State.waterOverride.h) };
+    // Use the canvas's own grid resolution so this works in both water and color modes
+    // (waterOverride may be null in color mode).
+    return { gx: Math.floor((clientX - r.left) / r.width  * cv.width),
+             gy: Math.floor((clientY - r.top)  / r.height * cv.height) };
   },
 
   _attach() {
