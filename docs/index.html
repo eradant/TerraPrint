@@ -3356,6 +3356,13 @@ const STLExport = {
 // Default 0.15mm; the outer silhouette is always untouched.
 let COLOR_OVERLAP_MM = 0.15;
 
+// How far each photo colour cap extends DOWN into the single-colour Base (mm). The cap bottom
+// would otherwise sit exactly on the Base top (a coincident touch), so each cap — a separate 3MF
+// object — reads as "floating" to the slicer and bonds weakly. Extending it into the Base makes
+// the two volumes overlap: caps rest on the plate-connected Base (no floating warning) and fuse.
+// Purely internal (never a visible surface), so it's a fixed value, not a user control.
+const CAP_BASE_OVERLAP_MM = 0.4;
+
 const ThreeMFExport = {
   COLORS: [
     { name: 'Water',   hex: '#2D6ABF' },
@@ -3726,7 +3733,9 @@ const ThreeMFExport = {
     }
     for (let i = 0; i < numTop; i++) {
       const off = offs[i];
-      const z = capDepth == null ? 0 : Math.max(0, topV[i*3+2] - capDepth);
+      // Extend the cap bottom below the Base top so the two solids overlap (no "floating" cap,
+      // stronger cap/Base bond). Full-height regions (capDepth == null) still go to the plate.
+      const z = capDepth == null ? 0 : Math.max(0, topV[i*3+2] - capDepth - CAP_BASE_OVERLAP_MM);
       allV.push(topV[i*3] + (off ? off[0] : 0), topV[i*3+1] + (off ? off[1] : 0), z);
     }
 
