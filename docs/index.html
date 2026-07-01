@@ -896,11 +896,12 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 <!-- ─── Water Paint Modal (full screen) ─── -->
 <div id="paint-modal" style="display:none;position:fixed;inset:0;z-index:2000;background:#0d1117;flex-direction:column;">
   <div style="display:flex;align-items:center;gap:14px;padding:10px 14px;border-bottom:1px solid var(--border,#30363d);flex-wrap:wrap;">
-    <strong style="font-size:14px;">Water Paint</strong>
-    <div class="btn-row" style="margin:0;">
+    <strong id="paint-title" style="font-size:14px;">Water Paint</strong>
+    <div class="btn-row" id="paint-water-modes" style="margin:0;">
       <button id="paint-mode-add" class="btn btn-sm btn-primary" onclick="Paint.setMode('add')">＋ Add</button>
       <button id="paint-mode-erase" class="btn btn-sm" onclick="Paint.setMode('erase')">－ Erase</button>
     </div>
+    <div id="paint-palette" style="display:none;align-items:center;gap:5px;flex-wrap:wrap;"></div>
     <label style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:8px;">Brush
       <input type="range" id="paint-brush" min="1" max="60" step="1" value="6" style="width:110px;" oninput="Paint.brush=parseInt(this.value);document.getElementById('paint-brush-val').textContent=this.value">
       <span id="paint-brush-val" style="min-width:18px;">6</span>
@@ -973,6 +974,7 @@ const State = {
   elevationData: null,     // {width, height, data: Float32Array, bounds}
   meshData: null,          // generated mesh
   waterOverride: null,     // { w, h, add:Uint8Array, remove:Uint8Array } manual paint edits
+  colorOverride: null,     // { w, h, band:Int8Array } manual band recolour (-1 = auto)
   advNames: null,          // per-band names for the legend (land-cover mode)
 };
 
@@ -2809,6 +2811,17 @@ const MeshGen = {
       pixelBands.set(out);
     }
 
+    // Manual colour correction: force painted pixels to a chosen band before deriving triColors,
+    // so the classification, preview and export all reflect the override (see Paint color mode).
+    const colorOv = State.colorOverride;
+    const hasColorOv = colorOv && colorOv.w === w && colorOv.h === h;
+    if (hasColorOv) {
+      for (let i = 0; i < w * h; i++) {
+        const bnd = colorOv.band[i];
+        if (bnd >= 0 && bnd < numColors) pixelBands[i] = bnd;
+      }
+    }
+
     // Derive triColors from pixelBands (majority band among a triangle's terrain vertices)
     const triColors = new Uint8Array(triElevations.length);
     const terrainVertCount = w * h;
@@ -3062,6 +3075,28 @@ const MeshGen = {
           }
           if (!anyChanged) break;
         }
+      }
+    }
+
+    // Re-assert manual colour corrections after the noise-smoothing passes, so small painted
+    // strokes aren't merged away. For any terrain triangle touching a painted vertex, re-derive
+    // its colour from the (already-overridden) pixelBands majority.
+    if (hasColorOv) {
+      const tvc = w * h;
+      for (let i = 0; i < triColors.length; i++) {
+        if (triElevations[i] < 0) continue;
+        const ti = i * 3;
+        let touched = false;
+        const counts = new Array(numColors).fill(0);
+        for (let k = 0; k < 3; k++) {
+          const vi = triangles[ti + k];
+          if (vi < tvc) {
+            counts[pixelBands[vi]]++;
+            const bnd = colorOv.band[vi];
+            if (bnd >= 0 && bnd < numColors) touched = true;
+          }
+        }
+        if (touched) triColors[i] = counts.indexOf(Math.max(...counts));
       }
     }
 
@@ -4284,6 +4319,13 @@ const UI = {
 
     if (State.meshData) {
       html += `<button class="btn btn-block" style="margin-top:8px;" onclick="Paint.open()">🖌 Paint Water</button>`;
+      // Color Correct only applies in the per-region colour modes (satellite/hybrid/land cover),
+      // where pixelBands defines the colours; in elevation-banded modes painting has no effect.
+      const advOn = document.getElementById('adv-colors-on')?.checked;
+      const src = advOn ? (document.getElementById('adv-source')?.value || 'elevation') : 'elevation';
+      if (State.meshData.satellite && (src === 'satellite' || src === 'hybrid' || src === 'landcover')) {
+        html += `<button class="btn btn-block" style="margin-top:8px;" onclick="Paint.openColor()">🎨 Color Correct</button>`;
+      }
       html += `<div class="btn-row" style="margin-top:8px;">
         <button class="btn" onclick="UI.exportSTL()">⬇ STL</button>
         <button class="btn" onclick="UI.export3MF()">⬇ 3MF</button>
@@ -4548,6 +4590,9 @@ const UI = {
 
 const Paint = {
   mode: 'add',
+  target: 'water',              // 'water' (mask edit) | 'color' (band recolour)
+  selectedBand: 1,              // active band for color mode
+  palette: [],                  // [{name,hex}] band colours in color mode
   brush: 6,
   painting: false,
   panning: false,
@@ -4558,6 +4603,7 @@ const Paint = {
     const ed = State.elevationData;
     if (!ed) { toast('Generate a model first.'); return; }
     const w = ed.width, h = ed.height;
+    this.target = 'water';
 
     // (Re)allocate override masks if grid size changed.
     if (!State.waterOverride || State.waterOverride.w !== w || State.waterOverride.h !== h) {
@@ -4565,6 +4611,7 @@ const Paint = {
     }
 
     this._buildHillshade(ed);
+    this._applyTargetUI();
 
     // Canvas internal resolution = grid resolution; zoom is done via CSS transform
     // (image-rendering:pixelated keeps it crisp), so painting precision is per-pixel.
@@ -4576,6 +4623,62 @@ const Paint = {
     document.getElementById('paint-modal').style.display = 'flex';
     this._attach();
     requestAnimationFrame(() => this.zoomFit());
+  },
+
+  // Color-correction mode: brush the classified colours to a chosen band.
+  openColor() {
+    const ed = State.elevationData, md = State.meshData;
+    if (!ed || !md || !md.pixelBands) { toast('Generate a model first.'); return; }
+    const w = ed.width, h = ed.height;
+    if (md.gridW !== w || md.gridH !== h) { toast('Regenerate the model first.'); return; }
+    this.target = 'color';
+
+    if (!State.colorOverride || State.colorOverride.w !== w || State.colorOverride.h !== h) {
+      State.colorOverride = { w, h, band: new Int8Array(w*h).fill(-1) };
+    }
+
+    this.palette = getBandConfig().colors;
+    if (this.selectedBand >= this.palette.length) this.selectedBand = 1;
+    this._buildHillshade(ed);
+    this._buildPalette();
+    this._applyTargetUI();
+
+    const cv = document.getElementById('paint-canvas');
+    cv.width = w; cv.height = h;
+
+    this.redraw();
+    document.getElementById('paint-modal').style.display = 'flex';
+    this._attach();
+    requestAnimationFrame(() => this.zoomFit());
+  },
+
+  // Show/hide the water add-erase buttons vs the colour palette; set the modal title.
+  _applyTargetUI() {
+    const color = this.target === 'color';
+    document.getElementById('paint-title').textContent = color ? 'Color Correct' : 'Water Paint';
+    document.getElementById('paint-water-modes').style.display = color ? 'none' : '';
+    document.getElementById('paint-palette').style.display = color ? 'flex' : 'none';
+  },
+
+  // Build the palette strip: one chip per band colour + an Auto (erase) chip.
+  _buildPalette() {
+    const box = document.getElementById('paint-palette');
+    box.innerHTML = '';
+    const chip = (label, hex, band) => {
+      const d = document.createElement('div');
+      d.title = label;
+      d.style.cssText = `width:22px;height:22px;border-radius:5px;cursor:pointer;` +
+        (hex ? `background:${hex};` : `background:repeating-conic-gradient(#555 0% 25%,#333 0% 50%) 50%/10px 10px;`) +
+        `border:2px solid ${this.selectedBand === band ? '#fff' : 'rgba(255,255,255,0.25)'};`;
+      d.onclick = () => { this.selectedBand = band; this._buildPalette(); };
+      box.appendChild(d);
+    };
+    this.palette.forEach((c, i) => chip(c.name, c.hex, i));
+    chip('Auto (erase)', null, -1);
+    const hint = document.createElement('span');
+    hint.style.cssText = 'font-size:11px;color:var(--text-muted);margin-left:4px;';
+    hint.textContent = 'alt-click = eyedropper';
+    box.appendChild(hint);
   },
 
   close() {
@@ -4615,8 +4718,12 @@ const Paint = {
   },
 
   clear() {
-    const ov = State.waterOverride;
-    if (ov) { ov.add.fill(0); ov.remove.fill(0); }
+    if (this.target === 'color') {
+      if (State.colorOverride) State.colorOverride.band.fill(-1);
+    } else {
+      const ov = State.waterOverride;
+      if (ov) { ov.add.fill(0); ov.remove.fill(0); }
+    }
     this.redraw();
   },
 
@@ -4656,10 +4763,51 @@ const Paint = {
     }
     ctx.putImageData(img, 0, 0);
     this.baseCanvas = cv;
+    this._shadeCache = null;
+  },
+
+  _hexToRgb(hex) {
+    const h = (hex || '#808080').replace('#', '');
+    return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
+  },
+
+  // Grayscale hillshade values (0-255) read once from baseCanvas, for shaded colour maps.
+  _hillshadeData() {
+    if (this._shadeCache) return this._shadeCache;
+    const bc = this.baseCanvas;
+    const d = bc.getContext('2d').getImageData(0, 0, bc.width, bc.height).data;
+    const g = new Uint8Array(bc.width * bc.height);
+    for (let i = 0; i < g.length; i++) g[i] = d[i*4];
+    this._shadeCache = g;
+    return g;
+  },
+
+  // Color mode: render the classified colours (override ∪ auto) shaded by the hillshade — a live
+  // WYSIWYG preview that recolours as you paint.
+  _redrawColor() {
+    const cv = document.getElementById('paint-canvas');
+    const ctx = cv.getContext('2d');
+    const cov = State.colorOverride;
+    const w = cov.w, h = cov.h;
+    const pb = State.meshData?.pixelBands;
+    const shade = this._hillshadeData();
+    const pal = this.palette.map(c => this._hexToRgb(c.hex));
+    ctx.imageSmoothingEnabled = false;
+    const img = ctx.createImageData(w, h);
+    for (let i = 0; i < w*h; i++) {
+      let b = cov.band[i] >= 0 ? cov.band[i] : (pb ? pb[i] : 0);
+      if (b >= pal.length) b = pb ? pb[i] : 0;
+      const rgb = pal[b] || [128,128,128];
+      const s = (shade ? shade[i] : 200) / 255;
+      const o = i*4;
+      img.data[o] = rgb[0]*s; img.data[o+1] = rgb[1]*s; img.data[o+2] = rgb[2]*s; img.data[o+3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
   },
 
   // Composite: hillshade + current water (detected ∪ add) ∖ remove, tinted blue.
   redraw() {
+    if (this.target === 'color') return this._redrawColor();
     const cv = document.getElementById('paint-canvas');
     const ctx = cv.getContext('2d');
     const ov = State.waterOverride;
@@ -4707,10 +4855,12 @@ const Paint = {
     let panStart = null;
 
     // Left button on the canvas paints; other buttons / empty stage pans.
+    // In color mode, alt-click eyedrops the band under the cursor instead of painting.
     cv.addEventListener('mousedown', e => {
       if (e.button !== 0) return;
-      this.painting = true;
       const p = this._toGrid(e.clientX, e.clientY);
+      if (this.target === 'color' && e.altKey) { this._eyedrop(p.gx, p.gy); e.preventDefault(); return; }
+      this.painting = true;
       this._stamp(p.gx, p.gy);
       e.preventDefault();
     });
@@ -4778,8 +4928,20 @@ const Paint = {
   },
 
   _stamp(gx, gy) {
+    const r = this.brush;
+    if (this.target === 'color') {
+      const cov = State.colorOverride, w = cov.w, h = cov.h, val = this.selectedBand;
+      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        if (dx*dx + dy*dy > r*r) continue;
+        const x = gx + dx, y = gy + dy;
+        if (x < 0 || x >= w || y < 0 || y >= h) continue;
+        cov.band[y*w + x] = val;   // -1 = Auto (revert)
+      }
+      this.redraw();
+      return;
+    }
     const ov = State.waterOverride;
-    const w = ov.w, h = ov.h, r = this.brush;
+    const w = ov.w, h = ov.h;
     const addMask = this.mode === 'add' ? ov.add : ov.remove;
     const clrMask = this.mode === 'add' ? ov.remove : ov.add;
     for (let dy = -r; dy <= r; dy++) {
@@ -4793,6 +4955,17 @@ const Paint = {
       }
     }
     this.redraw();
+  },
+
+  // Sample the effective band under the cursor (override ∪ auto) into the active brush colour.
+  _eyedrop(gx, gy) {
+    const cov = State.colorOverride;
+    if (gx < 0 || gx >= cov.w || gy < 0 || gy >= cov.h) return;
+    const i = gy*cov.w + gx;
+    const pb = State.meshData?.pixelBands;
+    let b = cov.band[i] >= 0 ? cov.band[i] : (pb ? pb[i] : -1);
+    if (b >= this.palette.length) b = pb ? pb[i] : -1;
+    if (b >= 0) { this.selectedBand = b; this._buildPalette(); }
   },
 };
 
