@@ -314,8 +314,9 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 #preview-panel.fullscreen {
   position: fixed;
   inset: 0;
-  width: 100vw;
-  height: 100vh;
+  /* !important beats any lingering inline size from the drag-resize grip */
+  width: 100vw !important;
+  height: 100vh !important;
   border-radius: 0;
   z-index: 2000;
 }
@@ -4532,6 +4533,12 @@ const Preview = {
   toggleFullscreen() {
     this.isFullscreen = true;
     const panel = document.getElementById('preview-panel');
+    // The resize grip / saved size set INLINE width/height, which would override the
+    // .fullscreen class geometry (inline > class) and wedge the panel. Stash + clear them
+    // for the fullscreen stint, restore on exit.
+    this._savedSize = { w: panel.style.width, h: panel.style.height };
+    panel.style.width = '';
+    panel.style.height = '';
     panel.classList.add('fullscreen');
     void panel.offsetHeight; // force reflow so wrap reports new dimensions
     this.resize();
@@ -4541,6 +4548,11 @@ const Preview = {
     this.isFullscreen = false;
     const panel = document.getElementById('preview-panel');
     panel.classList.remove('fullscreen');
+    if (this._savedSize) {
+      panel.style.width = this._savedSize.w;
+      panel.style.height = this._savedSize.h;
+      this._savedSize = null;
+    }
     void panel.offsetHeight; // force reflow
     this.resize();
   },
@@ -4919,24 +4931,38 @@ const Paint = {
     document.getElementById('paint-palette').style.display = color ? 'flex' : 'none';
   },
 
-  // Build the palette strip: one chip per band colour + an Auto (erase) chip.
+  // Build the palette strip: one chip per band colour + an Auto (erase) chip. Selection uses
+  // pointerdown (not click) so no drag/mouseup quirk can swallow it, and the active colour is
+  // echoed by name — derived satellite tints can be near-identical, so a border alone is easy
+  // to miss.
   _buildPalette() {
     const box = document.getElementById('paint-palette');
     box.innerHTML = '';
     const chip = (label, hex, band) => {
+      const sel = this.selectedBand === band;
       const d = document.createElement('div');
       d.title = label;
-      d.style.cssText = `width:22px;height:22px;border-radius:5px;cursor:pointer;` +
+      d.style.cssText = `flex:0 0 auto;box-sizing:border-box;width:24px;height:24px;border-radius:6px;cursor:pointer;` +
         (hex ? `background:${hex};` : `background:repeating-conic-gradient(#555 0% 25%,#333 0% 50%) 50%/10px 10px;`) +
-        `border:2px solid ${this.selectedBand === band ? '#fff' : 'rgba(255,255,255,0.25)'};`;
-      d.onclick = () => { this.selectedBand = band; this._buildPalette(); };
+        `border:2px solid ${sel ? '#fff' : 'rgba(255,255,255,0.25)'};` +
+        (sel ? 'box-shadow:0 0 0 2px rgba(77,159,255,0.8);transform:scale(1.12);' : '');
+      d.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        this.selectedBand = band;
+        this._buildPalette();
+      });
       box.appendChild(d);
     };
     this.palette.forEach((c, i) => chip(c.name, c.hex, i));
     chip('Auto (erase)', null, -1);
+    const label = document.createElement('span');
+    label.style.cssText = 'font-size:11px;color:var(--text-primary);margin-left:6px;font-weight:600;';
+    label.textContent = 'Painting: ' + (this.selectedBand === -1
+      ? 'Auto (erase)' : (this.palette[this.selectedBand]?.name || 'Tint ' + this.selectedBand));
+    box.appendChild(label);
     const hint = document.createElement('span');
     hint.style.cssText = 'font-size:11px;color:var(--text-muted);margin-left:4px;';
-    hint.textContent = 'alt-click = eyedropper';
+    hint.textContent = '· alt-click = eyedropper';
     box.appendChild(hint);
   },
 
