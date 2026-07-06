@@ -5217,6 +5217,11 @@ const Paint = {
   _stamp(gx, gy) {
     const r = this.brush;
     if (this.target === 'color') {
+      // Defensive: never let a missing/stale override crash a stroke mid-paint.
+      const cv = document.getElementById('paint-canvas');
+      if (!State.colorOverride || State.colorOverride.w !== cv.width || State.colorOverride.h !== cv.height) {
+        State.colorOverride = { w: cv.width, h: cv.height, band: new Int8Array(cv.width * cv.height).fill(-1) };
+      }
       const cov = State.colorOverride, w = cov.w, h = cov.h, val = this.selectedBand;
       for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
         if (dx*dx + dy*dy > r*r) continue;
