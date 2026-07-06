@@ -272,8 +272,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   position: absolute;
   bottom: 16px;
   right: 16px;
-  width: 400px;
-  height: 350px;
+  width: min(560px, 44vw);
+  height: min(480px, 55vh);
   background: rgba(5,5,5,0.94);
   border: 1px solid rgba(77,159,255,0.14);
   border-radius: 12px;
@@ -319,6 +319,21 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
   border-radius: 0;
   z-index: 2000;
 }
+/* Drag-resize grip: panel is anchored bottom-right, so dragging the top-LEFT corner grows it. */
+#preview-resize {
+  position: absolute;
+  top: 0; left: 0;
+  width: 18px; height: 18px;
+  cursor: nwse-resize;
+  z-index: 5;
+  border-top: 2px solid rgba(77,159,255,0.35);
+  border-left: 2px solid rgba(77,159,255,0.35);
+  border-top-left-radius: 12px;
+  touch-action: none;
+}
+#preview-resize:hover { border-color: rgba(77,159,255,0.8); }
+#preview-panel.fullscreen #preview-resize { display: none; }
+
 #preview-panel .btn-back-to-map {
   display: none;
   border: 1px solid var(--border-hi);
@@ -452,7 +467,9 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
     </svg>
     TerraPrint
   </div>
-  <div class="header-actions"></div>
+  <div class="header-actions">
+    <button class="btn btn-sm" onclick="Settings.reset()" title="Reset all settings to defaults">↺ Defaults</button>
+  </div>
 </header>
 
 <div class="app-body">
@@ -542,6 +559,16 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
     <div class="panel-section">
       <h3>Terrain Colors (3MF)</h3>
       <div class="section-body">
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;">
+          <label style="margin:0;">Color source</label>
+          <select id="color-source" onchange="Advanced.setTopSource(this.value)" style="flex:1 1 auto;">
+            <option value="classic" selected>Elevation — classic 4 color</option>
+            <option value="elevation">Elevation bands — 4/8 color</option>
+            <option value="satellite">Satellite photo</option>
+            <option value="hybrid">Hybrid (land cover × photo)</option>
+            <option value="landcover">Land cover (semantic)</option>
+          </select>
+        </div>
         <div id="std-colors">
           <div class="threshold-row">
             <span class="swatch" style="background:#2D6ABF"></span>
@@ -667,7 +694,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
           </div>
           <div id="sat-shell-group" style="display:none;">
             <div class="input-group">
-              <label>Color depth (mm) <span style="color:var(--text-muted);font-size:11px;">(top photo shell)</span></label>
+              <label>Color depth (mm) <span style="color:var(--text-muted);font-size:11px;">(top photo shell · auto-deepens on steep faces)</span></label>
               <div class="range-row">
                 <input type="range" id="sat-depth" min="0.6" max="8" step="0.1" value="2.5" oninput="document.getElementById('sat-depth-val').textContent=this.value+'mm'">
                 <span class="range-val" id="sat-depth-val">2.5mm</span>
@@ -883,6 +910,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
       <div id="loading-text">Fetching elevation data…</div>
     </div>
     <div id="preview-panel">
+      <div id="preview-resize" title="Drag to resize"></div>
       <div class="preview-header">
         3D Preview
         <div style="display:flex;gap:6px;align-items:center;">
@@ -983,6 +1011,74 @@ const State = {
   waterOverride: null,     // { w, h, add:Uint8Array, remove:Uint8Array } manual paint edits
   colorOverride: null,     // { w, h, band:Int8Array } manual band recolour (-1 = auto)
   advNames: null,          // per-band names for the legend (land-cover mode)
+};
+
+// ═══════════════════════════════════════════════
+//  SETTINGS PERSISTENCE (localStorage)
+// ═══════════════════════════════════════════════
+
+const Settings = {
+  KEY: 'terraprint-settings-v1',
+
+  // Serialize every panel control with an id (checkbox → checked, else value).
+  save() {
+    const out = {};
+    document.querySelectorAll('#side-panel input[id], #side-panel select[id]').forEach(el => {
+      out[el.id] = el.type === 'checkbox' ? el.checked : el.value;
+    });
+    try { localStorage.setItem(this.KEY, JSON.stringify(out)); } catch (e) { /* quota/private */ }
+  },
+
+  // Restore saved values, then re-fire each control's own handler so visibility toggles and
+  // range labels come back in sync. A few controls are NOT dispatched because their handlers
+  // would clobber the restored state: adv-count / adv-colors-on / color-source run autofit()
+  // (overwriting the saved thresholds) and frame-style re-applies its preset. Their side
+  // effects are applied manually below (color-source visibility comes via the adv-source
+  // dispatch → setSource → _syncTopSelect).
+  SKIP_DISPATCH: new Set(['adv-count', 'adv-colors-on', 'frame-style', 'color-source']),
+  restore() {
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(this.KEY) || 'null'); } catch (e) {}
+    if (!saved) return;
+    const els = document.querySelectorAll('#side-panel input[id], #side-panel select[id]');
+    els.forEach(el => {
+      if (!(el.id in saved)) return;
+      if (el.type === 'checkbox') el.checked = !!saved[el.id];
+      else el.value = saved[el.id];
+    });
+    els.forEach(el => {
+      if (this.SKIP_DISPATCH.has(el.id)) return;
+      const evt = (el.tagName === 'SELECT' || el.type === 'checkbox') ? 'change' : 'input';
+      el.dispatchEvent(new Event(evt));
+    });
+    // Manual side effects for the skipped controls.
+    const advOn = document.getElementById('adv-colors-on')?.checked;
+    const adv = document.getElementById('adv-colors');
+    if (adv) adv.style.display = advOn ? 'block' : 'none';
+    Advanced._fitted = true; // saved thresholds are the user's — don't autofit over them
+    const extra = document.getElementById('adv-extra');
+    if (extra) extra.style.display = document.getElementById('adv-count')?.value === '4' ? 'none' : 'block';
+    Advanced._updateSatHigh();
+  },
+
+  // One delegated, debounced listener persists every change.
+  attach() {
+    const panel = document.getElementById('side-panel');
+    if (!panel) return;
+    let t = null;
+    const queue = () => { clearTimeout(t); t = setTimeout(() => this.save(), 300); };
+    panel.addEventListener('input', queue);
+    panel.addEventListener('change', queue);
+  },
+
+  reset() {
+    if (!confirm('Reset all settings to defaults?')) return;
+    try {
+      localStorage.removeItem(this.KEY);
+      localStorage.removeItem('terraprint-preview-size');
+    } catch (e) {}
+    location.reload();
+  },
 };
 
 // ═══════════════════════════════════════════════
@@ -1175,6 +1271,13 @@ const Elevation = {
     return { north: latTop, south: latBottom, west: lonLeft, east: lonRight };
   },
 
+  // Web-Mercator y of a latitude (unitless; grows southward is NOT true — grows northward,
+  // callers difference it). Tile-canvas rows are LINEAR in this, not in latitude.
+  mercY(latDeg) {
+    const r = latDeg * Math.PI / 180;
+    return Math.log(Math.tan(r) + 1 / Math.cos(r));
+  },
+
   // Fetch elevation data for bounds
   async fetchElevation(bounds, resolution) {
     const zoom = terrainZoomForBounds(bounds);
@@ -1228,48 +1331,85 @@ const Elevation = {
     }
     await Promise.all(promises);
 
-    // Calculate the pixel region that corresponds to our bounds
-    const topLeftBounds = this.tileToBounds(minTX, minTY, zoom);
-    const bottomRightBounds = this.tileToBounds(maxTX, maxTY, zoom);
-
-    const fullW = topLeftBounds.east !== topLeftBounds.west
-      ? (bottomRightBounds.east !== undefined ? bottomRightBounds.east : topLeftBounds.east) : 1;
-
     // Full geographic extent of all fetched tiles
+    const topLeftBounds = this.tileToBounds(minTX, minTY, zoom);
     const fullNorth = topLeftBounds.north;
     const fullSouth = this.tileToBounds(minTX, maxTY, zoom).south;
     const fullWest = topLeftBounds.west;
     const fullEast = this.tileToBounds(maxTX, minTY, zoom).east;
 
-    // Map our desired bounds to pixel coordinates within the composited canvas
-    const pxLeft = Math.round((bounds.getWest() - fullWest) / (fullEast - fullWest) * canvas.width);
-    const pxRight = Math.round((bounds.getEast() - fullWest) / (fullEast - fullWest) * canvas.width);
-    const pxTop = Math.round((fullNorth - bounds.getNorth()) / (fullNorth - fullSouth) * canvas.height);
-    const pxBottom = Math.round((fullNorth - bounds.getSouth()) / (fullNorth - fullSouth) * canvas.height);
+    // Source-pixel mapping. Tile canvas columns are linear in LONGITUDE, but rows are linear in
+    // MERCATOR-Y — mapping rows linearly in latitude (the old code) skews everything N–S and
+    // misregisters the grid against the water/land-cover rasters, which are true lat/lon.
+    const mN = this.mercY(fullNorth), mS = this.mercY(fullSouth);
+    const srcXofLon = lon => (lon - fullWest) / (fullEast - fullWest) * canvas.width;
+    const srcYofLat = lat => (this.mercY(lat) - mN) / (mS - mN) * canvas.height;
 
-    const cropW = Math.max(1, pxRight - pxLeft);
-    const cropH = Math.max(1, pxBottom - pxTop);
+    const north = bounds.getNorth(), south = bounds.getSouth();
+    const west = bounds.getWest(), east = bounds.getEast();
 
-    // Get pixel data for our region
-    const imageData = ctx.getImageData(pxLeft, pxTop, cropW, cropH);
+    // Read just the needed region (±1px pad for the bilinear stencil).
+    const rx0 = Math.max(0, Math.floor(srcXofLon(west)) - 1);
+    const rx1 = Math.min(canvas.width, Math.ceil(srcXofLon(east)) + 1);
+    const ry0 = Math.max(0, Math.floor(srcYofLat(north)) - 1);
+    const ry1 = Math.min(canvas.height, Math.ceil(srcYofLat(south)) + 1);
+    const gw = Math.max(1, rx1 - rx0), gh = Math.max(1, ry1 - ry0);
+    const id = ctx.getImageData(rx0, ry0, gw, gh).data;
 
-    // Resample to desired resolution
+    // Resample to the output grid — LINEAR in lat/lon (what the mesh/water/land-cover assume),
+    // sampled at pixel CENTERS. Terrarium decode per source pixel (linear encoding).
     showLoading('Processing elevation data…');
     const outW = resolution;
     const outH = resolution;
     const elevations = new Float32Array(outW * outH);
 
+    const elevAt = (px, py) => {
+      px = px < 0 ? 0 : (px >= gw ? gw - 1 : px);
+      py = py < 0 ? 0 : (py >= gh ? gh - 1 : py);
+      const k = (py * gw + px) * 4;
+      return (id[k] * 256 + id[k + 1] + id[k + 2] / 256) - 32768;
+    };
+    // Bilinear at a fractional source point (pixel i's value lives at its center i+0.5).
+    const bilinear = (sx, sy) => {
+      const u = sx - 0.5, v = sy - 0.5;
+      const x0 = Math.floor(u), y0 = Math.floor(v);
+      const fx = u - x0, fy = v - y0;
+      return elevAt(x0, y0)     * (1 - fx) * (1 - fy) + elevAt(x0 + 1, y0)     * fx * (1 - fy)
+           + elevAt(x0, y0 + 1) * (1 - fx) * fy       + elevAt(x0 + 1, y0 + 1) * fx * fy;
+    };
+
+    const dLon = (east - west) / outW, dLat = (north - south) / outH;
     for (let y = 0; y < outH; y++) {
+      // Cell's source-row footprint (Mercator-aware): top/bottom edges and center.
+      const latT = north - y * dLat, latB = north - (y + 1) * dLat;
+      const syT = srcYofLat(latT) - ry0, syB = srcYofLat(latB) - ry0;
+      const syC = srcYofLat(north - (y + 0.5) * dLat) - ry0;
+      const spanY = syB - syT;
       for (let x = 0; x < outW; x++) {
-        // Map output pixel to source pixel
-        const sx = Math.min(Math.floor(x / outW * cropW), cropW - 1);
-        const sy = Math.min(Math.floor(y / outH * cropH), cropH - 1);
-        const idx = (sy * cropW + sx) * 4;
-        const r = imageData.data[idx];
-        const g = imageData.data[idx + 1];
-        const b = imageData.data[idx + 2];
-        // Terrarium encoding
-        elevations[y * outW + x] = (r * 256 + g + b / 256) - 32768;
+        const sxL = srcXofLon(west + x * dLon) - rx0;
+        const sxR = srcXofLon(west + (x + 1) * dLon) - rx0;
+        const spanX = sxR - sxL;
+        let e;
+        if (spanX > 1.5 || spanY > 1.5) {
+          // Downsampling: box-average every source pixel the cell covers (anti-aliased),
+          // instead of the old single point-sample that speckled ridgelines.
+          const px0 = Math.max(0, Math.floor(sxL)), px1 = Math.min(gw, Math.max(px0 + 1, Math.ceil(sxR)));
+          const py0 = Math.max(0, Math.floor(syT)), py1 = Math.min(gh, Math.max(py0 + 1, Math.ceil(syB)));
+          let sum = 0, cnt = 0;
+          for (let py = py0; py < py1; py++) {
+            const rowk = py * gw;
+            for (let px = px0; px < px1; px++) {
+              const k = (rowk + px) * 4;
+              sum += (id[k] * 256 + id[k + 1] + id[k + 2] / 256) - 32768;
+              cnt++;
+            }
+          }
+          e = cnt ? sum / cnt : bilinear((sxL + sxR) / 2, syC);
+        } else {
+          // At-or-above source resolution: smooth bilinear (no stair-steps).
+          e = bilinear((sxL + sxR) / 2, syC);
+        }
+        elevations[y * outW + x] = e;
       }
     }
 
@@ -1330,27 +1470,35 @@ const Satellite = {
       const fullNorth = tl.north, fullWest = tl.west;
       const fullSouth = Elevation.tileToBounds(minTX, maxTY, zoom).south;
       const fullEast  = Elevation.tileToBounds(maxTX, minTY, zoom).east;
-      const pxLeft   = Math.round((bounds.getWest()  - fullWest) / (fullEast - fullWest) * canvas.width);
-      const pxRight  = Math.round((bounds.getEast()  - fullWest) / (fullEast - fullWest) * canvas.width);
-      const pxTop    = Math.round((fullNorth - bounds.getNorth()) / (fullNorth - fullSouth) * canvas.height);
-      const pxBottom = Math.round((fullNorth - bounds.getSouth()) / (fullNorth - fullSouth) * canvas.height);
-      const cropW = Math.max(1, pxRight - pxLeft), cropH = Math.max(1, pxBottom - pxTop);
-      const img = ctx.getImageData(pxLeft, pxTop, cropW, cropH); // throws if CORS-tainted
+
+      // Same source-pixel mapping as Elevation.fetchElevation: columns linear in longitude, rows
+      // linear in MERCATOR-Y (tiles are Web-Mercator). Keeps the photo pixel-aligned with the
+      // elevation grid; the old linear-latitude rows skewed the photo N–S against the terrain.
+      const north = bounds.getNorth(), south = bounds.getSouth();
+      const west = bounds.getWest(), east = bounds.getEast();
+      const mN = Elevation.mercY(fullNorth), mS = Elevation.mercY(fullSouth);
+      const srcX = lon => (lon - fullWest) / (fullEast - fullWest) * canvas.width;
+      const srcY = lat => (Elevation.mercY(lat) - mN) / (mS - mN) * canvas.height;
+
+      const rx0 = Math.max(0, Math.floor(srcX(west)));
+      const rx1 = Math.min(canvas.width, Math.ceil(srcX(east)) + 1);
+      const ry0 = Math.max(0, Math.floor(srcY(north)));
+      const ry1 = Math.min(canvas.height, Math.ceil(srcY(south)) + 1);
+      const cropW = Math.max(1, rx1 - rx0), cropH = Math.max(1, ry1 - ry0);
+      const img = ctx.getImageData(rx0, ry0, cropW, cropH); // throws if CORS-tainted
 
       const w = resolution, h = resolution;
       const rgb = new Uint8Array(w * h * 3);
-      // Box-average downsample, not point-sample. The native crop is usually much larger than
-      // the grid (e.g. ~1800px → 512), so the old nearest-neighbour grab took ONE native pixel
-      // per cell and discarded the rest — aliasing that fed k-means/SLIC a speckled, unrepresentative
-      // image (a big source of the "blobby" result). Averaging every native pixel a cell covers
-      // gives the true mean colour per cell: clean input, accurate region tints. Cost is ~linear
-      // in native pixels. When the grid is finer than the crop the block collapses to 1px (= nearest).
-      const ex = x => Math.min(cropW, Math.max(0, Math.round(x / w * cropW)));
-      const ey = y => Math.min(cropH, Math.max(0, Math.round(y / h * cropH)));
+      // Box-average per output cell (anti-aliased mean colour — clean input for k-means/SLIC).
+      // Cell edges are mapped Mercator-aware; when the grid is finer than the crop the block
+      // collapses to 1px (= nearest).
+      const dLon = (east - west) / w, dLat = (north - south) / h;
+      const exEdge = x => Math.min(cropW, Math.max(0, Math.round(srcX(west + x * dLon) - rx0)));
+      const eyEdge = y => Math.min(cropH, Math.max(0, Math.round(srcY(north - y * dLat) - ry0)));
       for (let y = 0; y < h; y++) {
-        const sy0 = ey(y), sy1 = Math.max(sy0 + 1, ey(y + 1));
+        const sy0 = eyEdge(y), sy1 = Math.max(sy0 + 1, eyEdge(y + 1));
         for (let x = 0; x < w; x++) {
-          const sx0 = ex(x), sx1 = Math.max(sx0 + 1, ex(x + 1));
+          const sx0 = exEdge(x), sx1 = Math.max(sx0 + 1, exEdge(x + 1));
           let r = 0, g = 0, b = 0, cnt = 0;
           for (let yy = sy0; yy < sy1 && yy < cropH; yy++) {
             const row = yy * cropW;
@@ -3458,6 +3606,32 @@ const ThreeMFExport = {
     return { blob, warnings: [] };
   },
 
+  // Per-grid-vertex effective colour-shell depth (mm), slope-aware. A constant VERTICAL depth
+  // thins to capDepth·cos(slope) measured perpendicular to a steep face, so the Base colour
+  // bleeds up cliffs. Deepen by 1/nz of the PRINTED surface (model-space mm — vertical
+  // exaggeration included), clamped at 4× so gorges don't go bottomless. Cached on the mesh;
+  // used by both the Base ceiling and the cap bottoms so their interface stays coincident.
+  _effDepthMap(mesh, capDepth) {
+    if (mesh._effDepth && mesh._effDepthCap === capDepth) return mesh._effDepth;
+    const gw = mesh.gridW, gh = mesh.gridH, mv = mesh.vertices;
+    const d = new Float32Array(gw * gh);
+    const MAXD = capDepth * 4;
+    for (let r = 0; r < gh; r++) {
+      for (let c = 0; c < gw; c++) {
+        const gi = r * gw + c;
+        const L = (c > 0 ? gi - 1 : gi) * 3,  R = (c < gw - 1 ? gi + 1 : gi) * 3;
+        const U = (r > 0 ? gi - gw : gi) * 3, D = (r < gh - 1 ? gi + gw : gi) * 3;
+        const gx = (mv[R + 2] - mv[L + 2]) / ((mv[R] - mv[L]) || 1);
+        const gy = (mv[D + 2] - mv[U + 2]) / ((mv[D + 1] - mv[U + 1]) || 1);
+        const nz = 1 / Math.sqrt(1 + gx * gx + gy * gy);
+        d[gi] = Math.min(capDepth / Math.max(nz, 1e-3), MAXD);
+      }
+    }
+    mesh._effDepth = d;
+    mesh._effDepthCap = capDepth;
+    return d;
+  },
+
   // Outward XY offset (model-space mm) for grid vertex `gi` within band `bandIdx`, aimed at
   // its 4-neighbours of a DIFFERENT in-mask band. Returns [dx,dy], or null when the vertex
   // isn't on a colour interface (interior, or it only borders the outer model edge — so the
@@ -3504,14 +3678,16 @@ const ThreeMFExport = {
       const tz = gi => mesh.vertices[gi*3 + 2];
       const capDepth = parseFloat(document.getElementById('sat-depth')?.value) || 2.5;
       const baseHex = document.getElementById('sat-base-color')?.value || '#444444';
+      // Slope-aware shell: deeper on steep faces so cliffs keep their colour (see _effDepthMap).
+      const eff = this._effDepthMap(mesh, capDepth);
 
       const built = [], presentBands = [];
-      // Base: full footprint from z=0 up to terrain − capDepth (clamped ≥0).
+      // Base: full footprint from z=0 up to terrain − effDepth (clamped ≥0).
       // bandIdx=null → no flare (single full-footprint colour, sits under the caps).
       const baseSolid = this._buildStackSolid(mesh, {
         active: () => true,
         floor:  () => 0,
-        ceil:   gi => Math.max(0, tz(gi) - capDepth),
+        ceil:   gi => Math.max(0, tz(gi) - eff[gi]),
       }, null);
       if (baseSolid && baseSolid.t.length > 0) built.push({ name: 'Base', hex: baseHex, solid: baseSolid });
 
@@ -3738,11 +3914,14 @@ const ThreeMFExport = {
       offs[i] = off;
       allV.push(topV[i*3] + (off ? off[0] : 0), topV[i*3+1] + (off ? off[1] : 0), topV[i*3+2]);
     }
+    // Slope-aware bottom: use the same per-vertex effective depth as the Base ceiling so the
+    // cap/Base interface stays coincident (plus the anti-floating Z overlap into the Base).
+    const eff = capDepth == null ? null : this._effDepthMap(mesh, capDepth);
     for (let i = 0; i < numTop; i++) {
       const off = offs[i];
       // Extend the cap bottom below the Base top so the two solids overlap (no "floating" cap,
       // stronger cap/Base bond). Full-height regions (capDepth == null) still go to the plate.
-      const z = capDepth == null ? 0 : Math.max(0, topV[i*3+2] - capDepth - CAP_BASE_OVERLAP_MM);
+      const z = eff == null ? 0 : Math.max(0, topV[i*3+2] - eff[giOfLocal[i]] - CAP_BASE_OVERLAP_MM);
       allV.push(topV[i*3] + (off ? off[0] : 0), topV[i*3+1] + (off ? off[1] : 0), z);
     }
 
@@ -4166,6 +4345,8 @@ const Preview = {
     const canvas = document.getElementById('preview-canvas');
     const wrap = document.getElementById('preview-canvas-wrap');
 
+    this._initResize();
+
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x161b22);
 
@@ -4292,6 +4473,47 @@ const Preview = {
     if (!this.frameId) this.animate();
 
     this.resize();
+  },
+
+  // Drag-to-resize via the top-left grip (panel anchored bottom-right → dragging up/left grows
+  // it). Persists the chosen size and restores it on load.
+  _initResize() {
+    const panel = document.getElementById('preview-panel');
+    const grip = document.getElementById('preview-resize');
+    if (!panel || !grip) return;
+
+    try {
+      const saved = JSON.parse(localStorage.getItem('terraprint-preview-size') || 'null');
+      if (saved && saved.w && saved.h) {
+        panel.style.width = saved.w + 'px';
+        panel.style.height = saved.h + 'px';
+      }
+    } catch (e) {}
+
+    let start = null;
+    grip.addEventListener('pointerdown', e => {
+      start = { x: e.clientX, y: e.clientY, w: panel.offsetWidth, h: panel.offsetHeight };
+      grip.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    grip.addEventListener('pointermove', e => {
+      if (!start) return;
+      const w = Math.min(window.innerWidth * 0.9,  Math.max(320, start.w + (start.x - e.clientX)));
+      const h = Math.min(window.innerHeight * 0.85, Math.max(280, start.h + (start.y - e.clientY)));
+      panel.style.width = w + 'px';
+      panel.style.height = h + 'px';
+      this.resize();
+    });
+    const end = () => {
+      if (!start) return;
+      start = null;
+      try {
+        localStorage.setItem('terraprint-preview-size',
+          JSON.stringify({ w: panel.offsetWidth, h: panel.offsetHeight }));
+      } catch (e) {}
+    };
+    grip.addEventListener('pointerup', end);
+    grip.addEventListener('pointercancel', end);
   },
 
   resize() {
@@ -5013,10 +5235,35 @@ const Paint = {
 // ═══════════════════════════════════════════════
 
 const Advanced = {
+  // Top-level "Color source" select (Terrain Colors section): drives the legacy hidden
+  // controls (adv-colors-on + adv-source) so all downstream logic stays untouched.
+  setTopSource(val) {
+    const on = val !== 'classic';
+    const chk = document.getElementById('adv-colors-on');
+    if (chk) chk.checked = on;
+    this.toggle(on);
+    if (on) {
+      const src = document.getElementById('adv-source');
+      if (src) src.value = val;
+      this.setSource(val);
+      // Reveal the fine-tuning section so the auto-derived controls are discoverable.
+      chk?.closest('.panel-section')?.classList.remove('collapsed');
+    }
+  },
+
+  // Keep the top-level select mirrored when the legacy controls are used directly.
+  _syncTopSelect() {
+    const sel = document.getElementById('color-source');
+    if (!sel) return;
+    const on = document.getElementById('adv-colors-on')?.checked;
+    sel.value = on ? (document.getElementById('adv-source')?.value || 'elevation') : 'classic';
+  },
+
   toggle(on) {
     document.getElementById('adv-colors').style.display = on ? 'block' : 'none';
     // Basic thresholds stay visible; advanced simply overrides them when enabled.
     if (on && !this._fitted) { this.autofit(); this._fitted = true; }
+    this._syncTopSelect();
   },
 
   // Palette size: '8' (2 AMS, Water + 7 tints) or '4' (1 AMS, Water + 3 tints).
@@ -5040,6 +5287,7 @@ const Advanced = {
     document.getElementById('sat-photo-group').style.display = photoMode ? 'block' : 'none';
     document.getElementById('sat-cap-group').style.display = (val === 'satellite') ? 'block' : 'none';
     this._updateSatHigh();
+    this._syncTopSelect();
   },
 
   // High-elevation tints selector applies only to satellite + 8-color.
@@ -5086,6 +5334,8 @@ function initApp() {
   }
   MapModule.init();
   Preview.init();
+  Settings.restore();   // after MapModule.init so setBaseImagery targets a live map
+  Settings.attach();
 }
 
 if (document.readyState === 'loading') {
