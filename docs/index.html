@@ -1799,15 +1799,22 @@ const WaterDetection = {
         }
       }
 
-      // Flat surface level = median of the component (robust to DEM outliers).
+      // Flat surface level = median of the component (robust to DEM outliers and to any
+      // island pixels, which are a tiny fraction of a lake's area).
       const elevs = comp.map(i => origData[i]).sort((a, b) => a - b);
       const surfaceElev = elevs[elevs.length >> 1];
 
-      // Lower pixels to that level but NEVER raise one above its own terrain. A
-      // truly flat lake settles at the median; a body that actually spans elevation
-      // (a long reservoir, or a river mis-tagged as still water) then follows the
-      // terrain downhill instead of ballooning into a raised water blob.
+      // Lower pixels to that level but NEVER raise one above its own terrain. A truly flat lake
+      // settles at the median; a body that actually spans elevation (a long reservoir, or a river
+      // mis-tagged as still water) then follows the terrain downhill instead of ballooning.
+      //
+      // PRESERVE islands/rocks: land that rises clearly above the water surface (e.g. Wizard
+      // Island in Crater Lake) must NOT be flattened — otherwise min() drowns it to lake level
+      // and shatters it into speckle. Real islands rise tens–hundreds of metres; a few metres of
+      // DEM noise on the water surface is still flattened.
+      const ISLAND_MARGIN_M = 10;
       for (const idx of comp) {
+        if (origData[idx] > surfaceElev + ISLAND_MARGIN_M) continue; // island → keep as real land
         const z = Math.min(origData[idx], surfaceElev);
         origData[idx] = z;
         lakeElevMap[idx] = z;
