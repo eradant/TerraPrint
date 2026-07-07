@@ -821,7 +821,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
     </div>
 
     <div class="panel-section">
-      <h3>Frame &amp; Cartouche (3MF)</h3>
+      <h3>Frame &amp; Card (3MF)</h3>
       <div class="section-body">
         <div class="input-group" style="display:flex;align-items:center;gap:8px;">
           <input type="checkbox" id="frame-enable" style="accent-color:var(--accent);width:16px;height:16px;" onchange="document.getElementById('frame-opts').style.display=this.checked?'block':'none'">
@@ -829,14 +829,11 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
         </div>
         <div id="frame-opts" style="display:none;margin-top:8px;">
           <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-            <label style="margin:0;">Frame style</label>
-            <select id="frame-style" onchange="applyFramePreset(this.value)" style="flex:1 1 auto;">
-              <option value="custom" selected>Custom</option>
-              <option value="museum">Museum (recessed + lip)</option>
-              <option value="field">Field map (flat, full data)</option>
-              <option value="tray">Display tray (deep recess)</option>
-              <option value="medallion">Medallion (circular)</option>
-              <option value="minimal">Minimal slab</option>
+            <label style="margin:0;">Layout</label>
+            <select id="frame-layout" onchange="UI.setFrameLayout(this.value)" style="flex:1 1 auto;">
+              <option value="frame" selected>Attached frame (classic)</option>
+              <option value="edge">Engrave base edges</option>
+              <option value="card">Separate card (shadowbox)</option>
             </select>
           </div>
           <div class="input-group">
@@ -847,20 +844,119 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
             <label>Subtitle</label>
             <input type="text" id="frame-subtitle" placeholder="e.g. Cascade Range" value="">
           </div>
-          <div class="input-row" style="margin-top:6px;">
-            <div>
-              <label>Margin (mm)</label>
-              <input type="number" id="frame-width" value="8" min="2" max="40" step="1">
-            </div>
-            <div>
-              <label>Panel (mm)</label>
-              <input type="number" id="frame-panel" value="30" min="10" max="120" step="2">
-            </div>
-          </div>
           <div class="input-group" style="margin-top:6px;">
-            <label>Inset depth (mm) <span style="color:var(--text-muted);font-size:11px;">(0 = flush · &gt;0 = terrain recessed in a well)</span></label>
-            <input type="number" id="frame-inset" value="0" min="0" max="20" step="0.5">
+            <label>Text size <span style="color:var(--text-muted);font-size:11px;">(all cartouche text)</span></label>
+            <div class="range-row">
+              <input type="range" id="frame-text-scale" min="0.7" max="2.5" step="0.1" value="1" oninput="document.getElementById('frame-text-scale-val').textContent=this.value+'×'">
+              <span class="range-val" id="frame-text-scale-val">1×</span>
+            </div>
           </div>
+          <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+            <label style="margin:0;">Align</label>
+            <select id="frame-align" style="flex:1 1 auto;">
+              <option value="left" selected>Left</option>
+              <option value="center">Center</option>
+              <option value="right">Right</option>
+            </select>
+          </div>
+
+          <!-- Attached-frame options -->
+          <div id="frame-opts-frame">
+            <div class="input-group" style="display:flex;align-items:center;gap:8px;margin:8px 0;">
+              <label style="margin:0;">Frame style</label>
+              <select id="frame-style" onchange="applyFramePreset(this.value)" style="flex:1 1 auto;">
+                <option value="custom" selected>Custom</option>
+                <option value="museum">Museum (recessed + lip)</option>
+                <option value="field">Field map (flat, full data)</option>
+                <option value="tray">Display tray (deep recess)</option>
+                <option value="medallion">Medallion (circular)</option>
+                <option value="minimal">Minimal slab</option>
+                <option value="gallery">Gallery (large card)</option>
+                <option value="plaque">Plaque (bold title)</option>
+              </select>
+            </div>
+            <div class="input-row" style="margin-top:6px;">
+              <div>
+                <label>Margin (mm)</label>
+                <input type="number" id="frame-width" value="8" min="2" max="40" step="1">
+              </div>
+              <div>
+                <label>Panel (mm)</label>
+                <input type="number" id="frame-panel" value="30" min="10" max="120" step="2">
+              </div>
+            </div>
+            <div class="input-group" style="margin-top:6px;">
+              <label>Inset depth (mm) <span style="color:var(--text-muted);font-size:11px;">(0 = flush · &gt;0 = terrain recessed in a well)</span></label>
+              <input type="number" id="frame-inset" value="0" min="0" max="20" step="0.5">
+            </div>
+            <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+              <input type="checkbox" id="frame-border-on" style="accent-color:var(--accent);width:15px;height:15px;" onchange="document.getElementById('frame-border-opts').style.display=this.checked?'flex':'none'">
+              <label for="frame-border-on" style="margin:0;cursor:pointer;">Raised outer border</label>
+            </div>
+            <div class="input-row" id="frame-border-opts" style="display:none;margin-top:6px;">
+              <div>
+                <label>Rim width (mm)</label>
+                <input type="number" id="frame-rim-width" value="4" min="1" max="20" step="0.5">
+              </div>
+              <div>
+                <label>Rim height (mm)</label>
+                <input type="number" id="frame-rim-height" value="4" min="1" max="20" step="0.5">
+              </div>
+            </div>
+          </div>
+
+          <!-- Edge-engraving options -->
+          <div id="frame-opts-edge" style="display:none;">
+            <div class="input-group" style="display:flex;align-items:center;gap:8px;margin:8px 0;">
+              <label style="margin:0;">Letter style</label>
+              <select id="edge-style" style="flex:1 1 auto;">
+                <option value="raised" selected>Raised (proud of the wall)</option>
+                <option value="flush">Flush (inlaid, wall stays flat)</option>
+              </select>
+            </div>
+            <div class="input-row">
+              <div>
+                <label>Title edge</label>
+                <select id="edge-title-side">
+                  <option value="front" selected>Front</option>
+                  <option value="back">Back</option>
+                  <option value="left">Left</option>
+                  <option value="right">Right</option>
+                </select>
+              </div>
+              <div>
+                <label>Coords edge</label>
+                <select id="edge-coords-side">
+                  <option value="front">Front</option>
+                  <option value="back" selected>Back</option>
+                  <option value="left">Left</option>
+                  <option value="right">Right</option>
+                </select>
+              </div>
+            </div>
+            <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0;">Text sits on the base's side walls — use a base of 5mm+ for legible letters. Rectangle selections only.</p>
+          </div>
+
+          <!-- Separate-card options -->
+          <div id="frame-opts-card" style="display:none;">
+            <div class="input-row" style="margin-top:8px;">
+              <div>
+                <label>Card width (mm)</label>
+                <input type="number" id="card-width" value="150" min="40" max="300" step="5">
+              </div>
+              <div>
+                <label>Thickness (mm)</label>
+                <input type="number" id="card-thick" value="4" min="1.5" max="15" step="0.5">
+              </div>
+            </div>
+            <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+              <input type="checkbox" id="card-border" style="accent-color:var(--accent);width:15px;height:15px;">
+              <label for="card-border" style="margin:0;cursor:pointer;">Raised card border</label>
+            </div>
+            <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0;">Prints beside the model in the same file — mount separately in a shadowbox.</p>
+          </div>
+
+          <!-- Shared content toggles -->
           <div style="margin-top:8px;display:flex;flex-direction:column;gap:5px;">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-title-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Title text</label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-subtitle-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Subtitle text</label>
@@ -868,20 +964,6 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-legend-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Color key / legend</label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-scale-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Scale bar</label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-arch-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Arched top (circular maps)</label>
-          </div>
-          <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
-            <input type="checkbox" id="frame-border-on" style="accent-color:var(--accent);width:15px;height:15px;" onchange="document.getElementById('frame-border-opts').style.display=this.checked?'flex':'none'">
-            <label for="frame-border-on" style="margin:0;cursor:pointer;">Raised outer border</label>
-          </div>
-          <div class="input-row" id="frame-border-opts" style="display:none;margin-top:6px;">
-            <div>
-              <label>Rim width (mm)</label>
-              <input type="number" id="frame-rim-width" value="4" min="1" max="20" step="0.5">
-            </div>
-            <div>
-              <label>Rim height (mm)</label>
-              <input type="number" id="frame-rim-height" value="4" min="1" max="20" step="0.5">
-            </div>
           </div>
         </div>
       </div>
@@ -2248,12 +2330,15 @@ function getBandConfig() {
 // arched top, and which cartouche elements appear, so a name maps to a finished aesthetic.
 function applyFramePreset(style) {
   const P = {
-    //          margin panel inset border  rimW rimH  arch  title  sub   coords legend scale
-    museum:    { margin:10, panel:34, inset:3, border:true,  rimW:5,   rimH:6, arch:false, title:true, sub:true,  coords:true,  legend:true,  scale:false },
-    field:     { margin:8,  panel:36, inset:0, border:true,  rimW:2.5, rimH:2, arch:false, title:true, sub:true,  coords:true,  legend:true,  scale:true  },
-    tray:      { margin:12, panel:30, inset:5, border:false, rimW:4,   rimH:4, arch:false, title:true, sub:false, coords:true,  legend:false, scale:false },
-    medallion: { margin:9,  panel:26, inset:2, border:true,  rimW:4,   rimH:5, arch:true,  title:true, sub:false, coords:true,  legend:false, scale:false },
-    minimal:   { margin:4,  panel:22, inset:0, border:false, rimW:4,   rimH:4, arch:false, title:true, sub:false, coords:false, legend:false, scale:false },
+    //          margin panel inset border  rimW rimH  arch  title  sub   coords legend scale  textScale align
+    museum:    { margin:10, panel:34, inset:3, border:true,  rimW:5,   rimH:6, arch:false, title:true, sub:true,  coords:true,  legend:true,  scale:false, ts:1,   align:'left'   },
+    field:     { margin:8,  panel:36, inset:0, border:true,  rimW:2.5, rimH:2, arch:false, title:true, sub:true,  coords:true,  legend:true,  scale:true,  ts:1,   align:'left'   },
+    tray:      { margin:12, panel:30, inset:5, border:false, rimW:4,   rimH:4, arch:false, title:true, sub:false, coords:true,  legend:false, scale:false, ts:1,   align:'left'   },
+    medallion: { margin:9,  panel:26, inset:2, border:true,  rimW:4,   rimH:5, arch:true,  title:true, sub:false, coords:true,  legend:false, scale:false, ts:1,   align:'left'   },
+    minimal:   { margin:4,  panel:22, inset:0, border:false, rimW:4,   rimH:4, arch:false, title:true, sub:false, coords:false, legend:false, scale:false, ts:1,   align:'left'   },
+    // Card-forward presets: the cartouche is the star, not a footnote under the map.
+    gallery:   { margin:12, panel:64, inset:0, border:true,  rimW:3,   rimH:3, arch:false, title:true, sub:true,  coords:true,  legend:true,  scale:true,  ts:1.6, align:'center' },
+    plaque:    { margin:8,  panel:48, inset:0, border:false, rimW:4,   rimH:4, arch:false, title:true, sub:false, coords:true,  legend:false, scale:false, ts:1.9, align:'center' },
   };
   const p = P[style];
   if (!p) return; // 'custom' → leave the user's settings untouched
@@ -2265,6 +2350,8 @@ function applyFramePreset(style) {
   chk('frame-arch-on', p.arch);
   chk('frame-title-on', p.title); chk('frame-subtitle-on', p.sub);
   chk('frame-coords-on', p.coords); chk('frame-legend-on', p.legend); chk('frame-scale-on', p.scale);
+  set('frame-text-scale', p.ts); set('frame-align', p.align);
+  const tsv = document.getElementById('frame-text-scale-val'); if (tsv) tsv.textContent = p.ts + '×';
 }
 
 // ═══════════════════════════════════════════════
@@ -4049,14 +4136,292 @@ const ThreeMFExport = {
   // Build the frame plate and all enabled label/legend/scale objects.
   // Returns an array of { name, hex, solid }. Elements are laid out first so the
   // cartouche panel can grow to contain them (never less than the requested height).
+  // Extrude 2D (u,v) triangles onto a vertical base wall. u runs along the wall LEFT→RIGHT as
+  // seen from OUTSIDE (mirrored for back/left so text reads correctly), v = z. The prism spans
+  // wall−inMM (embedded into the base) to wall+outMM (proud of it). Closed manifold via the same
+  // directed-edge boundary-wall logic as _extrudePrism.
+  _extrudePrismOnWall(tris2d, wall, outMM, inMM, mesh) {
+    const W = mesh.meshW, H = mesh.meshH;
+    const M = {
+      front: { p: (u, v) => [u, 0, v],     n: [0, -1, 0] },
+      back:  { p: (u, v) => [W - u, H, v], n: [0, 1, 0] },
+      left:  { p: (u, v) => [0, H - u, v], n: [-1, 0, 0] },
+      right: { p: (u, v) => [W, u, v],     n: [1, 0, 0] },
+    }[wall];
+    if (!M) return null;
+    const [nx, ny, nz] = M.n;
+
+    const verts = [], tris = [], vmap = new Map();
+    const STR = 1e7;
+    const addV = (x, y, z) => {
+      const k = `${x.toFixed(3)},${y.toFixed(3)},${z.toFixed(3)}`;
+      let i = vmap.get(k);
+      if (i !== undefined) return i;
+      i = verts.length / 3; verts.push(x, y, z); vmap.set(k, i); return i;
+    };
+    const addT = (a, b, c) => { if (a !== b && b !== c && a !== c) tris.push(a, b, c); };
+    const OUT = (u, v) => { const [x, y, z] = M.p(u, v); return addV(x + nx*outMM, y + ny*outMM, z + nz*outMM); };
+    const INN = (u, v) => { const [x, y, z] = M.p(u, v); return addV(x - nx*inMM,  y - ny*inMM,  z - nz*inMM); };
+
+    const pid = new Map();
+    const pidOf = (u, v) => {
+      const k = `${u.toFixed(3)},${v.toFixed(3)}`;
+      let i = pid.get(k); if (i === undefined) { i = pid.size; pid.set(k, i); } return i;
+    };
+    const fwd = new Set();
+    const pts = [];
+    for (let i = 0; i < tris2d.length; i += 6) {
+      const u0=tris2d[i],   v0=tris2d[i+1], u1=tris2d[i+2], v1=tris2d[i+3], u2=tris2d[i+4], v2=tris2d[i+5];
+      const p0=pidOf(u0,v0), p1=pidOf(u1,v1), p2=pidOf(u2,v2);
+      pts[p0]=[u0,v0]; pts[p1]=[u1,v1]; pts[p2]=[u2,v2];
+      addT(OUT(u0,v0), OUT(u1,v1), OUT(u2,v2));   // outer face (normal = outward)
+      addT(INN(u0,v0), INN(u2,v2), INN(u1,v1));   // inner face (reversed)
+      fwd.add(p0*STR+p1); fwd.add(p1*STR+p2); fwd.add(p2*STR+p0);
+    }
+    for (const ab of fwd) {
+      const a = Math.floor(ab/STR), b = ab % STR;
+      if (fwd.has(b*STR + a)) continue; // interior edge
+      const [au, av] = pts[a], [bu, bv] = pts[b];
+      const ta = OUT(au,av), tb = OUT(bu,bv), ba = INN(au,av), bb = INN(bu,bv);
+      addT(ta, ba, tb); addT(tb, ba, bb);
+    }
+    return { v: verts, t: tris };
+  },
+
+  // Bitmap → wall-plane prisms (per-pixel rects, like _extrudeBitmap but on a vertical wall).
+  // (uLeft, vTop) is the top-left of the text box in wall coordinates.
+  _extrudeBitmapOnWall(bmp, wall, uLeft, vTop, wMM, hMM, outMM, inMM, mesh) {
+    const tris2d = [];
+    const pw = wMM / bmp.w, ph = hMM / bmp.h;
+    for (let py = 0; py < bmp.h; py++) {
+      for (let px = 0; px < bmp.w; px++) {
+        if (!bmp.data[py * bmp.w + px]) continue;
+        const u0 = uLeft + px * pw, v1 = vTop - py * ph;
+        this._rectTris(tris2d, u0, v1 - ph, u0 + pw, v1);
+      }
+    }
+    if (!tris2d.length) return null;
+    return this._extrudePrismOnWall(tris2d, wall, outMM, inMM, mesh);
+  },
+
+  // ── Edge-text layout mode: title/coords on the base slab's vertical walls, no frame plate ──
+  _buildEdgeTextObjects(mesh) {
+    if (mesh.shapeMask) { toast('Edge text needs a rectangle selection.'); return []; }
+    const baseH = mesh.baseHeight;
+    if (baseH < 5) toast('Base is under 5mm — edge text will be small. Consider a thicker base.', 5000);
+
+    const S = parseFloat(document.getElementById('frame-text-scale')?.value) || 1;
+    const align = document.getElementById('frame-align')?.value || 'left';
+    const style = document.getElementById('edge-style')?.value || 'raised';
+    // Raised: proud of the wall with a small embed to bond. Flush: embedded cap-style
+    // (same overlap mechanism as the colour caps over the Base) with a hair of protrusion.
+    const outMM = style === 'flush' ? 0.05 : 0.6;
+    const inMM  = style === 'flush' ? 0.8  : 0.2;
+
+    // Collect requested items, then lay out per wall (two items on one wall stack vertically).
+    const items = [];
+    if (document.getElementById('frame-title-on')?.checked) {
+      const t = (document.getElementById('frame-title')?.value || '').trim();
+      if (t) items.push({ text: t, name: 'Edge title', hex: '#F5F5F5',
+        wall: document.getElementById('edge-title-side')?.value || 'front' });
+    }
+    if (document.getElementById('frame-coords-on')?.checked && mesh.bounds) {
+      items.push({ text: this._coordString(mesh), name: 'Edge coordinates', hex: '#C8C8C8',
+        wall: document.getElementById('edge-coords-side')?.value || 'back' });
+    }
+
+    const elems = [];
+    const byWall = {};
+    for (const it of items) (byWall[it.wall] = byWall[it.wall] || []).push(it);
+    for (const wall of Object.keys(byWall)) {
+      const group = byWall[wall];
+      const len = (wall === 'front' || wall === 'back') ? mesh.meshW : mesh.meshH;
+      const padU = 3, availU = len - 2 * padU;
+      // Vertical slots inside the slab: one item centres; two stack (upper/lower).
+      const slotH = (baseH - 1.2) / group.length;
+      group.forEach((it, gi) => {
+        const bmp = this._textBitmap(it.text, 64, true);
+        let hMM = Math.max(Math.min((slotH - 0.4) * S, slotH - 0.4), 2.5);
+        let wMM = hMM * (bmp.w / bmp.h);
+        if (wMM > availU) { hMM *= availU / wMM; wMM = availU; }
+        const uLeft = align === 'center' ? (len - wMM) / 2
+                    : align === 'right'  ? len - padU - wMM : padU;
+        const slotTop = baseH - 0.6 - gi * slotH;      // stack from the top of the slab down
+        const vTop = slotTop - (slotH - hMM) / 2;      // centre within the slot
+        const solid = this._extrudeBitmapOnWall(bmp, wall, uLeft, vTop, wMM, hMM, outMM, inMM, mesh);
+        if (solid) elems.push({ name: it.name, hex: it.hex, solid });
+      });
+    }
+    return elems;
+  },
+
+  // ── Separate-card layout mode: standalone cartouche plaque beside the model ──────────
+  _buildCardObjects(mesh, presentBands) {
+    const cardW = parseFloat(document.getElementById('card-width')?.value) || 150;
+    const cardT = parseFloat(document.getElementById('card-thick')?.value) || 4;
+    const minH  = parseFloat(document.getElementById('frame-panel')?.value) || 30;
+    const borderOn = document.getElementById('card-border')?.checked;
+    const rimW = borderOn ? Math.min(parseFloat(document.getElementById('frame-rim-width')?.value) || 4, cardW / 4) : 0;
+    const rimH = borderOn ? (parseFloat(document.getElementById('frame-rim-height')?.value) || 4) : 0;
+
+    const GAP = 15;                        // clearance to the model on the plate
+    const x0 = mesh.meshW + GAP, x1 = x0 + cardW;
+    const yTop = mesh.meshH;               // top-aligned with the tile
+    const pad = Math.max(4, borderOn ? rimW + 1.5 : 0);
+
+    const { elems, bottomY } = this._buildCartoucheContent(mesh, presentBands, {
+      xLeft: x0 + pad, xRight: x1 - pad, topY: yTop - pad, plateTop: cardT,
+      scale: parseFloat(document.getElementById('frame-text-scale')?.value) || 1,
+      align: document.getElementById('frame-align')?.value || 'left',
+    });
+
+    const y0 = Math.min(yTop - minH, bottomY - pad);
+    const objs = [];
+    const plate = [];
+    this._rectTris(plate, x0, y0, x1, yTop);
+    objs.push({ name: 'Card', hex: '#2B2B2B', solid: this._extrudePrism(plate, 0, cardT) });
+
+    if (borderOn) {
+      const rxs = [x0, x0 + rimW, x1 - rimW, x1];
+      const rys = [y0, y0 + rimW, yTop - rimW, yTop];
+      const ring = [];
+      for (let ci = 0; ci < 3; ci++) for (let ri = 0; ri < 3; ri++) {
+        if (ci === 1 && ri === 1) continue;
+        this._rectTris(ring, rxs[ci], rys[ri], rxs[ci+1], rys[ri+1]);
+      }
+      objs.push({ name: 'Card border', hex: '#1E1E1E', solid: this._extrudePrism(ring, cardT, cardT + rimH) });
+    }
+    return [...objs, ...elems];
+  },
+
+  // ── Cartouche content (title / subtitle / coordinates / legend / scale bar) ──────────
+  // Shared by the attached frame and the separate card. L = { xLeft, xRight, topY, plateTop,
+  // scale, align }. Returns { elems, bottomY }; at scale 1 / align 'left' the layout matches
+  // the original fixed arrangement exactly.
+  _buildCartoucheContent(mesh, presentBands, L) {
+    const elems = [];
+    const S = L.scale || 1;
+    const align = L.align || 'left';
+    const inkLow = L.plateTop - 0.3;           // labels embed slightly into the plate
+    const inkHigh = L.plateTop + 0.8;          // raised 0.8mm
+    const swatchHigh = L.plateTop + 1.2;
+    const availW = L.xRight - L.xLeft;
+    let cursorY = L.topY;
+    let lowestY = cursorY;
+    const track = y => { if (y < lowestY) lowestY = y; };
+    // Minimum glyph height so the thinnest stroke stays printable on a 0.4mm nozzle.
+    // Bold Arial stroke ≈ 0.2 × glyph height, so ~4mm → ~0.8mm strokes (2 perimeters).
+    const MIN_TEXT_MM = 4;
+    // Row alignment within [xLeft, xRight].
+    const alignX = wMM => align === 'center' ? L.xLeft + (availW - wMM) / 2
+                        : align === 'right' ? L.xRight - wMM
+                        : L.xLeft;
+
+    // Render a tight glyph bitmap and extrude it at cursorY, heightMM·scale tall.
+    // Scales down to fit availW if the string would be too wide. Always bold.
+    const addText = (text, name, hex, heightMM) => {
+      if (!text) return 0;
+      const bmp = this._textBitmap(text, 64, true);
+      let hMM = Math.max(heightMM * S, MIN_TEXT_MM);
+      let wMM = hMM * (bmp.w / bmp.h);
+      if (wMM > availW) { hMM *= availW / wMM; wMM = availW; }
+      const solid = this._extrudeBitmap(bmp, alignX(wMM), cursorY, wMM, hMM, inkLow, inkHigh);
+      if (solid) { elems.push({ name, hex, solid }); track(cursorY - hMM); }
+      return hMM;
+    };
+
+    // Title
+    if (document.getElementById('frame-title-on')?.checked) {
+      const title = (document.getElementById('frame-title')?.value || '').trim();
+      const used = addText(title, 'Title', '#F5F5F5', 9);
+      if (used) cursorY -= used + 3 * S;
+    }
+    // Subtitle (smaller, directly under the title)
+    if (document.getElementById('frame-subtitle-on')?.checked) {
+      const sub = (document.getElementById('frame-subtitle')?.value || '').trim();
+      const used = addText(sub, 'Subtitle', '#DADADA', 6);
+      if (used) cursorY -= used + 4 * S;
+    }
+    // Coordinates (centre of the selected area — compact and always fits)
+    if (document.getElementById('frame-coords-on')?.checked && mesh.bounds) {
+      const used = addText(this._coordString(mesh), 'Coordinates', '#C8C8C8', 4.5);
+      if (used) cursorY -= used + 4 * S;
+    }
+    // Legend: swatch (band colour) + label per present band, aligned as one row.
+    if (document.getElementById('frame-legend-on')?.checked) {
+      const palette = getBandConfig().colors;
+      const present = presentBands && presentBands.length
+        ? presentBands : palette.map((_, i) => i);
+      let sw = 6 * S, gap = 2.5 * S, lblH = 4.5 * S, itemGap = 6 * S;
+      // Measure the row, then uniformly scale it down if it would overrun the panel.
+      const bmps = present.map(b => this._textBitmap(palette[b].name, 64, true));
+      const rowW = () => present.reduce((s, _, i) =>
+        s + sw + gap + lblH * (bmps[i].w / bmps[i].h) + itemGap, 0);
+      const total = rowW();
+      if (total > availW) { const f = availW / total; sw*=f; gap*=f; lblH*=f; itemGap*=f; }
+
+      let lx = alignX(Math.min(rowW() - itemGap, availW)); // visual row width has no trailing gap
+      const legendTop = cursorY;
+      present.forEach((b, i) => {
+        const c = palette[b];
+        const st = [];
+        this._rectTris(st, lx, legendTop - sw, lx + sw, legendTop);
+        elems.push({ name: c.name + ' key', hex: c.hex, solid: this._extrudePrism(st, L.plateTop - 0.3, swatchHigh) });
+        const lblW = lblH * (bmps[i].w / bmps[i].h);
+        const ls = this._extrudeBitmap(bmps[i], lx + sw + gap, legendTop - (sw - lblH)/2, lblW, lblH, inkLow, inkHigh);
+        if (ls) elems.push({ name: c.name + ' label', hex: '#F5F5F5', solid: ls });
+        lx += sw + gap + lblW + itemGap;
+      });
+      track(legendTop - sw);
+      cursorY = legendTop - sw - 5 * S;
+    }
+    // Scale bar: a filled bar of a round distance, with a label centred on it. The bar's LENGTH
+    // is a true ground distance and never scales; only the bar height / label do.
+    if (document.getElementById('frame-scale-on')?.checked && mesh.bounds) {
+      const b = mesh.bounds;
+      const midLatR = (b.north + b.south) / 2 * Math.PI / 180;
+      const realWm = Math.abs(b.east - b.west) * Math.cos(midLatR) * 111320; // tile width in m
+      const mmPerM = mesh.meshW / realWm;
+      const maxM = 0.4 * realWm;
+      const nice = [1,2,5,10,20,50,100,200,500,1000,2000,5000,10000,20000,50000,100000];
+      let distM = nice[0];
+      for (const n of nice) if (n <= maxM) distM = n;
+      const barMM = distM * mmPerM;
+      const barH = 2.5 * S;
+      const label = distM >= 1000 ? `${distM/1000} km` : `${distM} m`;
+      const bmp = this._textBitmap(label, 64, true);
+      const lblH = 4.5 * S, lblW = lblH * (bmp.w / bmp.h), lblGap = 3 * S;
+      const bx = alignX(barMM + lblGap + lblW), by = cursorY;
+      const bar = [];
+      this._rectTris(bar, bx, by - barH, bx + barMM, by);
+      elems.push({ name: 'Scale bar', hex: '#F5F5F5', solid: this._extrudePrism(bar, L.plateTop - 0.3, L.plateTop + 0.8) });
+      // Vertically centre the label on the bar.
+      const lblTop = by - barH/2 + lblH/2;
+      const ls = this._extrudeBitmap(bmp, bx + barMM + lblGap, lblTop, lblW, lblH, inkLow, inkHigh);
+      if (ls) elems.push({ name: 'Scale label', hex: '#F5F5F5', solid: ls });
+      track(by - barH);
+    }
+
+    return { elems, bottomY: lowestY };
+  },
+
+  // "44.500°N  -121.900°W" centre-of-tile coordinate string.
+  _coordString(mesh) {
+    const b = mesh.bounds;
+    const clat = (b.north + b.south) / 2, clon = (b.east + b.west) / 2;
+    const fmt = (v, pos, neg) => `${Math.abs(v).toFixed(3)}°${v >= 0 ? pos : neg}`;
+    return `${fmt(clat,'N','S')}  ${fmt(clon,'E','W')}`;
+  },
+
   _buildFrameObjects(mesh, presentBands) {
     if (!document.getElementById('frame-enable')?.checked) return [];
-    const elems = [];
+    // Layout dispatcher: attached frame (classic) / base-edge text / separate card.
+    const layoutMode = document.getElementById('frame-layout')?.value || 'frame';
+    if (layoutMode === 'edge') return this._buildEdgeTextObjects(mesh);
+    if (layoutMode === 'card') return this._buildCardObjects(mesh, presentBands);
+
     const meshW = mesh.meshW, meshH = mesh.meshH;
     const frameH = mesh.baseHeight;            // border top flush with terrain base
-    const inkLow = frameH - 0.3;               // labels embed slightly into the plate
-    const inkHigh = frameH + 0.8;              // raised 0.8mm
-    const swatchHigh = frameH + 1.2;
 
     const fw = parseFloat(document.getElementById('frame-width')?.value) || 8;   // border width
     const ph = parseFloat(document.getElementById('frame-panel')?.value) || 30;  // min cartouche height
@@ -4076,105 +4441,14 @@ const ThreeMFExport = {
     const BORDER_GAP = 1.5;
     const pad = Math.max(Math.min(fw, 6), borderOn ? rimW + BORDER_GAP : 0);
 
-    let cursorY = Yc - pad;
-    let lowestY = cursorY;
-    const track = y => { if (y < lowestY) lowestY = y; };
-
-    // Minimum glyph height so the thinnest stroke stays printable on a 0.4mm nozzle.
-    // Bold Arial stroke ≈ 0.2 × glyph height, so ~4mm → ~0.8mm strokes (2 perimeters).
-    const MIN_TEXT_MM = 4;
-    const availW = (X1 - X0) - 2 * pad; // usable cartouche width
-
-    // Render a tight glyph bitmap and extrude it at (x, cursorY), heightMM tall.
-    // Scales down to fit availW if the string would be too wide. Always bold.
-    const addText = (text, name, hex, heightMM, x) => {
-      if (!text) return 0;
-      const bmp = this._textBitmap(text, 64, true);
-      let hMM = Math.max(heightMM, MIN_TEXT_MM);
-      let wMM = hMM * (bmp.w / bmp.h);
-      if (wMM > availW) { hMM *= availW / wMM; wMM = availW; }
-      const solid = this._extrudeBitmap(bmp, x, cursorY, wMM, hMM, inkLow, inkHigh);
-      if (solid) { elems.push({ name, hex, solid }); track(cursorY - hMM); }
-      return hMM;
-    };
-
-    // Title
-    if (document.getElementById('frame-title-on')?.checked) {
-      const title = (document.getElementById('frame-title')?.value || '').trim();
-      const used = addText(title, 'Title', '#F5F5F5', 9, X0 + pad);
-      if (used) cursorY -= used + 3;
-    }
-    // Subtitle (smaller, directly under the title)
-    if (document.getElementById('frame-subtitle-on')?.checked) {
-      const sub = (document.getElementById('frame-subtitle')?.value || '').trim();
-      const used = addText(sub, 'Subtitle', '#DADADA', 6, X0 + pad);
-      if (used) cursorY -= used + 4;
-    }
-    // Coordinates (centre of the selected area — compact and always fits)
-    if (document.getElementById('frame-coords-on')?.checked && mesh.bounds) {
-      const b = mesh.bounds;
-      const clat = (b.north + b.south) / 2, clon = (b.east + b.west) / 2;
-      const fmt = (v, pos, neg) => `${Math.abs(v).toFixed(3)}°${v >= 0 ? pos : neg}`;
-      const coordStr = `${fmt(clat,'N','S')}  ${fmt(clon,'E','W')}`;
-      const used = addText(coordStr, 'Coordinates', '#C8C8C8', 4.5, X0 + pad);
-      if (used) cursorY -= used + 4;
-    }
-    // Legend: swatch (band colour) + label per present band.
-    if (document.getElementById('frame-legend-on')?.checked) {
-      const palette = getBandConfig().colors;
-      const present = presentBands && presentBands.length
-        ? presentBands : palette.map((_, i) => i);
-      let sw = 6, gap = 2.5, lblH = 4.5, itemGap = 6;
-      // Measure the row, then uniformly scale it down if it would overrun the panel.
-      const bmps = present.map(b => this._textBitmap(palette[b].name, 64, true));
-      const rowW = () => present.reduce((s, _, i) =>
-        s + sw + gap + lblH * (bmps[i].w / bmps[i].h) + itemGap, 0);
-      const total = rowW();
-      if (total > availW) { const f = availW / total; sw*=f; gap*=f; lblH*=f; itemGap*=f; }
-
-      let lx = X0 + pad;
-      const legendTop = cursorY;
-      present.forEach((b, i) => {
-        const c = palette[b];
-        const st = [];
-        this._rectTris(st, lx, legendTop - sw, lx + sw, legendTop);
-        elems.push({ name: c.name + ' key', hex: c.hex, solid: this._extrudePrism(st, frameH - 0.3, swatchHigh) });
-        const lblW = lblH * (bmps[i].w / bmps[i].h);
-        const ls = this._extrudeBitmap(bmps[i], lx + sw + gap, legendTop - (sw - lblH)/2, lblW, lblH, inkLow, inkHigh);
-        if (ls) elems.push({ name: c.name + ' label', hex: '#F5F5F5', solid: ls });
-        lx += sw + gap + lblW + itemGap;
-      });
-      track(legendTop - sw);
-      cursorY = legendTop - sw - 5;
-    }
-    // Scale bar: a filled bar of a round distance, with a label centred on it.
-    if (document.getElementById('frame-scale-on')?.checked && mesh.bounds) {
-      const b = mesh.bounds;
-      const midLatR = (b.north + b.south) / 2 * Math.PI / 180;
-      const realWm = Math.abs(b.east - b.west) * Math.cos(midLatR) * 111320; // tile width in m
-      const mmPerM = meshW / realWm;
-      const maxM = 0.4 * realWm;
-      const nice = [1,2,5,10,20,50,100,200,500,1000,2000,5000,10000,20000,50000,100000];
-      let distM = nice[0];
-      for (const n of nice) if (n <= maxM) distM = n;
-      const barMM = distM * mmPerM;
-      const barH = 2.5;
-      const bx = X0 + pad, by = cursorY;
-      const bar = [];
-      this._rectTris(bar, bx, by - barH, bx + barMM, by);
-      elems.push({ name: 'Scale bar', hex: '#F5F5F5', solid: this._extrudePrism(bar, frameH - 0.3, frameH + 0.8) });
-      const label = distM >= 1000 ? `${distM/1000} km` : `${distM} m`;
-      const bmp = this._textBitmap(label, 64, true);
-      const lblH = 4.5, lblW = lblH * (bmp.w / bmp.h);
-      // Vertically centre the label on the bar.
-      const lblTop = by - barH/2 + lblH/2;
-      const ls = this._extrudeBitmap(bmp, bx + barMM + 3, lblTop, lblW, lblH, inkLow, inkHigh);
-      if (ls) elems.push({ name: 'Scale label', hex: '#F5F5F5', solid: ls });
-      track(by - barH);
-    }
+    const { elems, bottomY } = this._buildCartoucheContent(mesh, presentBands, {
+      xLeft: X0 + pad, xRight: X1 - pad, topY: Yc - pad, plateTop: frameH,
+      scale: parseFloat(document.getElementById('frame-text-scale')?.value) || 1,
+      align: document.getElementById('frame-align')?.value || 'left',
+    });
 
     // Panel bottom: at least the requested height, but grown to contain content.
-    const Y0 = Math.min(-(fw + ph), lowestY - pad);
+    const Y0 = Math.min(-(fw + ph), bottomY - pad);
 
     const objs = [];
     const archOn = mesh.shapeMask && document.getElementById('frame-arch-on')?.checked;
@@ -4734,6 +5008,15 @@ const UI = {
     document.getElementById('tiling-opts').style.display = on ? 'block' : 'none';
     this._updateTileInfo();
     drawTileGrid();
+  },
+
+  // Frame layout mode: show only the option group for the active mode.
+  setFrameLayout(mode) {
+    const groups = { frame: 'frame-opts-frame', edge: 'frame-opts-edge', card: 'frame-opts-card' };
+    for (const [m, id] of Object.entries(groups)) {
+      const el = document.getElementById(id);
+      if (el) el.style.display = m === mode ? 'block' : 'none';
+    }
   },
 
   onTileGridChange() {
