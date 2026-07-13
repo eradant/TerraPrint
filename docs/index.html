@@ -1236,9 +1236,10 @@ const MapModule = {
     map = L.map('map', {
       center: [40, -100],
       zoom: 4,
-      zoomControl: true,
+      zoomControl: false,   // default topleft sits under the floating panel
       preferCanvas: true,
     });
+    L.control.zoom({ position: 'topright' }).addTo(map);
 
     // Satellite imagery base layer — kept in sync with the colour-extraction source.
     setBaseImagery(currentImagerySource);
