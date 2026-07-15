@@ -538,13 +538,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
     <div class="panel-section collapsible collapsed" id="sec-imagery">
       <h3 onclick="UI.toggleSection(this)">Imagery &amp; Color</h3>
       <div class="section-body">
-        <div class="input-group">
-          <label>Base imagery <span style="color:var(--text-muted);font-size:11px;">(map + photo colors)</span></label>
-          <select id="imagery-source" onchange="setBaseImagery(this.value)">
-            <option value="eox" selected>Sentinel-2 cloudless — global, clean</option>
-            <option value="naip">NAIP / USGS — US only, high-res</option>
-          </select>
-        </div>
+        <!-- Mode switch: everything below shows/hides per mode (Advanced._updateSectionVisibility) -->
         <div class="input-group" style="display:flex;align-items:center;gap:8px;">
           <label style="margin:0;">Color source</label>
           <select id="color-source" onchange="Advanced.setTopSource(this.value)" style="flex:1 1 auto;">
@@ -553,6 +547,13 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
             <option value="satellite">Satellite photo</option>
             <option value="hybrid">Hybrid (land cover × photo)</option>
             <option value="landcover">Land cover (semantic)</option>
+          </select>
+        </div>
+        <div class="input-group" id="imagery-source-group" style="display:none;">
+          <label>Base imagery <span style="color:var(--text-muted);font-size:11px;">(map + photo colors)</span></label>
+          <select id="imagery-source" onchange="setBaseImagery(this.value)">
+            <option value="eox" selected>Sentinel-2 cloudless — global, clean</option>
+            <option value="naip">NAIP / USGS — US only, high-res</option>
           </select>
         </div>
         <div id="std-colors">
@@ -579,10 +580,12 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
             <span style="color:var(--text-muted)">above</span>
           </div>
         </div>
-        <div class="sub-fold collapsed" id="adv-fold">
-          <div class="sub-fold-head" onclick="UI.toggleSection(this)">Advanced fine-tuning</div>
+        <div class="sub-fold collapsed" id="adv-fold" style="display:none;">
+          <div class="sub-fold-head" onclick="UI.toggleSection(this)">Fine-tuning</div>
           <div class="sub-fold-body">
-        <label class="input-group" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px;">
+        <!-- Driven by the top Color source select; kept in the DOM (hidden) so all logic that
+             reads adv-colors-on / adv-source keeps working unchanged. -->
+        <label class="input-group" style="display:none;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px;">
           <input type="checkbox" id="adv-colors-on" style="accent-color:var(--accent);width:16px;height:16px;" onchange="Advanced.toggle(this.checked)">
           <span>Enable — hypsometric or photographic (4 / 8 colors)</span>
         </label>
@@ -594,7 +597,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
               <option value="4">4 — 1 AMS</option>
             </select>
           </div>
-          <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <div class="input-group" id="adv-source-row" style="display:none;align-items:center;gap:8px;margin-bottom:8px;">
             <label style="margin:0;">Color source</label>
             <select id="adv-source" onchange="Advanced.setSource(this.value)" style="flex:1 1 auto;">
               <option value="elevation" selected>Elevation bands</option>
@@ -1151,6 +1154,8 @@ const Settings = {
     const extra = document.getElementById('adv-extra');
     if (extra) extra.style.display = document.getElementById('adv-count')?.value === '4' ? 'none' : 'block';
     Advanced._updateSatHigh();
+    // Mode-driven visibility for the Imagery & Color section (color-source is skip-dispatched).
+    Advanced._updateSectionVisibility(document.getElementById('color-source')?.value || 'classic');
     // Accordion collapse state.
     if (Array.isArray(saved.__collapsed)) {
       for (const id of this.SECTION_IDS) {
@@ -5670,6 +5675,22 @@ const Advanced = {
       document.getElementById('adv-fold')?.classList.remove('collapsed');
       document.getElementById('sec-imagery')?.classList.remove('collapsed');
     }
+    this._updateSectionVisibility(val);
+  },
+
+  // Mode-driven section layout: only the settings that apply to the chosen colour source show.
+  //   classic            → elevation thresholds only
+  //   elevation          → fine-tuning fold (band pickers)
+  //   satellite / hybrid → base-imagery source + fold (photo controls)
+  //   landcover          → fold only (classified — no photo source)
+  _updateSectionVisibility(val) {
+    const show = (id, on, disp = 'block') => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = on ? disp : 'none';
+    };
+    show('imagery-source-group', val === 'satellite' || val === 'hybrid');
+    show('std-colors', val === 'classic');
+    show('adv-fold', val !== 'classic');
   },
 
   // Keep the top-level select mirrored when the legacy controls are used directly.
