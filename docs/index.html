@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TerraPrint — Oregon Terrain Model Generator</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' fill='%23000'/><path d='M32 14 L45 39 L53 30 L61 52 L66 44 L72 65 L77 57 L82 86 L6 86 Z M86 86 L91 75 L96 86 Z' fill='%23fff'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' fill='%23000'/><path d='M36 12 L47 34 L54 23 L64 48 L70 38 L78 63 L83 54 L89 79 L8 74 Z M91 64 L96 79 L84 78 Z' fill='%23fff'/></svg>">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -480,11 +480,12 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
   <div class="logo">
     <!-- SRL mark: faceted peak, shoulder summit, sawtooth ridge, detached foothill -->
     <svg width="26" height="22" viewBox="0 0 96 80" fill="currentColor" aria-label="SRL">
-      <path d="M32 4 L45 29 L53 20 L61 42 L66 34 L72 55 L77 47 L82 76 L6 76 Z M86 76 L91 65 L96 76 Z"/>
+      <path d="M36 4 L47 26 L54 15 L64 40 L70 30 L78 55 L83 46 L89 71 L8 66 Z M91 56 L96 71 L84 70 Z"/>
     </svg>
     TerraPrint
   </div>
   <div class="header-actions">
+    <button class="btn btn-sm" onclick="Intro.show()" title="How it works">?</button>
     <button class="btn btn-sm" onclick="Settings.reset()" title="Reset all settings to defaults">↺ Defaults</button>
   </div>
 </header>
@@ -1016,6 +1017,34 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 
 <div id="toast"></div>
 
+<!-- ─── First-visit intro / how-to ─── -->
+<div id="intro-modal" style="display:none;position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);justify-content:center;align-items:center;">
+  <div style="width:min(540px,92vw);max-height:86vh;overflow-y:auto;background:var(--glass-heavy);backdrop-filter:blur(18px) saturate(1.15);-webkit-backdrop-filter:blur(18px) saturate(1.15);border:1px solid var(--hairline-hi);border-radius:var(--radius-lg);padding:22px 24px 18px;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+      <svg width="26" height="22" viewBox="0 0 96 80" fill="#fff"><path d="M36 4 L47 26 L54 15 L64 40 L70 30 L78 55 L83 46 L89 71 L8 66 Z M91 56 L96 71 L84 70 Z"/></svg>
+      <div>
+        <div style="font-size:15px;font-weight:600;letter-spacing:0.3px;">TerraPrint</div>
+        <div style="font-size:11px;color:var(--text-secondary);">Turn real terrain into multi-color 3D-printable models</div>
+      </div>
+    </div>
+    <ol style="margin:0 0 14px 18px;display:flex;flex-direction:column;gap:9px;font-size:12.5px;color:var(--text-primary);">
+      <li><strong>Find a place</strong> — search by name or pan the map, then draw a <em>rectangle</em> or <em>circle</em> with the tools on the right.</li>
+      <li><strong>Pick a color source</strong> (Imagery &amp; Color) — elevation bands for classic hypsometric tints, or satellite / land-cover for photographic color. 3MF exports print each color as its own filament (AMS/MMU).</li>
+      <li><strong>Generate</strong> — elevation is fetched from USGS/Terrarium data at up to ~10 m detail and meshed into a watertight model. Check the size readout in Selected Area.</li>
+      <li><strong>Refine</strong> — 🖌 Paint Water fixes missed lakes, 🎨 Color Correct repaints misclassified regions, and Composition adds frames, engraved edges, or a display card.</li>
+      <li><strong>Export</strong> — ⬇ 3MF for multi-color printing (Bambu/Orca/Prusa slicers), ⬇ STL for single color. Big area? Use Tiling to split it into full-resolution pieces.</li>
+    </ol>
+    <p style="font-size:11px;color:var(--text-muted);margin:0 0 16px;">Settings persist between visits. Reopen this guide anytime with the <strong>?</strong> button in the header.</p>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid var(--hairline);padding-top:14px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text-secondary);margin:0;">
+        <input type="checkbox" id="intro-dismiss" style="accent-color:var(--accent);width:15px;height:15px;">
+        Don't show again
+      </label>
+      <button class="btn btn-primary" onclick="Intro.close()">Get started</button>
+    </div>
+  </div>
+</div>
+
 <!-- ─── Water Paint Modal (full screen) ─── -->
 <div id="paint-modal" style="display:none;position:fixed;inset:0;z-index:2000;background:#0a0c0e;flex-direction:column;">
   <div style="display:flex;align-items:center;gap:14px;padding:10px 14px;border-bottom:1px solid var(--hairline);flex-wrap:wrap;background:var(--glass-heavy);">
@@ -1180,8 +1209,37 @@ const Settings = {
     try {
       localStorage.removeItem(this.KEY);
       localStorage.removeItem('terraprint-preview-size');
+      localStorage.removeItem(Intro.KEY);   // a true reset shows the intro again
     } catch (e) {}
     location.reload();
+  },
+};
+
+// ═══════════════════════════════════════════════
+//  INTRO  (first-visit how-to overlay)
+// ═══════════════════════════════════════════════
+
+const Intro = {
+  KEY: 'terraprint-intro-dismissed',
+
+  // Show on first visit only; the header "?" reopens it anytime.
+  maybeShow() {
+    let dismissed = null;
+    try { dismissed = localStorage.getItem(this.KEY); } catch (e) {}
+    if (!dismissed) this.show();
+  },
+
+  show() {
+    const box = document.getElementById('intro-dismiss');
+    if (box) box.checked = false;
+    document.getElementById('intro-modal').style.display = 'flex';
+  },
+
+  close() {
+    document.getElementById('intro-modal').style.display = 'none';
+    if (document.getElementById('intro-dismiss')?.checked) {
+      try { localStorage.setItem(this.KEY, '1'); } catch (e) {}
+    }
   },
 };
 
@@ -5778,6 +5836,7 @@ function initApp() {
   Preview.init();
   Settings.restore();   // after MapModule.init so setBaseImagery targets a live map
   Settings.attach();
+  Intro.maybeShow();    // first-visit how-to (dismissible)
 }
 
 if (document.readyState === 'loading') {
