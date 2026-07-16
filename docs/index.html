@@ -612,7 +612,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
           <div id="sat-detail-group" class="input-group" style="display:none;">
             <label>Detail <span style="color:var(--text-muted);font-size:11px;">(sharper ↔ cleaner blocks)</span></label>
             <div class="range-row">
-              <input type="range" id="sat-detail" min="1" max="10" step="1" value="5" oninput="document.getElementById('sat-detail-val').textContent=this.value">
+              <input type="range" id="sat-detail" min="1" max="15" step="1" value="5" oninput="document.getElementById('sat-detail-val').textContent=this.value">
               <span class="range-val" id="sat-detail-val">5</span>
             </div>
           </div>
@@ -620,14 +620,14 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
             <div class="input-group">
               <label>Region shape <span style="color:var(--text-muted);font-size:11px;">(edge-hug ↔ smooth)</span></label>
               <div class="range-row">
-                <input type="range" id="sat-shape" min="5" max="40" step="1" value="10" oninput="document.getElementById('sat-shape-val').textContent=this.value">
+                <input type="range" id="sat-shape" min="1" max="40" step="1" value="10" oninput="document.getElementById('sat-shape-val').textContent=this.value">
                 <span class="range-val" id="sat-shape-val">10</span>
               </div>
             </div>
             <div class="input-group">
               <label>Texture smoothing <span style="color:var(--text-muted);font-size:11px;">(crisp ↔ clean)</span></label>
               <div class="range-row">
-                <input type="range" id="sat-smooth" min="0" max="10" step="1" value="5" oninput="document.getElementById('sat-smooth-val').textContent=this.value">
+                <input type="range" id="sat-smooth" min="0" max="10" step="1" value="5" oninput="document.getElementById('sat-smooth-val').textContent=this.value=='0'?'off':this.value">
                 <span class="range-val" id="sat-smooth-val">5</span>
               </div>
             </div>
@@ -639,27 +639,34 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
               <span class="range-val" id="sat-feather-val">off</span>
             </div>
           </div>
-          <!-- Photo adjust — applied to the source image before clustering -->
+          <!-- Photo adjust — applied to the source image before clustering, so these change
+               the PRINTED palette (not just a preview). Folded: occasionally used. -->
           <div id="sat-photo-group" style="display:none;">
-            <div class="input-group">
-              <label>Saturation <span style="color:var(--text-muted);font-size:11px;">(separate ↔ muted)</span></label>
-              <div class="range-row">
-                <input type="range" id="sat-satur" min="-50" max="80" step="5" value="0" oninput="document.getElementById('sat-satur-val').textContent=(this.value>0?'+':'')+this.value">
-                <span class="range-val" id="sat-satur-val">0</span>
-              </div>
-            </div>
-            <div class="input-group">
-              <label>Contrast</label>
-              <div class="range-row">
-                <input type="range" id="sat-contrast" min="-50" max="50" step="5" value="0" oninput="document.getElementById('sat-contrast-val').textContent=(this.value>0?'+':'')+this.value">
-                <span class="range-val" id="sat-contrast-val">0</span>
-              </div>
-            </div>
-            <div class="input-group">
-              <label>Brightness</label>
-              <div class="range-row">
-                <input type="range" id="sat-bright" min="-50" max="50" step="5" value="0" oninput="document.getElementById('sat-bright-val').textContent=(this.value>0?'+':'')+this.value">
-                <span class="range-val" id="sat-bright-val">0</span>
+            <div class="sub-fold collapsed" id="photo-adjust-fold">
+              <div class="sub-fold-head" onclick="UI.toggleSection(this)">Photo adjustments</div>
+              <div class="sub-fold-body">
+                <p style="font-size:11px;color:var(--text-muted);margin:6px 0 8px;">Applied on Generate — these change the printed palette, not just a preview.</p>
+                <div class="input-group">
+                  <label>Saturation <span style="color:var(--text-muted);font-size:11px;">(separate ↔ muted)</span></label>
+                  <div class="range-row">
+                    <input type="range" id="sat-satur" min="-50" max="80" step="5" value="0" oninput="document.getElementById('sat-satur-val').textContent=(this.value>0?'+':'')+this.value">
+                    <span class="range-val" id="sat-satur-val">0</span>
+                  </div>
+                </div>
+                <div class="input-group">
+                  <label>Contrast</label>
+                  <div class="range-row">
+                    <input type="range" id="sat-contrast" min="-50" max="50" step="5" value="0" oninput="document.getElementById('sat-contrast-val').textContent=(this.value>0?'+':'')+this.value">
+                    <span class="range-val" id="sat-contrast-val">0</span>
+                  </div>
+                </div>
+                <div class="input-group">
+                  <label>Brightness</label>
+                  <div class="range-row">
+                    <input type="range" id="sat-bright" min="-50" max="50" step="5" value="0" oninput="document.getElementById('sat-bright-val').textContent=(this.value>0?'+':'')+this.value">
+                    <span class="range-val" id="sat-bright-val">0</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -751,6 +758,26 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
           <button class="btn btn-sm btn-block" style="margin-top:8px;" onclick="Advanced.autofit()">Auto-fit thresholds to tile</button>
         </div>
           </div>
+        </div>
+
+        <div class="sub-head">Winter</div>
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" id="winter-on" style="accent-color:var(--accent);width:16px;height:16px;" onchange="document.getElementById('winter-opts').style.display=this.checked?'block':'none'">
+          <label for="winter-on" style="margin:0;cursor:pointer;">Winter mode (snow cap)</label>
+        </div>
+        <div id="winter-opts" style="display:none;margin-top:8px;">
+          <div class="input-group">
+            <label>Snowline (m) <span style="color:var(--text-muted);font-size:11px;">(snow above · steep rock stays bare)</span></label>
+            <input type="number" id="snowline" value="1800" min="0" max="6000" step="50">
+          </div>
+          <div class="input-group">
+            <label>Transition (m) <span style="color:var(--text-muted);font-size:11px;">(feathered band above the line)</span></label>
+            <div class="range-row">
+              <input type="range" id="snow-transition" min="50" max="400" step="25" value="150" oninput="document.getElementById('snow-transition-val').textContent=this.value+'m'">
+              <span class="range-val" id="snow-transition-val">150m</span>
+            </div>
+          </div>
+          <p style="font-size:11px;color:var(--text-muted);margin:0;">Snow prints in the top color slot (recolored white).</p>
         </div>
       </div>
     </div>
@@ -972,6 +999,25 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
           <p id="tiling-info" style="font-size:11px;color:var(--text-secondary);margin:2px 0 0;font-family:var(--mono);"></p>
           <button class="btn btn-primary btn-block" style="margin-top:10px;" onclick="UI.generateTiles()">⬇ Generate Tiles (ZIP)</button>
         </div>
+
+        <div class="sub-head">Route (GPX)</div>
+        <div class="input-group">
+          <input type="file" id="gpx-file" accept=".gpx" onchange="Gpx.onFile(this)" style="font-size:11px;width:100%;color:var(--text-secondary);">
+        </div>
+        <p id="gpx-status" style="font-size:11px;color:var(--text-muted);margin:4px 0 8px;font-family:var(--mono);">No route loaded</p>
+        <div class="threshold-row">
+          <input type="color" id="route-color" value="#E8442A" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+          <span>Route color</span>
+          <span style="color:var(--text-muted);font-size:11px;">raised ribbon</span>
+        </div>
+        <div class="input-group" style="margin-top:8px;">
+          <label>Route width (mm)</label>
+          <div class="range-row">
+            <input type="range" id="route-width" min="1" max="4" step="0.25" value="2" oninput="document.getElementById('route-width-val').textContent=this.value+'mm'">
+            <span class="range-val" id="route-width-val">2mm</span>
+          </div>
+        </div>
+        <button class="btn btn-sm" onclick="Gpx.clear()">✕ Clear route</button>
       </div>
     </div>
 
@@ -1129,6 +1175,7 @@ const State = {
   waterOverride: null,     // { w, h, add:Uint8Array, remove:Uint8Array } manual paint edits
   colorOverride: null,     // { w, h, band:Int8Array } manual band recolour (-1 = auto)
   advNames: null,          // per-band names for the legend (land-cover mode)
+  gpxTrack: null,          // { name, points:[{lat,lon}…] } loaded GPX route
 };
 
 // ═══════════════════════════════════════════════
@@ -1139,7 +1186,7 @@ const Settings = {
   KEY: 'terraprint-settings-v1',
 
   // Sections/folds whose open-collapsed state is remembered across sessions.
-  SECTION_IDS: ['sec-model', 'sec-imagery', 'sec-features', 'sec-composition', 'adv-fold'],
+  SECTION_IDS: ['sec-model', 'sec-imagery', 'sec-features', 'sec-composition', 'adv-fold', 'photo-adjust-fold'],
 
   // Serialize every panel control with an id (checkbox → checked, else value),
   // plus the accordion collapse state.
@@ -2370,6 +2417,124 @@ const Buildings = {
 };
 
 // ═══════════════════════════════════════════════
+//  GPX ROUTE  (raised ribbon following the terrain — Relief-Track style)
+// ═══════════════════════════════════════════════
+
+const Gpx = {
+  onFile(input) {
+    const f = input.files && input.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const doc = new DOMParser().parseFromString(reader.result, 'application/xml');
+        let els = [...doc.getElementsByTagName('trkpt')];
+        if (!els.length) els = [...doc.getElementsByTagName('rtept')];
+        const points = els.map(p => ({ lat: parseFloat(p.getAttribute('lat')), lon: parseFloat(p.getAttribute('lon')) }))
+                          .filter(p => isFinite(p.lat) && isFinite(p.lon));
+        if (points.length < 2) { toast('No track points found in that GPX.'); return; }
+        const name = doc.getElementsByTagName('name')[0]?.textContent?.trim() || f.name.replace(/\.gpx$/i, '');
+        State.gpxTrack = { name, points };
+        const st = document.getElementById('gpx-status');
+        if (st) st.textContent = `${name} · ${points.length.toLocaleString()} pts`;
+        toast(`Route loaded (${points.length.toLocaleString()} points) — Generate to apply.`);
+      } catch (e) {
+        console.warn('GPX parse failed:', e);
+        toast('Could not read that GPX file.');
+      }
+    };
+    reader.readAsText(f);
+  },
+
+  clear() {
+    State.gpxTrack = null;
+    const fi = document.getElementById('gpx-file'); if (fi) fi.value = '';
+    const st = document.getElementById('gpx-status'); if (st) st.textContent = 'No route loaded';
+  },
+
+  // Terrain-following ribbon: the track is clipped to the tile (split where it leaves),
+  // resampled to grid-cell length, then extruded as a closed quad-strip whose top rides
+  // RAISE mm above the surface and whose underside embeds EMBED mm into it (slicer unions
+  // it with the terrain, same principle as the colour caps).
+  extrude(points, ctx) {
+    const { data, w, h, bounds, meshW, meshH, minElev, elevScale, baseHeight } = ctx;
+    const west = bounds.west, east = bounds.east, south = bounds.south, north = bounds.north;
+    const widthMM = parseFloat(document.getElementById('route-width')?.value) || 2;
+    const RAISE = 1.0, EMBED = 0.8, hw = widthMM / 2;
+
+    const inB = p => p.lat >= south && p.lat <= north && p.lon >= west && p.lon <= east;
+    const mx = p => (p.lon - west) / (east - west) * meshW;
+    const my = p => (p.lat - south) / (north - south) * meshH;
+    // Bilinear surface height (mm) at mesh XY — mirrors the terrain vertex z mapping.
+    const zAt = (x, y) => {
+      const gx = Math.min(w - 1.001, Math.max(0, x / meshW * (w - 1)));
+      const gy = Math.min(h - 1.001, Math.max(0, (1 - y / meshH) * (h - 1)));
+      const x0 = Math.floor(gx), y0 = Math.floor(gy);
+      const fx = gx - x0, fy = gy - y0;
+      const e = data[y0*w + x0] * (1-fx) * (1-fy) + data[y0*w + x0 + 1] * fx * (1-fy)
+              + data[(y0+1)*w + x0] * (1-fx) * fy + data[(y0+1)*w + x0 + 1] * fx * fy;
+      return (Math.max(0, e) - minElev) * elevScale + baseHeight;
+    };
+
+    // Split into in-bounds sub-paths (mesh XY).
+    const subs = [];
+    let cur = [];
+    for (const p of points) {
+      if (inB(p)) cur.push([mx(p), my(p)]);
+      else if (cur.length) { subs.push(cur); cur = []; }
+    }
+    if (cur.length) subs.push(cur);
+
+    const cell = Math.min(meshW / (w - 1), meshH / (h - 1));
+    const V = [], T = [];
+    for (const sub of subs) {
+      if (sub.length < 2) continue;
+      // Resample to ≤ 1 grid cell per segment so the ribbon follows the surface.
+      const pts = [sub[0]];
+      for (let i = 1; i < sub.length; i++) {
+        const a = sub[i-1], b = sub[i];
+        const d = Math.hypot(b[0]-a[0], b[1]-a[1]);
+        if (d < 1e-6) continue;
+        const n = Math.max(1, Math.ceil(d / cell));
+        for (let k = 1; k <= n; k++) pts.push([a[0] + (b[0]-a[0])*k/n, a[1] + (b[1]-a[1])*k/n]);
+      }
+      if (pts.length < 2) continue;
+
+      // Per-vertex XY normal (average of neighbours) for the ribbon offset.
+      const nrm = [];
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[Math.max(0, i-1)], b = pts[Math.min(pts.length-1, i+1)];
+        const dx = b[0]-a[0], dy = b[1]-a[1];
+        const L = Math.hypot(dx, dy) || 1;
+        nrm.push([-dy / L, dx / L]);
+      }
+
+      const base = V.length / 3;
+      // 4 vertices per path point: L-top, R-top, L-bottom, R-bottom.
+      for (let i = 0; i < pts.length; i++) {
+        const [x, y] = pts[i], [nx, ny] = nrm[i];
+        const lx = x + nx*hw, ly = y + ny*hw, rx = x - nx*hw, ry = y - ny*hw;
+        const lz = zAt(lx, ly), rz = zAt(rx, ry);
+        V.push(lx, ly, lz + RAISE,  rx, ry, rz + RAISE,  lx, ly, lz - EMBED,  rx, ry, rz - EMBED);
+      }
+      const idx = (i, k) => base + i*4 + k;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const a = idx(i,0), b = idx(i,1), c = idx(i,2), d = idx(i,3);
+        const A = idx(i+1,0), B = idx(i+1,1), C = idx(i+1,2), D = idx(i+1,3);
+        T.push(a, A, b,  b, A, B);   // top strip
+        T.push(c, d, C,  d, D, C);   // bottom strip (reversed)
+        T.push(a, c, A,  c, C, A);   // left wall
+        T.push(b, B, d,  d, B, D);   // right wall
+      }
+      const sN = pts.length - 1;     // end caps close the prism
+      T.push(idx(0,0), idx(0,1), idx(0,2),  idx(0,1), idx(0,3), idx(0,2));
+      T.push(idx(sN,0), idx(sN,2), idx(sN,1),  idx(sN,1), idx(sN,2), idx(sN,3));
+    }
+    return T.length ? { v: V, t: T } : null;
+  },
+};
+
+// ═══════════════════════════════════════════════
 //  BAND CONFIG  (single source of truth for terrain colours)
 // ═══════════════════════════════════════════════
 
@@ -2413,16 +2578,28 @@ function getBandConfig() {
       if (!isFinite(thresholds[i])) thresholds[i] = (i + 1) * 400;
     }
     thresholds.sort((a, b) => a - b);
-    return { colors, thresholds };
+    return winterizeBands({ colors, thresholds });
   }
   // Default = current 4-colour behaviour, unchanged.
-  return {
+  return winterizeBands({
     colors: ThreeMFExport.COLORS,
     thresholds: [
       parseFloat(document.getElementById('thresh-forest-lo').value) || 400,
       parseFloat(document.getElementById('thresh-hills').value)     || 1500,
     ],
-  };
+  });
+}
+
+// Winter mode repurposes the TOP colour slot as snow white (non-mutating — the pickers and the
+// classic palette are untouched). MeshGen assigns snow pixels to this band; in satellite modes
+// the top slot is the luminance-sorted LIGHTEST cluster, so bright terrain merging into snow
+// reads naturally.
+function winterizeBands(cfg) {
+  if (document.getElementById('winter-on')?.checked) {
+    cfg.colors = cfg.colors.slice();
+    cfg.colors[cfg.colors.length - 1] = { name: 'Snow', hex: '#F2F5F7' };
+  }
+  return cfg;
 }
 
 // Frame style presets — set the frame controls to a coherent look in one click. "Custom"
@@ -3004,13 +3181,18 @@ const MeshGen = {
         // small features survive); low = large superpixels (simple poster-like blocks).
         // A bilateral pre-smooth first is essential — without it SLIC fragments on texture
         // noise; with it, region borders adhere to genuine edges.
-        const regionArea = Math.round(34 + Math.pow((10 - detail) / 9, 1.4) * 396); // ~34 … ~430 px
-        const m = parseFloat(document.getElementById('sat-shape')?.value) || 10; // SLIC compactness
+        // Piecewise: 1–10 keeps the original curve (~430…34 px); 11–15 extends linearly down to
+        // ~12 px superpixels for maximum edge fidelity on high-detail tiles.
+        const regionArea = detail <= 10
+          ? Math.round(34 + Math.pow((10 - detail) / 9, 1.4) * 396)
+          : Math.round(34 - (detail - 10) / 5 * 22);
+        const m = parseFloat(document.getElementById('sat-shape')?.value) || 10; // SLIC compactness (1 = hug edges hardest)
         const sVal = parseFloat(document.getElementById('sat-smooth')?.value);
         const smoothAmt = isFinite(sVal) ? sVal : 5;
         const passes = smoothAmt <= 1 ? 1 : smoothAmt <= 6 ? 2 : 3;   // 5 → 2 (default)
         const sigmaC = 15 + smoothAmt * 3;                            // 5 → 30 (default)
-        const smooth = bilateralRGB(srcRgb, w, h, 2, sigmaC, passes);
+        // 0 = truly off: feed SLIC the raw image (previously 0 still ran one bilateral pass).
+        const smooth = smoothAmt <= 0 ? srcRgb : bilateralRGB(srcRgb, w, h, 2, sigmaC, passes);
         const lab = rgbToLab(smooth, w * h);
         const { labels, K } = slicLabels(lab, w, h, landMask, regionArea, m, 10);
         if (K > 0) {
@@ -3042,7 +3224,7 @@ const MeshGen = {
         // borders fall onto neighbouring superpixel edges, so edge-adherence is preserved.
         const pxMm2 = (meshW / w) * (meshH / h);
         const minPrintPx = Math.max(0, Math.round((1.5 * 1.5) / Math.max(1e-6, pxMm2)));
-        const detailIsland = Math.round(Math.pow((10 - detail) / 9, 1.3) * 0.011 * w * h);
+        const detailIsland = Math.round(Math.pow(Math.max(0, 10 - detail) / 9, 1.3) * 0.011 * w * h);
         removeIslands(Math.max(minPrintPx, detailIsland));
 
         // Hybrid: now that regions are final, set each band's printed colour to the MEAN
@@ -3086,7 +3268,7 @@ const MeshGen = {
             }
           }
         }
-        removeIslands(Math.round(Math.pow((10 - detail) / 9, 1.3) * 0.011 * w * h));
+        removeIslands(Math.round(Math.pow(Math.max(0, 10 - detail) / 9, 1.3) * 0.011 * w * h));
       }
 
       // Write the derived palette into the advanced colour pickers (land tints).
@@ -3098,6 +3280,29 @@ const MeshGen = {
     } else {
       for (let i = 0; i < w * h; i++) pixelBands[i] = waterMask[i] ? 0 : bandOf(origData[i]);
       State.advNames = null;
+    }
+
+    // ── Winter mode: slope-aware snow cap above the snowline (all colour modes) ─────────
+    // Coverage rises over a feathered transition band above the snowline (Bayer-dithered so the
+    // line never rings the mountain), and thins with slope — steep rock above ~55° stays bare,
+    // matching real snow distribution. Snow pixels take the TOP band, which getBandConfig
+    // recolours to snow white while winter is on.
+    if (document.getElementById('winter-on')?.checked) {
+      const snowline = parseFloat(document.getElementById('snowline')?.value) || 1800;
+      const trans = Math.max(1, parseFloat(document.getElementById('snow-transition')?.value) || 150);
+      const BAYER4 = [0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5].map(v => (v + 0.5) / 16);
+      const snowBand = numColors - 1;
+      const TAN35 = Math.tan(35 * Math.PI / 180), TAN55 = Math.tan(55 * Math.PI / 180);
+      for (let i = 0; i < w * h; i++) {
+        if (waterMask[i]) continue;
+        let p = (origData[i] - snowline) / trans;
+        if (p <= 0) continue;
+        if (p > 1) p = 1;
+        const t = slopeTanAt(i % w, (i / w) | 0);
+        if (t >= TAN55) p *= 0.1;                                       // cliffs shed snow
+        else if (t > TAN35) p *= 1 - (t - TAN35) / (TAN55 - TAN35) * 0.9; // steep slopes thin out
+        if (p >= 1 || BAYER4[((i / w | 0) & 3) * 4 + ((i % w) & 3)] < p) pixelBands[i] = snowBand;
+      }
     }
 
     // ── Optional boundary stippling (banded modes only) ──────────────────────
@@ -3467,11 +3672,22 @@ const MeshGen = {
       if (geom.t.length) buildingSolid = geom;
     }
 
+    // Optional GPX route: raised terrain-following ribbon (own colour, unioned by the slicer).
+    let routeSolid = null;
+    if (State.gpxTrack && State.gpxTrack.points?.length > 1) {
+      routeSolid = Gpx.extrude(State.gpxTrack.points, {
+        data, w, h, bounds: elevData.bounds, meshW, meshH, minElev, elevScale, baseHeight,
+      });
+      if (routeSolid === null) toast('Route does not cross the selected area.');
+    }
+
     return {
       vertices: vertexArray,
       triangles: triangleArray,
       buildings: buildingSolid,
       buildingHex: document.getElementById('building-color')?.value || '#9A9A9A',
+      route: routeSolid,
+      routeHex: document.getElementById('route-color')?.value || '#E8442A',
       shapeMask,
       satellite,
       triColors,
@@ -3624,15 +3840,15 @@ const STLExport = {
       const { built } = ThreeMFExport._buildTerrainSolids(mesh);
       const c = this._combine(built.map(b => b.solid));
       v = c.v; t = c.t;
-    } else if (mesh.buildings && mesh.buildings.t.length) {
-      // Rectangular tile: merge the terrain mesh with the building prisms.
-      const c = this._combine([
-        { v: mesh.vertices, t: mesh.triangles },
-        mesh.buildings,
-      ]);
-      v = c.v; t = c.t;
     } else {
-      v = mesh.vertices; t = mesh.triangles;
+      // Rectangular tile: merge the terrain mesh with any overlay solids (buildings, route).
+      const extras = [mesh.buildings, mesh.route].filter(s => s && s.t && s.t.length);
+      if (extras.length) {
+        const c = this._combine([{ v: mesh.vertices, t: mesh.triangles }, ...extras]);
+        v = c.v; t = c.t;
+      } else {
+        v = mesh.vertices; t = mesh.triangles;
+      }
     }
 
     const numTriangles = t.length / 3;
@@ -3933,10 +4149,13 @@ const ThreeMFExport = {
     return { built, presentBands };
   },
 
-  // Append the extruded OSM building solid (if any) as its own coloured object.
+  // Append the extra overlay solids (OSM buildings, GPX route) as their own coloured objects.
   _appendBuildings(mesh, built) {
     if (mesh.buildings && mesh.buildings.t && mesh.buildings.t.length) {
       built.push({ name: 'Buildings', hex: mesh.buildingHex || '#9A9A9A', solid: mesh.buildings });
+    }
+    if (mesh.route && mesh.route.t && mesh.route.t.length) {
+      built.push({ name: 'Route', hex: mesh.routeHex || '#E8442A', solid: mesh.route });
     }
   },
 
