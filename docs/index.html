@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TerraPrint — Oregon Terrain Model Generator</title>
+<title>TerraPrint — Terrain Model Generator</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' fill='%23000'/><path d='M36 12 L47 34 L54 23 L64 48 L70 38 L78 63 L83 54 L89 79 L8 74 Z M91 64 L96 79 L84 78 Z' fill='%23fff'/></svg>">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
@@ -16,7 +16,7 @@
 
 :root {
   --bg-deep:    #000000;
-  --glass:        rgba(10,12,14,0.72);   /* translucent chrome over the map */
+  --glass:        rgba(10,12,14,0.78);   /* translucent chrome over the map */
   --glass-heavy:  rgba(8,10,12,0.88);    /* where readability needs more ink */
   --bg-surface:   rgba(255,255,255,0.04);
   --bg-hover:     rgba(255,255,255,0.08);
@@ -25,8 +25,8 @@
   --border:     var(--hairline);
   --border-hi:  var(--hairline-hi);
   --text-primary:   #e8ecf0;
-  --text-secondary: #8b959e;
-  --text-muted:     #565f67;
+  --text-secondary: #98a2ab;
+  --text-muted:     #6e7981;
   /* Blue is FUNCTIONAL only: primary action, focus, control accents. Chrome stays neutral. */
   --accent:      #4d9fff;
   --accent-hover: #70b3ff;
@@ -35,6 +35,7 @@
   --topo-hills:    #3d8c40;
   --topo-mountain: #c8c8c8;
   --danger:  #f85149;
+  --warning: #f0a020;
   --success: #3fb950;
   --radius:    4px;
   --radius-lg: 6px;
@@ -363,38 +364,6 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 #preview-panel.fullscreen .btn-back-to-map { display: block; }
 #preview-panel.fullscreen .btn-fullscreen { display: none; }
 
-/* ─── Progress Bar ─── */
-.progress-bar-wrap {
-  height: 4px;
-  background: rgba(255,255,255,0.05);
-  border-radius: 2px;
-  overflow: hidden;
-  margin-top: 8px;
-}
-.progress-bar-fill {
-  height: 100%;
-  background: var(--success);
-  border-radius: 2px;
-  transition: width 0.3s;
-}
-.progress-stats {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-top: 6px;
-}
-
-/* ─── Legend ─── */
-.legend-row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 6px; }
-.legend-swatch {
-  width: 13px;
-  height: 13px;
-  border-radius: 3px;
-  border: 1px solid rgba(255,255,255,0.08);
-  flex-shrink: 0;
-}
-
 /* ─── Status Toast ─── */
 #toast {
   position: fixed;
@@ -440,30 +409,24 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 @keyframes spin { to { transform: rotate(360deg); } }
 #loading-text { font-size: 12px; color: var(--text-secondary); letter-spacing: 0.3px; }
 
-/* ─── Grid tooltip ─── */
-.grid-tooltip {
-  background: var(--glass-heavy) !important;
-  border: 1px solid var(--hairline-hi) !important;
-  color: var(--text-primary) !important;
-  font-size: 12px !important;
-  border-radius: var(--radius) !important;
-  padding: 6px 10px !important;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.5) !important;
-}
-.grid-tooltip::before { border-top-color: var(--hairline-hi) !important; }
-
 /* ─── Leaflet overrides ─── */
-/* Use background-color (not the `background` shorthand) so Leaflet.Draw's sprite
-   icons (set via background-image) are preserved. Light controls keep the dark
-   zoom glyphs and dark draw icons clearly visible. */
+/* Glass-system controls. background-color (not the `background` shorthand) preserves
+   Leaflet.Draw's sprite icons; the draw sprites are dark-on-light, so they get an invert
+   filter to stay legible on the dark bar. */
 .leaflet-bar a {
-  background-color: #ffffff !important;
-  color: #333333 !important;
-  border-color: rgba(0,0,0,0.2) !important;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.5) !important;
+  background-color: var(--glass-heavy) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--hairline) !important;
+  box-shadow: none !important;
 }
-.leaflet-bar a:hover { background-color: #f0f0f0 !important; }
-.leaflet-bar { box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important; }
+.leaflet-bar a:hover { background-color: rgba(32,36,40,0.94) !important; }
+.leaflet-bar {
+  box-shadow: none !important;
+  border: 1px solid var(--hairline-hi) !important;
+  border-radius: var(--radius) !important;
+  overflow: hidden;
+}
+.leaflet-draw-toolbar a { filter: invert(1) grayscale(1) brightness(1.35); }
 
 /* ─── Color threshold inputs ─── */
 .threshold-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
@@ -471,7 +434,38 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 .threshold-row span { font-size: 12px; color: var(--text-secondary); min-width: 60px; }
 .threshold-row input[type="number"] { width: 80px; padding: 4px 6px; font-size: 12px; }
 
-@media (max-width: 768px) { .panel { display: none; } }
+/* Keyboard focus: one visible treatment everywhere (functional blue, no glow) */
+:focus-visible { outline: 1px solid rgba(77,159,255,0.6); outline-offset: 2px; }
+
+/* Reduced motion: state changes become instant; nothing is information-gated on animation */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* Below tablet width the settings panel doesn't fit; say so instead of silently amputating */
+#mobile-note { display: none; }
+@media (max-width: 768px) {
+  .panel { display: none; }
+  #mobile-note {
+    display: block;
+    position: absolute;
+    left: 12px; right: 12px; bottom: 12px;
+    z-index: 950;
+    background: var(--glass-heavy);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--hairline-hi);
+    border-radius: var(--radius-lg);
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-align: center;
+  }
+}
 </style>
 </head>
 <body>
@@ -997,7 +991,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
             </div>
           </div>
           <p id="tiling-info" style="font-size:11px;color:var(--text-secondary);margin:2px 0 0;font-family:var(--mono);"></p>
-          <button class="btn btn-primary btn-block" style="margin-top:10px;" onclick="UI.generateTiles()">⬇ Generate Tiles (ZIP)</button>
+          <button class="btn btn-primary btn-block" style="margin-top:10px;" onclick="UI.generateTiles()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M4 20h16"/></svg> Generate Tiles (ZIP)</button>
         </div>
 
         <div class="sub-head">Route (GPX)</div>
@@ -1040,9 +1034,10 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
              onkeydown="if(event.key==='Enter')Geocode.search()" autocomplete="off" spellcheck="false">
       <button class="btn btn-sm btn-primary" onclick="Geocode.search()">Go</button>
     </div>
+    <div id="mobile-note">TerraPrint needs a desktop-width window to configure and generate models — the map stays browsable here.</div>
     <div id="loading-overlay">
       <div class="spinner"></div>
-      <div id="loading-text">Fetching elevation data…</div>
+      <div id="loading-text" aria-live="polite">Fetching elevation data…</div>
     </div>
     <div id="preview-panel">
       <div id="preview-resize" title="Drag to resize"></div>
@@ -1061,7 +1056,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
   </div>
 </div>
 
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 
 <!-- ─── First-visit intro / how-to ─── -->
 <div id="intro-modal" style="display:none;position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);justify-content:center;align-items:center;">
@@ -1077,8 +1072,8 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
       <li><strong>Find a place</strong> — search by name or pan the map, then draw a <em>rectangle</em> or <em>circle</em> with the tools on the right.</li>
       <li><strong>Pick a color source</strong> (Imagery &amp; Color) — elevation bands for classic hypsometric tints, or satellite / land-cover for photographic color. 3MF exports print each color as its own filament (AMS/MMU).</li>
       <li><strong>Generate</strong> — elevation is fetched from USGS/Terrarium data at up to ~10 m detail and meshed into a watertight model. Check the size readout in Selected Area.</li>
-      <li><strong>Refine</strong> — 🖌 Paint Water fixes missed lakes, 🎨 Color Correct repaints misclassified regions, and Composition adds frames, engraved edges, or a display card.</li>
-      <li><strong>Export</strong> — ⬇ 3MF for multi-color printing (Bambu/Orca/Prusa slicers), ⬇ STL for single color. Big area? Use Tiling to split it into full-resolution pieces.</li>
+      <li><strong>Refine</strong> — Paint Water fixes missed lakes, Color Correct repaints misclassified regions, and Composition adds frames, engraved edges, or a display card.</li>
+      <li><strong>Export</strong> — 3MF for multi-color printing (Bambu/Orca/Prusa slicers), STL for single color. Big area? Use Tiling to split it into full-resolution pieces.</li>
     </ol>
     <p style="font-size:11px;color:var(--text-muted);margin:0 0 16px;">Settings persist between visits. Reopen this guide anytime with the <strong>?</strong> button in the header.</p>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid var(--hairline);padding-top:14px;">
@@ -1468,6 +1463,8 @@ const Geocode = {
       } else {
         map.flyTo([parseFloat(r.lat), parseFloat(r.lon)], 12);
       }
+      // Nominatim limit=1 picks silently ("Springfield" → which one?); name the destination.
+      if (r.display_name) toast('→ ' + r.display_name.split(',').slice(0, 3).join(','), 4000);
     } catch (err) {
       console.warn('Geocode failed:', err);
       toast('Search failed — try again');
@@ -1533,6 +1530,7 @@ const Elevation = {
     // Fetch all tiles
     const total = tilesX * tilesY;
     let loaded = 0;
+    let failed = 0;
 
     const loadTile = (tx, ty) => new Promise((resolve, reject) => {
       const img = new Image();
@@ -1547,8 +1545,9 @@ const Elevation = {
       };
       img.onerror = () => {
         loaded++;
+        failed++;
         showLoading(`Fetching tiles… ${loaded}/${total} (${tx},${ty} failed)`);
-        resolve(); // Don't fail everything for one missing tile
+        resolve(); // keep loading the rest; we abort with a count below
       };
       img.src = TERRAIN_TILE_URL.replace('{z}', zoom).replace('{x}', tx).replace('{y}', ty);
     });
@@ -1560,6 +1559,11 @@ const Elevation = {
       }
     }
     await Promise.all(promises);
+    // A partially-fetched heightfield meshes into a confidently WRONG model (flat slabs that
+    // still pass "mesh sealed"). Worst failure mode for a print-first tool — abort loudly.
+    if (failed > 0) {
+      throw new Error(`${failed} of ${total} elevation tiles failed to load — check your connection and retry.`);
+    }
 
     // Full geographic extent of all fetched tiles
     const topLeftBounds = this.tileToBounds(minTX, minTY, zoom);
@@ -1683,18 +1687,25 @@ const Satellite = {
       canvas.height = tilesY * tileSize;
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-      const total = tilesX * tilesY; let loaded = 0;
+      const total = tilesX * tilesY; let loaded = 0, failed = 0;
       const loadTile = (tx, ty) => new Promise(resolve => {
         const img = new Image();
         img.crossOrigin = 'anonymous';
         img.onload = () => { ctx.drawImage(img, (tx-minTX)*tileSize, (ty-minTY)*tileSize); loaded++; showLoading(`Fetching imagery… ${loaded}/${total}`); resolve(); };
-        img.onerror = () => { loaded++; resolve(); };
+        img.onerror = () => { loaded++; failed++; resolve(); };
         img.src = src.url.replace('{z}', zoom).replace('{y}', ty).replace('{x}', tx);
       });
       const promises = [];
       for (let ty = minTY; ty <= maxTY; ty++)
         for (let tx = minTX; tx <= maxTX; tx++) promises.push(loadTile(tx, ty));
       await Promise.all(promises);
+
+      // Mostly-black imagery clusters into garbage palettes; treat >20% missing tiles as
+      // unavailable so the caller falls back to elevation colours with its existing toast.
+      if (failed > total * 0.2) {
+        console.warn(`Satellite imagery: ${failed}/${total} tiles failed`);
+        return null;
+      }
 
       const tl = Elevation.tileToBounds(minTX, minTY, zoom);
       const fullNorth = tl.north, fullWest = tl.west;
@@ -2056,6 +2067,7 @@ const WaterDetection = {
       return await this.overpassDetect(bounds, resolution);
     } catch (e) {
       console.warn('Water detection failed, using ocean-only:', e);
+      toast('Lake detection unavailable — coloring ocean water only.');
       return { lakeMask: null, flattenMask: null };
     }
   },
@@ -4013,7 +4025,7 @@ const ThreeMFExport = {
       type: 'blob',
       mimeType: 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml',
     });
-    return { blob, warnings: [] };
+    return { blob, warnings: [], objects: built.length };
   },
 
   // Per-grid-vertex effective colour-shell depth (mm), slope-aware. A constant VERTICAL depth
@@ -5175,36 +5187,40 @@ const UI = {
   updateSelectionInfo() {
     const el = document.getElementById('selection-info');
     if (!State.selectedBounds) {
-      el.innerHTML = '<p style="font-size:12px;color:var(--text-muted);">Draw a rectangle on the map to select an area.</p>';
+      el.innerHTML = '<p style="font-size:12px;color:var(--text-muted);">Draw a rectangle or circle on the map to select an area.</p>';
       return;
     }
 
     const b = State.selectedBounds;
-    let html = `<div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">
-      ${b.getSouth().toFixed(3)}°N — ${b.getNorth().toFixed(3)}°N<br>
-      ${b.getWest().toFixed(3)}°W — ${b.getEast().toFixed(3)}°W
+    const geo = (v, pos, neg) => `${Math.abs(v).toFixed(3)}°${v >= 0 ? pos : neg}`;
+    let html = `<div style="font-size:11px;color:var(--text-secondary);font-family:var(--mono);font-variant-numeric:tabular-nums;margin-bottom:12px;">
+      ${geo(b.getSouth(),'N','S')} – ${geo(b.getNorth(),'N','S')}<br>
+      ${geo(b.getWest(),'E','W')} – ${geo(b.getEast(),'E','W')}
     </div>`;
 
     html += `<button class="btn btn-primary btn-block" onclick="UI.generateModel()">Generate 3D Model</button>`;
 
     if (State.meshData) {
-      html += `<button class="btn btn-block" style="margin-top:8px;" onclick="Paint.open()">🖌 Paint Water</button>`;
+      html += `<div class="btn-row" style="margin-top:8px;">
+        <button class="btn" onclick="Paint.open()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3l3 3L10 17H7v-3z"/><path d="M3 21c2-.5 3-1.5 3.5-3.5"/></svg> Paint Water</button>
+        <button class="btn" onclick="Preview.showMesh(State.meshData)" title="Reopen the 3D preview"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/></svg> Preview</button>
+      </div>`;
       // Color Correct only applies in the per-region colour modes (satellite/hybrid/land cover),
       // where pixelBands defines the colours; in elevation-banded modes painting has no effect.
       const advOn = document.getElementById('adv-colors-on')?.checked;
       const src = advOn ? (document.getElementById('adv-source')?.value || 'elevation') : 'elevation';
       if (State.meshData.satellite && (src === 'satellite' || src === 'hybrid' || src === 'landcover')) {
-        html += `<button class="btn btn-block" style="margin-top:8px;" onclick="Paint.openColor()">🎨 Color Correct</button>`;
+        html += `<button class="btn btn-block" style="margin-top:8px;" onclick="Paint.openColor()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg> Color Correct</button>`;
       }
       html += `<div class="btn-row" style="margin-top:8px;">
-        <button class="btn" onclick="UI.exportSTL()">⬇ STL</button>
-        <button class="btn" onclick="UI.export3MF()">⬇ 3MF</button>
+        <button class="btn" onclick="UI.exportSTL()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M4 20h16"/></svg> STL</button>
+        <button class="btn" onclick="UI.export3MF()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M4 20h16"/></svg> 3MF</button>
       </div>`;
       const s = State.meshData.repairStats;
       if (s) {
         const ok = s.ok && s.issues.length === 0;
-        const color = ok ? 'var(--success)' : '#f0a020';
-        const icon  = ok ? '✓' : '⚠';
+        const color = ok ? 'var(--success)' : 'var(--warning)';
+        const icon  = ok ? '✓' : '⚠\uFE0E';
         const detail = s.issues.length ? s.issues.join(' · ') : 'No issues found';
         // Physical footprint + height and a calibrated export-size estimate, so oversized
         // models and oversized files are visible BEFORE slicing.
@@ -5224,16 +5240,56 @@ const UI = {
     el.innerHTML = html;
   },
 
+  // LRU raster cache for the iterate loop: tweaking mesh settings (exaggeration, base, colors)
+  // no longer refetches elevation / Overpass / imagery / land cover for identical bounds. Keys
+  // include bounds+resolution(+source), so changing the selection is an automatic miss.
+  _cache: {
+    MAX: 10,
+    m: new Map(),
+    key(bounds, ...parts) {
+      const b = bounds;
+      return [b.getSouth().toFixed(6), b.getWest().toFixed(6), b.getNorth().toFixed(6),
+              b.getEast().toFixed(6), ...parts].join('|');
+    },
+    get(k) {
+      if (!this.m.has(k)) return null;
+      const v = this.m.get(k);
+      this.m.delete(k); this.m.set(k, v);   // refresh recency
+      return v;
+    },
+    set(k, v) {
+      this.m.set(k, v);
+      if (this.m.size > this.MAX) this.m.delete(this.m.keys().next().value);
+    },
+  },
+
   // Fetch every layer for `bounds` (elevation, water, colour source, buildings, land-cover water
   // seed) and build + repair the mesh. `tileScale` forces a shared coordinate system (tiling).
   // Returns { meshData, elevationData }. Pure builder — no preview / State writes / UI text.
   async _buildMeshForBounds(bounds, resolution, tileScale = null) {
-    showLoading('Fetching elevation data…');
-    const elevationData = await Elevation.fetchElevation(bounds, resolution);
+    const C = this._cache;
+
+    // Elevation — cache a PRISTINE copy: flattenLakes mutates the array in place, so each run
+    // gets its own clone of the cached original.
+    let elevationData;
+    const ek = C.key(bounds, 'elev', resolution);
+    const ecached = C.get(ek);
+    if (ecached) {
+      elevationData = { ...ecached, data: ecached.data.slice() };
+    } else {
+      showLoading('Fetching elevation data…');
+      elevationData = await Elevation.fetchElevation(bounds, resolution);
+      C.set(ek, { ...elevationData, data: elevationData.data.slice() });
+    }
 
     let lakeMask = null, lakeElevMap = null;
     if (document.getElementById('water-detect').checked) {
-      const result = await WaterDetection.detect(bounds, resolution);
+      const wk = C.key(bounds, 'water', resolution);
+      let result = C.get(wk);
+      if (!result) {
+        result = await WaterDetection.detect(bounds, resolution);
+        if (result.lakeMask) C.set(wk, result);   // don't cache failures — retry stays possible
+      }
       lakeMask = result.lakeMask;            // all water → coloured as water
       if (lakeMask) {
         // Flatten only still water; rivers/streams keep following the terrain.
@@ -5241,20 +5297,39 @@ const UI = {
       }
     }
 
+    // Cached imagery fetchers (rasters are read-only downstream — adjustExposure copies).
+    const satFetch = async () => {
+      const k = C.key(bounds, 'sat', currentImagerySource, resolution);
+      let v = C.get(k);
+      if (!v) {
+        showLoading('Fetching satellite imagery…');
+        v = await Satellite.fetch(bounds, resolution);
+        if (v) C.set(k, v);
+      }
+      return v;
+    };
+    const lcFetch = async () => {
+      const k = C.key(bounds, 'lc', resolution);
+      let v = C.get(k);
+      if (!v) {
+        v = await Landcover.fetch(bounds, resolution);
+        if (v) C.set(k, v);
+      }
+      return v;
+    };
+
     // Per-region colouring source (advanced mode): satellite photo or land cover.
     let colorImage = null;
     const advOn = document.getElementById('adv-colors-on')?.checked;
     const source = advOn ? (document.getElementById('adv-source')?.value || 'elevation') : 'elevation';
     if (source === 'satellite') {
-      showLoading('Fetching satellite imagery…');
-      const img = await Satellite.fetch(bounds, resolution);
+      const img = await satFetch();
       if (img) colorImage = { kind: 'photo', ...img };
       else toast('Satellite imagery unavailable — using elevation colors.');
     } else if (source === 'hybrid') {
       // Hybrid needs BOTH rasters: land cover defines the regions, the photo colours them.
-      showLoading('Fetching satellite imagery…');
-      const photo = await Satellite.fetch(bounds, resolution);
-      const lc = photo ? await Landcover.fetch(bounds, resolution) : null;
+      const photo = await satFetch();
+      const lc = photo ? await lcFetch() : null;
       if (photo && lc) {
         colorImage = { kind: 'hybrid', width: photo.width, height: photo.height, rgb: photo.rgb, lcRgb: lc.rgb };
       } else if (photo) {
@@ -5264,7 +5339,7 @@ const UI = {
         toast('Imagery unavailable — using elevation colors.');
       }
     } else if (source === 'landcover') {
-      const img = await Landcover.fetch(bounds, resolution);
+      const img = await lcFetch();
       if (img) colorImage = { kind: 'landcover', ...img };
       else toast('Land cover unavailable — using elevation colors.');
     }
@@ -5272,8 +5347,13 @@ const UI = {
     // Optional OSM buildings (opt-in). Failure is tolerated — never aborts the model.
     let buildings = null;
     if (document.getElementById('buildings-enable')?.checked) {
-      showLoading('Fetching buildings…');
-      buildings = await Buildings.fetch(bounds);
+      const bk = C.key(bounds, 'bld');
+      buildings = C.get(bk);
+      if (!buildings) {
+        showLoading('Fetching buildings…');
+        buildings = await Buildings.fetch(bounds);
+        if (buildings.length) C.set(bk, buildings);
+      }
       if (!buildings.length) toast('No OSM buildings found in this area.');
     }
 
@@ -5288,7 +5368,7 @@ const UI = {
                 : colorImage?.kind === 'hybrid'    ? colorImage.lcRgb : null;
       if (!lcRgb) {
         showLoading('Detecting water (land cover)…');
-        const lc = await Landcover.fetch(bounds, resolution);
+        const lc = await lcFetch();
         if (lc) lcRgb = lc.rgb;
       }
       if (lcRgb) {
@@ -5473,13 +5553,13 @@ const UI = {
     if (!State.meshData) { toast('Generate a model first.'); return; }
     showLoading('Building 3MF…');
     try {
-      const { blob, warnings } = await ThreeMFExport.generate(State.meshData);
+      const { blob, warnings, objects } = await ThreeMFExport.generate(State.meshData);
       downloadBlob(blob, exportName('3mf'));
       hideLoading();
       if (warnings.length) {
-        toast('⚠ 3MF exported with gaps: ' + warnings.join(' · '), 6000);
+        toast('Exported with gaps: ' + warnings.join(' · ') + ' — try raising Color overlap.', 7000);
       } else {
-        toast('3MF downloaded — 4 color solids ✓');
+        toast(`3MF downloaded — ${objects} color objects ✓`);
       }
     } catch (e) {
       hideLoading();
@@ -5580,11 +5660,20 @@ const Paint = {
       d.style.cssText = `flex:0 0 auto;box-sizing:border-box;width:24px;height:24px;border-radius:6px;cursor:pointer;` +
         (hex ? `background:${hex};` : `background:repeating-conic-gradient(#555 0% 25%,#333 0% 50%) 50%/10px 10px;`) +
         `border:2px solid ${sel ? '#fff' : 'rgba(255,255,255,0.25)'};` +
-        (sel ? 'box-shadow:0 0 0 2px rgba(77,159,255,0.8);transform:scale(1.12);' : '');
+        (sel ? 'outline:1px solid var(--accent);outline-offset:2px;' : '');
+      d.setAttribute('tabindex', '0');
+      d.setAttribute('role', 'button');
       d.addEventListener('pointerdown', e => {
         e.preventDefault();
         this.selectedBand = band;
         this._buildPalette();
+      });
+      d.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          this.selectedBand = band;
+          this._buildPalette();
+        }
       });
       box.appendChild(d);
     };
@@ -6062,6 +6151,24 @@ function initApp() {
   Settings.restore();   // after MapModule.init so setBaseImagery targets a live map
   Settings.attach();
   Intro.maybeShow();    // first-visit how-to (dismissible)
+
+  // Keyboard floor: accordion + fold headers are real controls, so make them focusable and
+  // Enter/Space-operable; Escape backs out of overlays in visual-stack order.
+  document.querySelectorAll('.panel-section.collapsible h3, .sub-fold-head').forEach(el => {
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('role', 'button');
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }
+    });
+  });
+  window.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const intro = document.getElementById('intro-modal');
+    const paint = document.getElementById('paint-modal');
+    if (intro && intro.style.display !== 'none' && intro.style.display !== '') Intro.close();
+    else if (paint && paint.style.display !== 'none' && paint.style.display !== '') Paint.close();
+    else if (Preview.isFullscreen) Preview.exitFullscreen();
+  });
 }
 
 if (document.readyState === 'loading') {
