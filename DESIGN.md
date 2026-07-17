@@ -2,18 +2,20 @@
 name: TerraPrint
 description: Client-side terrain-to-3D-print pipeline — map, mesh, multi-color export
 colors:
-  void-black: "#000000"
-  glass-panel: "#0A0C0EC7"
-  glass-heavy: "#080A0CE0"
-  surface-raise: "#FFFFFF0A"
-  surface-hover: "#FFFFFF14"
-  hairline: "#FFFFFF12"
-  hairline-strong: "#FFFFFF24"
-  ink-primary: "#E8ECF0"
-  ink-secondary: "#98A2AB"
-  ink-muted: "#6E7981"
-  signal-blue: "#4D9FFF"
-  signal-blue-bright: "#70B3FF"
+  bench: "#191714"
+  faceplate: "#24211B"
+  faceplate-deep: "#201D17"
+  surface-raise: "#2E2A22"
+  surface-hover: "#37322A"
+  contour-sepia: "#A8794A"
+  rule: "#A8794A4D"
+  rule-strong: "#A8794A8C"
+  ink-primary: "#ECE7DE"
+  ink-secondary: "#ADA598"
+  ink-muted: "#9A9285"
+  signal-orange: "#FF4D1C"
+  signal-orange-bright: "#FF6A3D"
+  hydro-blue: "#4D9FFF"
   topo-water: "#2D6ABF"
   topo-lowland: "#C47F17"
   topo-forest: "#3D8C40"
@@ -42,8 +44,7 @@ typography:
     fontSize: "11px"
     fontWeight: 400
 rounded:
-  sm: "4px"
-  lg: "6px"
+  sm: "2px"
 spacing:
   xs: "4px"
   sm: "8px"
@@ -57,14 +58,14 @@ components:
   button-hover:
     backgroundColor: "{colors.surface-hover}"
   button-primary:
-    backgroundColor: "{colors.signal-blue}"
+    backgroundColor: "{colors.signal-orange}"
     textColor: "#000000"
     rounded: "{rounded.sm}"
     padding: "7px 14px"
   button-primary-hover:
-    backgroundColor: "{colors.signal-blue-bright}"
+    backgroundColor: "{colors.signal-orange-bright}"
   input:
-    backgroundColor: "#00000073"
+    backgroundColor: "{colors.bench}"
     textColor: "{colors.ink-primary}"
     rounded: "{rounded.sm}"
     padding: "6px 10px"
@@ -74,145 +75,147 @@ components:
 
 ## 1. Overview
 
-**Creative North Star: "The Cartographer's Light Table"**
+**Creative North Star: "The Quad Bench"**
 
-A dark surface with the living map shining through translucent overlays. Every piece of chrome —
-the settings column, the search bar, the 3D preview — is tracing film laid over the light table:
-blurred glass, hairline edges, quiet gray ink. The terrain is the only thing allowed to be
-colorful; the interface's job is to disappear into the task, the way a slicer's viewport chrome
-disappears around the model.
+A Teenage Engineering instrument faceplate bolted to an evening workbench, framing a USGS quad
+sheet. Every surface is **solid, opaque, matte** — warm charcoal panels with warm-white silk-screen
+ink, sepia contour rules for structure, and one loud Signal Orange for action. The glass era is
+over: nothing blurs, nothing floats translucently. The map is the quad sheet; the chrome is the
+hardware holding it down.
 
-The system is dense and trustworthy in the manner of OrcaSlicer/Bambu Studio: many controls
-visible, tightly packed, every one labeled and predictable. It explicitly rejects the vibe-coded
-AI aesthetic — big radii, glows, gradient text, pill buttons — and anything toy-like or gamified.
-Familiarity is the feature; strangeness without purpose is the failure mode.
+The system is mechanical and trustworthy: controls snap rather than glide, switches rock, sliders
+run on ruler-tick tracks, and a status LED in the header tells you at a glance whether the
+instrument is idle, working, done, or fault. It rejects the vibe-coded AI aesthetic — big radii,
+glows, gradient text, pills, cream — and anything toy-like; it also now rejects decorative
+translucency, its own former material.
 
 **Key Characteristics:**
-- Full-bleed map with floating translucent glass chrome (blur 14–18px, saturate 1.15)
-- Monochrome interface; color is reserved for data (terrain) and function (Signal Blue)
-- Sharp 4px radii, hairline 1px borders at 7–14% white
-- Monospace tabular numerals on every numeric readout
-- Accordion-organized dense control panel, mode-driven visibility
+- Solid faceplate docked flush-left; full-bleed map framed by a sepia neatline with corner ticks
+- Selection coordinates printed as map marginalia, quad-sheet style
+- Four ink roles: orange = action, hydro = water, sepia = structure, green = success
+- Mechanical motion: 100–150ms snaps, out-expo, LED state signaling
+- 2px radii, warm charcoal surfaces, monospace tabular numerals on every readout
 
 ## 2. Colors
 
-A monochrome glass system over black, with one functional accent and a data palette that belongs
-to the terrain, not the chrome.
+Four deliberate ink roles over warm charcoal — a full palette where every color has exactly one job.
 
 ### Primary
-- **Signal Blue** (#4D9FFF): the color that means "active" and nothing else. Primary action
-  buttons, focus rings, range/checkbox accents, the active accordion state. Hover brightens to
-  **Signal Blue Bright** (#70B3FF). Never decorative — no blue borders, headers, or washes.
+- **Signal Orange** (#FF4D1C): THE action color. Generate/Apply, working LED, focus rings, slider
+  thumbs, engaged switch thumbs, active paint chip. Hover: **Signal Orange Bright** (#FF6A3D).
+  6.3:1 with black button text.
 
-### Neutral
-- **Void Black** (#000000): page ground and header; the light table itself.
-- **Glass Panel** (#0A0C0EC7) / **Glass Heavy** (#080A0CE0): translucent chrome surfaces, always
-  paired with backdrop blur. Heavy is for readability-critical layers (toasts, modal toolbars, the
-  sticky footer).
-- **Surface Raise** (#FFFFFF0A) / **Surface Hover** (#FFFFFF14): button and control fills — white
-  alpha, never opaque gray.
-- **Hairline** (#FFFFFF12) / **Hairline Strong** (#FFFFFF24): every border in the system.
-- **Ink Primary** (#E8ECF0) / **Ink Secondary** (#98A2AB) / **Ink Muted** (#6E7981): three-step
-  text ramp — content, supporting labels, hints. Lifted a step in the 2026-07 contrast pass so
-  muted copy survives bright imagery bleeding through the glass.
+### Secondary
+- **Hydro Blue** (#4D9FFF): the water role — Water sub-head, Paint Water button ink. Everything
+  that touches water in the UI speaks this ink; nothing else does.
 
 ### Tertiary
-- **Topo palette** — Water (#2D6ABF), Lowland (#C47F17), Forest (#3D8C40), Alpine (#C8C8C8):
-  the default print-color bands. These are *data* colors: they appear in swatches, legends, and
-  the model itself, never in chrome.
-- **Warning** (#F0A020): non-fatal mesh-health and caution states.
-- **Danger** (#F85149) / **Success** (#3FB950): destructive actions and health/progress states
-  only, at low-alpha fills with colored text.
+- **Contour Sepia** (#A8794A): structure — section rules, accordion chevrons, neatline, corner
+  ticks, marginalia, slider tick tracks. The quad sheet's skeleton; never body text.
+- **Topo palette** (Water/Lowland/Forest/Alpine) — the print-color data bands, in swatches and
+  legends only.
+- **Success Green** (#3FB950) — LED done-state, mesh-sealed health. **Warning** (#F0A020),
+  **Danger** (#F85149) as before.
+
+### Neutral
+- **Bench** (#191714): page ground, header, input wells. **Faceplate** (#24211B) / **Faceplate
+  Deep** (#201D17): panel, modals / footer, toasts, map controls. **Surface Raise / Hover**
+  (#2E2A22 / #37322A): control fills. All solid — no alpha surfaces.
+- **Ink Primary / Secondary / Muted** (#ECE7DE / #ADA598 / #9A9285): silk-screen text ramp,
+  contrast-verified 13.0 / 6.6 / 5.2 : 1 on the faceplate.
 
 ### Named Rules
-**The Functional Blue Rule.** Signal Blue appears only where it means action, focus, or active
-state. If removing the blue wouldn't remove information, it shouldn't be blue.
+**The One Orange Rule.** Signal Orange is action and only action. If it isn't a control the user
+fires or a state the machine is in, it isn't orange.
 
-**The Hairline Rule.** Borders are 1px white-alpha hairlines. No colored borders, no 2px+ accents,
-no side-stripes.
+**The Ink Roles Rule.** Four roles, one job each: orange acts, hydro is water, sepia structures,
+green succeeds. A color used outside its role is a defect.
+
+**The Solid Surface Rule.** No translucent chrome, no backdrop blur, no alpha surfaces. Depth
+comes from surface steps (bench → faceplate → raise) and sepia rules.
 
 ## 3. Typography
 
 **Body Font:** system sans (-apple-system → Segoe UI → Helvetica)
 **Data Font:** ui-monospace (SF Mono → Menlo → Consolas)
 
-**Character:** One quiet sans for everything verbal; a monospace voice for everything numeric.
-The pairing is contrast-by-function, not by style — words explain, numbers measure.
+**Character:** silk-screened hardware labels — one quiet sans printed on the faceplate, monospace
+for everything measured. Unchanged in structure from the previous system; re-inked warm.
 
 ### Hierarchy
-- **Title** (600, 14px, 0.4px tracking): the wordmark and modal titles. This system has no
-  display tier; nothing shouts.
-- **Label** (600, 10px, 1.2px tracking, UPPERCASE): section headers, sub-heads, preview header.
-  The strongest structural voice in the panel.
+- **Title** (600, 14px, 0.4px): wordmark, modal titles. No display tier; instruments don't shout.
+- **Label** (600, 10px, 1.2px, UPPERCASE): section headers and sub-heads — the stamped voice.
 - **Body** (400, 13px): control labels, options, buttons.
-- **Data** (400, 11–12px, tabular-nums, monospace): slider values, number inputs, coordinates,
-  dimensions, file sizes, tile info — every numeral the user reads.
+- **Data** (400, 11–12px, tabular mono): every numeral, including the map marginalia.
 
 ### Named Rules
-**The Mono Numerals Rule.** Any value a user might compare or re-read (mm, meters, counts, sizes)
-renders in the data font with tabular numerals. A proportional numeral in a readout is a bug.
+**The Mono Numerals Rule.** Any value a user might compare or re-read renders in the data font
+with tabular numerals — including coordinates printed on the map.
 
 ## 4. Elevation
 
-Depth comes from **translucency, not shadows**: layers closer to the user are more blurred and
-more opaque (glass → glass-heavy), separated by hairlines. The map glowing through a panel *is*
-the depth cue. Shadows are near-absent — one soft ambient (0 16px 56px rgba(0,0,0,0.6)) under the
-floating 3D preview, and nothing else. Buttons, cards, and inputs are flat at every state.
+Depth is **physical, not optical**: surfaces step lighter as they rise (bench → faceplate → raised
+control), separated by sepia rules. There is no blur and no translucency anywhere. Shadows remain
+near-absent — the one ambient shadow under the floating 3D preview (a device with a bezel sitting
+on the bench) survives; everything else is flat at every state, with press feedback as a 1px
+downward translate.
 
 ### Named Rules
-**The Glass Over Shadow Rule.** To lift a surface, increase its glass opacity and blur — never add
-a drop shadow. If a new surface needs a shadow to read, its glass values are wrong.
+**The Bench Step Rule.** To lift a surface, step its charcoal one level lighter and rule its edge
+in sepia. Never add blur; never add a shadow.
 
 ## 5. Components
 
-Dense and trustworthy: many controls, tight vertical rhythm, no control asking for attention until
-it's relevant.
+Mechanical and trustworthy: everything snaps, nothing glides decoratively.
 
 ### Buttons
-- **Shape:** sharp, gently eased corners (4px), 1px hairline-strong border
-- **Default:** Surface Raise fill, Ink Primary text (13px/500), 7px 14px padding
-- **Hover:** Surface Hover fill, border to 22% white; 150ms background/border transition
-- **Primary:** Signal Blue fill, black text (600) — one per view region
-- **Danger / Success:** transparent fill with 35%-alpha colored border and colored text;
-  low-alpha colored fill on hover
-- **Small:** 5px 10px padding, 12px text
+- **Shape:** flat, 2px radius, 1px rule border
+- **Default:** Surface Raise fill, Ink Primary 13px/500; hover steps to Surface Hover with a
+  stronger sepia border; **active presses down 1px**
+- **Primary:** Signal Orange fill, black text — one per view region
+- **Danger/Success:** transparent fill, 35%-alpha colored border + colored text
+
+### Switches (checkboxes)
+- **Rocker style:** 28×15px well in bench charcoal, 9px thumb that snaps left (muted) to right
+  (orange) in 120ms; engaged well warms slightly. No pseudo-elements — layered backgrounds.
+
+### Sliders
+- **Ruler-tick tracks:** 1px sepia baseline + ticks at 10% intervals; 9×16px Signal Orange thumb
+  with a 1px dark edge. Fader, not pill.
 
 ### Inputs / Fields
-- **Style:** 45%-alpha black fill, hairline border, 4px radius, 6px 10px padding
-- **Numbers:** data font, tabular
-- **Focus:** border shifts to 50%-alpha Signal Blue; no glow, no ring shadow
-- **Ranges:** native sliders with Signal Blue accent-color; value chip right-aligned in data font
+- **Style:** recessed bench-charcoal well, 1px rule, 2px radius; numbers in data font
+- **Focus:** border shifts to 55%-alpha Signal Orange; no glow
 
-### Cards / Containers
-- **Panel:** floating glass column (320px) with 6px radius, hairline border, internal accordion
-  sections separated by hairlines — sections are flat groups, never nested cards
-- **Sub-folds:** hairline-top rows with rotating ▾ chevron for occasional controls
-- **Sticky footer:** glass-heavy, carries the primary action and readouts
+### Status LED (signature)
+8px header LED: off (dark umber) → **working** (orange, 0.9s two-step blink; steady under
+reduced-motion) → **ok** (green, 2s hold) → **err** (red, 2.5s hold). Driven by the loading
+pipeline; titles announce state on hover.
+
+### Quad-sheet framing (signature)
+The map carries a 1px sepia **neatline** (inset, clearing the faceplate) with graticule corner
+crosses, and the selection's coordinates print as **marginalia** along the bottom edge in sepia-lit
+mono — data living where a printed quad would put it.
 
 ### Navigation
-- **Header:** solid black bar, hairline bottom, SRL mark + wordmark left, utility buttons right
-- **Accordion:** uppercase Label-tier headers, chevron rotates -90° when collapsed, state persists
-
-### Signature: Glass overlays
-Search bar, 3D preview (drag-resizable, fullscreen), toast, and loading scrim all share the glass
-recipe: glass fill + backdrop blur + hairline border + 6px radius. Modals (paint editors, intro)
-use glass-heavy with near-opaque grounds for tool work.
+- **Header:** bench bar, sepia rule, SRL mark + wordmark + LED left, utility buttons right
+- **Accordion:** stamped uppercase labels, sepia chevrons snapping -90° when collapsed; state persists
 
 ## 6. Do's and Don'ts
 
 ### Do:
-- **Do** keep the terrain the hero: chrome stays monochrome glass; only data and function get color.
-- **Do** use monospace tabular numerals for every readout (The Mono Numerals Rule).
-- **Do** hold radii at 4px (6px only for floating containers) and borders at 1px hairlines.
-- **Do** keep state transitions 150–250ms, easing out; motion conveys state, never decoration.
-- **Do** show only applicable settings — mode-driven visibility over disabled clutter.
+- **Do** keep every chrome surface solid and matte; depth is a surface step + sepia rule.
+- **Do** reserve orange for action (The One Orange Rule) and hydro ink for water contexts only.
+- **Do** snap: 100–150ms, out-expo, press-down feedback; LED carries long-running state.
+- **Do** keep numerals mono-tabular everywhere, including map marginalia.
+- **Do** frame the map cartographically — the neatline and marginalia are identity, not decoration.
 
 ### Don't:
+- **Don't** reintroduce translucency, backdrop blur, or alpha surfaces — the former glass system
+  is an anti-reference now.
 - **Don't** ship the vibe-coded AI aesthetic (PRODUCT.md, verbatim): "big radii, glows, gradient
   text, pill buttons, cream backgrounds, generic SaaS landing energy."
-- **Don't** add anything toy-like or gamified: "cartoon markers, confetti, badges — anything that
-  undercuts the precision-instrument feel."
-- **Don't** use Signal Blue decoratively — no blue section headers, borders, or background washes.
-- **Don't** add drop shadows to lift surfaces (The Glass Over Shadow Rule).
-- **Don't** use display fonts, orchestrated page-load choreography, or custom scrollbars/form
-  controls where native ones work.
+- **Don't** add anything toy-like or gamified: "cartoon markers, confetti, badges."
+- **Don't** use orange decoratively, sepia for body text, or radii above 2px (LED excepted — it's
+  physically round).
+- **Don't** ease bouncily or animate longer than 150ms for state feedback.

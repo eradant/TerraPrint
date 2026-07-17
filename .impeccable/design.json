@@ -1,12 +1,27 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-07-17T00:00:00Z",
+  "generatedAt": "2026-07-17T12:00:00Z",
   "title": "Design System: TerraPrint",
   "extensions": {
     "colorMeta": {
-      "signal-blue": {
+      "signal-orange": {
         "role": "primary",
-        "displayName": "Signal Blue",
+        "displayName": "Signal Orange",
+        "canonical": "#FF4D1C",
+        "tonalRamp": [
+          "#330F05",
+          "#5F1D0A",
+          "#8C2B0F",
+          "#B83914",
+          "#DB4318",
+          "#FF4D1C",
+          "#FF8258",
+          "#FFC0A8"
+        ]
+      },
+      "hydro-blue": {
+        "role": "secondary",
+        "displayName": "Hydro Blue",
         "canonical": "#4D9FFF",
         "tonalRamp": [
           "#0A1B33",
@@ -19,79 +34,34 @@
           "#C2DEFF"
         ]
       },
-      "void-black": {
+      "contour-sepia": {
+        "role": "tertiary",
+        "displayName": "Contour Sepia",
+        "canonical": "#A8794A",
+        "tonalRamp": [
+          "#221709",
+          "#3F2C13",
+          "#5C411E",
+          "#79572A",
+          "#906637",
+          "#A8794A",
+          "#C29B72",
+          "#DDC3A4"
+        ]
+      },
+      "bench": {
         "role": "neutral",
-        "displayName": "Void Black",
-        "canonical": "#000000",
+        "displayName": "Bench Charcoal",
+        "canonical": "#191714",
         "tonalRamp": [
-          "#000000",
-          "#0A0C0E",
-          "#16191C",
-          "#23272B",
-          "#31363B",
-          "#565F67",
-          "#8B959E",
-          "#E8ECF0"
-        ]
-      },
-      "ink-primary": {
-        "role": "neutral",
-        "displayName": "Ink Primary",
-        "canonical": "#E8ECF0",
-        "tonalRamp": [
-          "#16191C",
-          "#31363B",
-          "#4A5157",
-          "#6E7981",
-          "#7F8992",
-          "#98A2AB",
-          "#C0C8CE",
-          "#E8ECF0"
-        ]
-      },
-      "topo-water": {
-        "role": "tertiary",
-        "displayName": "Topo Water",
-        "canonical": "#2D6ABF",
-        "tonalRamp": [
-          "#081527",
-          "#0F2A4E",
-          "#173F76",
-          "#20549C",
-          "#2D6ABF",
-          "#4E86D1",
-          "#84ACE2",
-          "#C1D5F1"
-        ]
-      },
-      "topo-forest": {
-        "role": "tertiary",
-        "displayName": "Topo Forest",
-        "canonical": "#3D8C40",
-        "tonalRamp": [
-          "#0A1C0B",
-          "#143518",
-          "#1F5023",
-          "#2C6E30",
-          "#3D8C40",
-          "#5BA95E",
-          "#8CC78E",
-          "#C5E3C6"
-        ]
-      },
-      "danger-red": {
-        "role": "tertiary",
-        "displayName": "Danger Red",
-        "canonical": "#F85149",
-        "tonalRamp": [
-          "#330D0B",
-          "#5F1A17",
-          "#8C2823",
-          "#B83630",
-          "#DB443D",
-          "#F85149",
-          "#FB8A85",
-          "#FDC5C2"
+          "#191714",
+          "#201D17",
+          "#24211B",
+          "#2E2A22",
+          "#37322A",
+          "#9A9285",
+          "#ADA598",
+          "#ECE7DE"
         ]
       },
       "success-green": {
@@ -108,16 +78,31 @@
           "#93DD9D",
           "#C8EECD"
         ]
+      },
+      "danger-red": {
+        "role": "tertiary",
+        "displayName": "Danger Red",
+        "canonical": "#F85149",
+        "tonalRamp": [
+          "#330D0B",
+          "#5F1A17",
+          "#8C2823",
+          "#B83630",
+          "#DB443D",
+          "#F85149",
+          "#FB8A85",
+          "#FDC5C2"
+        ]
       }
     },
     "typographyMeta": {
       "title": {
         "displayName": "Title",
-        "purpose": "Wordmark and modal titles; the system has no display tier."
+        "purpose": "Wordmark and modal titles; no display tier."
       },
       "label": {
         "displayName": "Label",
-        "purpose": "Uppercase 1.2px-tracked section headers \u2014 the panel's structural voice."
+        "purpose": "Stamped uppercase section headers."
       },
       "body": {
         "displayName": "Body",
@@ -125,38 +110,38 @@
       },
       "data": {
         "displayName": "Data",
-        "purpose": "Every numeric readout: mono, tabular-nums (The Mono Numerals Rule)."
+        "purpose": "Every numeral incl. map marginalia \u2014 mono tabular."
       }
     },
     "shadows": [
       {
-        "name": "preview-ambient",
+        "name": "device-ambient",
         "value": "0 16px 56px rgba(0,0,0,0.6)",
-        "purpose": "The single shadow in the system \u2014 under the floating 3D preview only (The Glass Over Shadow Rule)."
+        "purpose": "Only under the 3D-preview device bezel (The Bench Step Rule: everything else is flat)."
       }
     ],
     "motion": [
       {
+        "name": "mech-snap",
+        "value": "120ms cubic-bezier(0.16,1,0.3,1)",
+        "purpose": "Switches, presses, chevrons \u2014 mechanical out-expo."
+      },
+      {
         "name": "state-fast",
         "value": "150ms ease-out",
-        "purpose": "Buttons, borders, hover/focus state changes."
+        "purpose": "Hover/focus ink shifts."
       },
       {
-        "name": "state-medium",
-        "value": "250ms ease",
-        "purpose": "Toast slide, panel reveals."
-      },
-      {
-        "name": "chevron",
-        "value": "transform 150ms",
-        "purpose": "Accordion chevron rotation."
+        "name": "led-blink",
+        "value": "0.9s steps(2) infinite",
+        "purpose": "Working LED; steady under reduced-motion."
       }
     ],
     "breakpoints": [
       {
         "name": "panel-hide",
         "value": "768px",
-        "purpose": "Below this the settings panel is hidden; the app is desktop-first."
+        "purpose": "Faceplate hidden below; banner explains."
       }
     ]
   },
@@ -165,96 +150,109 @@
       "name": "Primary Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "The one blue action per view region \u2014 Generate, Apply, Go.",
+      "description": "The one orange action per region \u2014 Generate, Apply.",
       "html": "<button class=\"ds-btn-primary\">Generate 3D Model</button>",
-      "css": ".ds-btn-primary { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:7px 14px; border:1px solid #4D9FFF; border-radius:4px; background:#4D9FFF; color:#000; font:600 13px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; cursor:pointer; transition:background 150ms, border-color 150ms; } .ds-btn-primary:hover { background:#70B3FF; border-color:#70B3FF; } .ds-btn-primary:focus-visible { outline:1px solid rgba(77,159,255,0.5); outline-offset:2px; }"
+      "css": ".ds-btn-primary { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:7px 14px; border:1px solid #FF4D1C; border-radius:2px; background:#FF4D1C; color:#000; font:600 13px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; cursor:pointer; transition:background 150ms; } .ds-btn-primary:hover { background:#FF6A3D; } .ds-btn-primary:active { transform:translateY(1px); } .ds-btn-primary:focus-visible { outline:1px solid rgba(255,77,28,0.6); outline-offset:2px; }"
     },
     {
       "name": "Standard Button",
       "kind": "button",
       "refersTo": "button",
-      "description": "Quiet glass-surface button for secondary actions.",
-      "html": "<button class=\"ds-btn\">\u2b07 3MF</button>",
-      "css": ".ds-btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:7px 14px; border:1px solid rgba(255,255,255,0.14); border-radius:4px; background:rgba(255,255,255,0.04); color:#E8ECF0; font:500 13px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; cursor:pointer; transition:background 150ms, border-color 150ms; } .ds-btn:hover { background:rgba(255,255,255,0.08); border-color:rgba(255,255,255,0.22); } .ds-btn:focus-visible { outline:1px solid rgba(77,159,255,0.5); outline-offset:2px; }"
+      "description": "Raised faceplate control for secondary actions.",
+      "html": "<button class=\"ds-btn\">3MF</button>",
+      "css": ".ds-btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:7px 14px; border:1px solid rgba(168,121,74,0.55); border-radius:2px; background:#2E2A22; color:#ECE7DE; font:500 13px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; cursor:pointer; transition:background 150ms, border-color 150ms; } .ds-btn:hover { background:#37322A; border-color:rgba(168,121,74,0.7); } .ds-btn:active { transform:translateY(1px); }"
     },
     {
-      "name": "Danger Button",
-      "kind": "button",
-      "refersTo": "button",
-      "description": "Destructive action: colored border + text, transparent fill.",
-      "html": "<button class=\"ds-btn-danger\">Clear edits</button>",
-      "css": ".ds-btn-danger { display:inline-flex; align-items:center; padding:5px 10px; border:1px solid rgba(248,81,73,0.35); border-radius:4px; background:transparent; color:#F85149; font:500 12px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; cursor:pointer; transition:background 150ms; } .ds-btn-danger:hover { background:rgba(248,81,73,0.10); }"
+      "name": "Rocker Switch",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Mechanical two-state switch replacing checkboxes.",
+      "html": "<input class=\"ds-switch\" type=\"checkbox\" checked>",
+      "css": ".ds-switch { appearance:none; -webkit-appearance:none; width:28px; height:15px; border:1px solid rgba(168,121,74,0.55); border-radius:2px; background:radial-gradient(circle closest-side,#9A9285 0 92%,transparent 96%) left 3px center/9px 9px no-repeat,#191714; cursor:pointer; transition:background-color 120ms; } .ds-switch:checked { background:radial-gradient(circle closest-side,#FF4D1C 0 92%,transparent 96%) right 3px center/9px 9px no-repeat,#2A2017; border-color:rgba(255,77,28,0.5); }"
+    },
+    {
+      "name": "Ruler Slider",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Fader on a sepia tick track with an orange thumb.",
+      "html": "<input class=\"ds-slider\" type=\"range\" min=\"0\" max=\"100\" value=\"40\" style=\"width:200px\">",
+      "css": ".ds-slider { appearance:none; -webkit-appearance:none; height:16px; background:transparent; cursor:pointer; } .ds-slider::-webkit-slider-runnable-track { height:16px; background:linear-gradient(rgba(168,121,74,0.55),rgba(168,121,74,0.55)) 0 center/100% 1px no-repeat, repeating-linear-gradient(90deg, rgba(168,121,74,0.3) 0 1px, transparent 1px 10%) 0 center/100% 7px no-repeat; } .ds-slider::-webkit-slider-thumb { appearance:none; -webkit-appearance:none; width:9px; height:16px; background:#FF4D1C; border:1px solid rgba(0,0,0,0.55); border-radius:1px; }"
     },
     {
       "name": "Number Input",
       "kind": "input",
       "refersTo": "input",
-      "description": "Numeric field in the data font with tabular numerals.",
+      "description": "Recessed bench well, mono tabular numerals.",
       "html": "<input class=\"ds-input-number\" type=\"number\" value=\"150\">",
-      "css": ".ds-input-number { width:100px; padding:6px 10px; background:rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.07); border-radius:4px; color:#E8ECF0; font:400 12px ui-monospace,'SF Mono',Menlo,monospace; font-variant-numeric:tabular-nums; outline:none; transition:border-color 150ms; } .ds-input-number:focus { border-color:rgba(77,159,255,0.5); }"
+      "css": ".ds-input-number { width:100px; padding:6px 10px; background:#191714; border:1px solid rgba(168,121,74,0.3); border-radius:2px; color:#ECE7DE; font:400 12px ui-monospace,'SF Mono',Menlo,monospace; font-variant-numeric:tabular-nums; outline:none; transition:border-color 150ms; } .ds-input-number:focus { border-color:rgba(255,77,28,0.55); }"
     },
     {
       "name": "Section Header",
       "kind": "nav",
       "refersTo": "label",
-      "description": "Accordion row: uppercase tracked label + rotating chevron.",
-      "html": "<div class=\"ds-section-head\">Imagery &amp; Color<span class=\"ds-chev\">\u25be</span></div>",
-      "css": ".ds-section-head { display:flex; align-items:center; justify-content:space-between; padding:11px 14px 10px; font:600 10px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; text-transform:uppercase; letter-spacing:1.2px; color:#8B959E; border-bottom:1px solid rgba(255,255,255,0.07); cursor:pointer; user-select:none; } .ds-section-head:hover { color:#E8ECF0; } .ds-chev { font-size:9px; color:#565F67; transition:transform 150ms; }"
+      "description": "Stamped accordion row with sepia chevron.",
+      "html": "<div class=\"ds-section-head\">Imagery &amp; Color<span class=\"ds-chev\">\\u25be</span></div>",
+      "css": ".ds-section-head { display:flex; align-items:center; justify-content:space-between; padding:11px 14px 10px; font:600 10px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; text-transform:uppercase; letter-spacing:1.2px; color:#ADA598; border-bottom:1px solid rgba(168,121,74,0.3); cursor:pointer; user-select:none; background:#24211B; } .ds-section-head:hover { color:#ECE7DE; } .ds-chev { font-size:9px; color:#A8794A; }"
     },
     {
-      "name": "Range Row",
+      "name": "Status LED",
       "kind": "custom",
-      "refersTo": "data",
-      "description": "Slider + right-aligned mono value chip \u2014 the panel's most common control.",
-      "html": "<div class=\"ds-range-row\"><input type=\"range\" min=\"1\" max=\"5\" step=\"0.25\" value=\"2\"><span class=\"ds-range-val\">2\u00d7</span></div>",
-      "css": ".ds-range-row { display:flex; align-items:center; gap:8px; width:240px; } .ds-range-row input[type=range] { flex:1; accent-color:#4D9FFF; } .ds-range-val { min-width:44px; text-align:right; font:400 11px ui-monospace,'SF Mono',Menlo,monospace; font-variant-numeric:tabular-nums; color:#8B959E; }"
+      "refersTo": "button-primary",
+      "description": "Header state LED: idle/working/ok/err.",
+      "html": "<span style=\"display:inline-flex;gap:10px;align-items:center;background:#191714;padding:10px 14px;border:1px solid rgba(168,121,74,0.3);border-radius:2px;\"><span class=\"ds-led\"></span><span class=\"ds-led ds-led-working\"></span><span class=\"ds-led ds-led-ok\"></span></span>",
+      "css": ".ds-led { width:8px; height:8px; border-radius:50%; background:#3A342B; border:1px solid rgba(0,0,0,0.5); display:inline-block; } .ds-led-working { background:#FF4D1C; animation:ds-blink 0.9s steps(2,jump-none) infinite; } .ds-led-ok { background:#3FB950; } @keyframes ds-blink { 0% { opacity:1; } 100% { opacity:0.25; } }"
     }
   ],
   "narrative": {
-    "northStar": "The Cartographer's Light Table",
-    "overview": "A dark surface with the living map shining through translucent overlays. Every piece of chrome \u2014 the settings column, the search bar, the 3D preview \u2014 is tracing film laid over the light table: blurred glass, hairline edges, quiet gray ink. The terrain is the only thing allowed to be colorful; the interface's job is to disappear into the task, the way a slicer's viewport chrome disappears around the model. The system is dense and trustworthy in the manner of OrcaSlicer/Bambu Studio: many controls visible, tightly packed, every one labeled and predictable. It explicitly rejects the vibe-coded AI aesthetic \u2014 big radii, glows, gradient text, pill buttons \u2014 and anything toy-like or gamified. Familiarity is the feature; strangeness without purpose is the failure mode.",
+    "northStar": "The Quad Bench",
+    "overview": "A Teenage Engineering instrument faceplate bolted to an evening workbench, framing a USGS quad sheet. Every surface is solid, opaque, matte \u2014 warm charcoal with warm-white silk-screen ink, sepia contour rules for structure, one loud Signal Orange for action. Controls snap, switches rock, sliders run on ruler ticks, and a header LED signals idle/working/done/fault. The glass era is over.",
     "keyCharacteristics": [
-      "Full-bleed map with floating translucent glass chrome (blur 14\u201318px, saturate 1.15)",
-      "Monochrome interface; color is reserved for data (terrain) and function (Signal Blue)",
-      "Sharp 4px radii, hairline 1px borders at 7\u201314% white",
-      "Monospace tabular numerals on every numeric readout",
-      "Accordion-organized dense control panel, mode-driven visibility"
+      "Solid faceplate docked flush-left; map framed by a sepia neatline with corner ticks",
+      "Selection coordinates printed as map marginalia, quad-sheet style",
+      "Four ink roles: orange = action, hydro = water, sepia = structure, green = success",
+      "Mechanical motion: 100\u2013150ms snaps, out-expo, LED state signaling",
+      "2px radii, warm charcoal surfaces, mono tabular numerals everywhere"
     ],
     "rules": [
       {
-        "name": "The Functional Blue Rule",
-        "body": "Signal Blue appears only where it means action, focus, or active state. If removing the blue wouldn't remove information, it shouldn't be blue.",
+        "name": "The One Orange Rule",
+        "body": "Signal Orange is action and only action. If it isn't a control the user fires or a state the machine is in, it isn't orange.",
         "section": "colors"
       },
       {
-        "name": "The Hairline Rule",
-        "body": "Borders are 1px white-alpha hairlines. No colored borders, no 2px+ accents, no side-stripes.",
+        "name": "The Ink Roles Rule",
+        "body": "Four roles, one job each: orange acts, hydro is water, sepia structures, green succeeds. A color used outside its role is a defect.",
+        "section": "colors"
+      },
+      {
+        "name": "The Solid Surface Rule",
+        "body": "No translucent chrome, no backdrop blur, no alpha surfaces. Depth comes from surface steps and sepia rules.",
         "section": "colors"
       },
       {
         "name": "The Mono Numerals Rule",
-        "body": "Any value a user might compare or re-read (mm, meters, counts, sizes) renders in the data font with tabular numerals. A proportional numeral in a readout is a bug.",
+        "body": "Any value a user might compare or re-read renders in the data font with tabular numerals \u2014 including coordinates printed on the map.",
         "section": "typography"
       },
       {
-        "name": "The Glass Over Shadow Rule",
-        "body": "To lift a surface, increase its glass opacity and blur \u2014 never add a drop shadow. If a new surface needs a shadow to read, its glass values are wrong.",
+        "name": "The Bench Step Rule",
+        "body": "To lift a surface, step its charcoal one level lighter and rule its edge in sepia. Never add blur; never add a shadow.",
         "section": "elevation"
       }
     ],
     "dos": [
-      "Do keep the terrain the hero: chrome stays monochrome glass; only data and function get color.",
-      "Do use monospace tabular numerals for every readout (The Mono Numerals Rule).",
-      "Do hold radii at 4px (6px only for floating containers) and borders at 1px hairlines.",
-      "Do keep state transitions 150\u2013250ms, easing out; motion conveys state, never decoration.",
-      "Do show only applicable settings \u2014 mode-driven visibility over disabled clutter."
+      "Do keep every chrome surface solid and matte; depth is a surface step + sepia rule.",
+      "Do reserve orange for action and hydro ink for water contexts only.",
+      "Do snap: 100\u2013150ms, out-expo, press-down feedback; LED carries long-running state.",
+      "Do keep numerals mono-tabular everywhere, including map marginalia.",
+      "Do frame the map cartographically \u2014 neatline and marginalia are identity."
     ],
     "donts": [
-      "Don't ship the vibe-coded AI aesthetic: big radii, glows, gradient text, pill buttons, cream backgrounds, generic SaaS landing energy.",
-      "Don't add anything toy-like or gamified: cartoon markers, confetti, badges \u2014 anything that undercuts the precision-instrument feel.",
-      "Don't use Signal Blue decoratively \u2014 no blue section headers, borders, or background washes.",
-      "Don't add drop shadows to lift surfaces (The Glass Over Shadow Rule).",
-      "Don't use display fonts, orchestrated page-load choreography, or custom scrollbars/form controls where native ones work."
+      "Don't reintroduce translucency, backdrop blur, or alpha surfaces \u2014 the former glass system is an anti-reference now.",
+      "Don't ship the vibe-coded AI aesthetic: big radii, glows, gradient text, pill buttons, cream backgrounds.",
+      "Don't add anything toy-like or gamified: cartoon markers, confetti, badges.",
+      "Don't use orange decoratively, sepia for body text, or radii above 2px (the LED excepted).",
+      "Don't ease bouncily or animate longer than 150ms for state feedback."
     ]
   }
 }

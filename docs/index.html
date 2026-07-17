@@ -15,21 +15,26 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg-deep:    #000000;
-  --glass:        rgba(10,12,14,0.78);   /* translucent chrome over the map */
-  --glass-heavy:  rgba(8,10,12,0.88);    /* where readability needs more ink */
-  --bg-surface:   rgba(255,255,255,0.04);
-  --bg-hover:     rgba(255,255,255,0.08);
-  --hairline:     rgba(255,255,255,0.07);
-  --hairline-hi:  rgba(255,255,255,0.14);
+  /* ── THE QUAD BENCH: solid instrument surfaces, evening-workshop warm charcoal ── */
+  --bg-deep:    #191714;                 /* the bench — page ground, header */
+  --face:       #24211b;                 /* faceplate — panel, modals, toolbars */
+  --face-deep:  #201d17;                 /* recessed faceplate — footer, toasts, map controls */
+  --bg-surface: #2e2a22;                 /* raised control fills (buttons, inputs) */
+  --bg-hover:   #37322a;
+  /* Structure inks its rules in contour sepia — the quad sheet's skeleton */
+  --sepia:       #a8794a;
+  --hairline:    rgba(168,121,74,0.30);
+  --hairline-hi: rgba(168,121,74,0.55);
   --border:     var(--hairline);
   --border-hi:  var(--hairline-hi);
-  --text-primary:   #e8ecf0;
-  --text-secondary: #98a2ab;
-  --text-muted:     #6e7981;
-  /* Blue is FUNCTIONAL only: primary action, focus, control accents. Chrome stays neutral. */
-  --accent:      #4d9fff;
-  --accent-hover: #70b3ff;
+  /* Silk-screen ink: warm whites, printed on the faceplate */
+  --text-primary:   #ece7de;
+  --text-secondary: #ada598;
+  --text-muted:     #9a9285;
+  /* Four ink roles: orange = action, hydro = water, sepia = structure, green = success */
+  --accent:      #ff4d1c;                /* Signal Orange — THE action color */
+  --accent-hover: #ff6a3d;
+  --hydro:       #4d9fff;                /* water-role UI ink (data water stays --topo-water) */
   --topo-water:    #2d6abf;
   --topo-flat:     #c47f17;
   --topo-hills:    #3d8c40;
@@ -37,8 +42,9 @@
   --danger:  #f85149;
   --warning: #f0a020;
   --success: #3fb950;
-  --radius:    4px;
-  --radius-lg: 6px;
+  --radius:    2px;
+  --radius-lg: 2px;
+  --ease-mech: cubic-bezier(0.16, 1, 0.3, 1);   /* out-expo: mechanical, decisive */
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
@@ -59,12 +65,28 @@ header {
   justify-content: space-between;
   padding: 0 20px;
   height: 52px;
-  background: #000;
-  border-bottom: 1px solid var(--hairline);
+  background: var(--bg-deep);
+  border-bottom: 1px solid var(--hairline-hi);
   flex-shrink: 0;
   z-index: 1000;
   position: relative;
 }
+/* Status LED: off → working (orange blink) → ok (green) / err (red). Reduced-motion turns
+   the blink into steady-on automatically via the global animation override. */
+#status-led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3a342b;
+  border: 1px solid rgba(0,0,0,0.5);
+  margin-left: 4px;
+  flex-shrink: 0;
+  transition: background 120ms;
+}
+#status-led.working { background: var(--accent); animation: led-blink 0.9s steps(2, jump-none) infinite; }
+#status-led.ok  { background: var(--success); }
+#status-led.err { background: var(--danger); }
+@keyframes led-blink { 0% { opacity: 1; } 100% { opacity: 0.25; } }
 header .logo {
   display: flex;
   align-items: center;
@@ -80,19 +102,16 @@ header .header-actions { display: flex; align-items: center; gap: 8px; }
 /* ─── Layout: full-bleed map, chrome floats above it ─── */
 .app-body { display: flex; flex: 1; overflow: hidden; position: relative; }
 
-/* ─── Side Panel: translucent glass column over the map ─── */
+/* ─── Side Panel: solid faceplate bolted flush to the bench edge ─── */
 .panel {
   position: absolute;
-  left: 12px;
-  top: 12px;
-  bottom: 12px;
+  left: 0;
+  top: 0;
+  bottom: 0;
   width: 320px;
   z-index: 900;
-  background: var(--glass);
-  backdrop-filter: blur(16px) saturate(1.15);
-  -webkit-backdrop-filter: blur(16px) saturate(1.15);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
+  background: var(--face);
+  border-right: 1px solid var(--hairline-hi);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -100,7 +119,7 @@ header .header-actions { display: flex; align-items: center; gap: 8px; }
 }
 .panel::-webkit-scrollbar { width: 3px; }
 .panel::-webkit-scrollbar-track { background: transparent; }
-.panel::-webkit-scrollbar-thumb { background: var(--hairline-hi); border-radius: 2px; }
+.panel::-webkit-scrollbar-thumb { background: var(--hairline-hi); }
 
 /* ─── Panel sections: flat groups separated by hairlines (no floating cards) ─── */
 .panel-section {
@@ -126,8 +145,8 @@ header .header-actions { display: flex; align-items: center; gap: 8px; }
 .panel-section.collapsible h3::after {
   content: '▾';
   font-size: 9px;
-  transition: transform 0.15s;
-  color: var(--text-muted);
+  transition: transform 0.15s var(--ease-mech);
+  color: var(--sepia);
 }
 .panel-section.collapsed h3::after { transform: rotate(-90deg); }
 .panel-section.collapsed .section-body { display: none; }
@@ -144,6 +163,7 @@ header .header-actions { display: flex; align-items: center; gap: 8px; }
   border-top: 1px solid var(--hairline);
 }
 .sub-head:first-child { margin-top: 2px; padding-top: 0; border-top: none; }
+.sub-head-hydro { color: var(--hydro); }
 /* Nested fold (Advanced colour fine-tuning) */
 .sub-fold-head {
   font-size: 11px;
@@ -158,7 +178,7 @@ header .header-actions { display: flex; align-items: center; gap: 8px; }
   user-select: none;
 }
 .sub-fold-head:hover { color: var(--text-primary); }
-.sub-fold-head::after { content: '▾'; font-size: 9px; color: var(--text-muted); transition: transform 0.15s; }
+.sub-fold-head::after { content: '▾'; font-size: 9px; color: var(--sepia); transition: transform 0.15s var(--ease-mech); }
 .sub-fold.collapsed .sub-fold-head::after { transform: rotate(-90deg); }
 .sub-fold.collapsed .sub-fold-body { display: none; }
 /* Pin the selection / Generate card to the bottom of the panel so the primary
@@ -168,9 +188,7 @@ header .header-actions { display: flex; align-items: center; gap: 8px; }
   bottom: 0;
   margin-top: auto;
   z-index: 5;
-  background: var(--glass-heavy);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: var(--face-deep);
   border-bottom: none;
   border-top: 1px solid var(--hairline);
 }
@@ -186,7 +204,7 @@ label {
 input[type="number"], input[type="text"], select {
   width: 100%;
   padding: 6px 10px;
-  background: rgba(0,0,0,0.45);
+  background: var(--bg-deep);
   border: 1px solid var(--hairline);
   border-radius: var(--radius);
   color: var(--text-primary);
@@ -196,12 +214,81 @@ input[type="number"], input[type="text"], select {
 }
 input[type="number"] { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
 input[type="number"]:focus, input[type="text"]:focus, select:focus {
-  border-color: rgba(77,159,255,0.5);   /* functional: focus */
+  border-color: rgba(255,77,28,0.55);   /* functional: focus */
 }
+/* Rocker switches (checkboxes): thumb snaps left/right, orange when engaged. Uses layered
+   backgrounds (no pseudo-elements on the input) for cross-engine reliability. */
+#side-panel input[type="checkbox"], #paint-modal input[type="checkbox"],
+#intro-modal input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 28px !important;
+  height: 15px !important;
+  border: 1px solid var(--hairline-hi);
+  border-radius: var(--radius);
+  background:
+    radial-gradient(circle closest-side, var(--text-muted) 0 92%, transparent 96%)
+      left 3px center / 9px 9px no-repeat,
+    var(--bg-deep);
+  cursor: pointer;
+  vertical-align: middle;
+  flex-shrink: 0;
+  transition: background-color 120ms;
+}
+#side-panel input[type="checkbox"]:checked, #paint-modal input[type="checkbox"]:checked,
+#intro-modal input[type="checkbox"]:checked {
+  background:
+    radial-gradient(circle closest-side, var(--accent) 0 92%, transparent 96%)
+      right 3px center / 9px 9px no-repeat,
+    #2a2017;
+  border-color: rgba(255,77,28,0.5);
+}
+
+/* Ruler-tick sliders: sepia tick track, orange thumb — a fader on the faceplate. */
+#side-panel input[type="range"], #paint-modal input[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 16px;
+  background: transparent;
+  cursor: pointer;
+}
+#side-panel input[type="range"]::-webkit-slider-runnable-track,
+#paint-modal input[type="range"]::-webkit-slider-runnable-track {
+  height: 16px;
+  background:
+    linear-gradient(var(--hairline-hi), var(--hairline-hi)) 0 center / 100% 1px no-repeat,
+    repeating-linear-gradient(90deg, var(--hairline) 0 1px, transparent 1px 10%) 0 center / 100% 7px no-repeat;
+}
+#side-panel input[type="range"]::-webkit-slider-thumb,
+#paint-modal input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 9px;
+  height: 16px;
+  background: var(--accent);
+  border: 1px solid rgba(0,0,0,0.55);
+  border-radius: 1px;
+}
+#side-panel input[type="range"]::-moz-range-track,
+#paint-modal input[type="range"]::-moz-range-track {
+  height: 16px;
+  background:
+    linear-gradient(var(--hairline-hi), var(--hairline-hi)) 0 center / 100% 1px no-repeat,
+    repeating-linear-gradient(90deg, var(--hairline) 0 1px, transparent 1px 10%) 0 center / 100% 7px no-repeat;
+}
+#side-panel input[type="range"]::-moz-range-thumb,
+#paint-modal input[type="range"]::-moz-range-thumb {
+  width: 9px;
+  height: 16px;
+  background: var(--accent);
+  border: 1px solid rgba(0,0,0,0.55);
+  border-radius: 1px;
+}
+
 .input-row { display: flex; gap: 8px; margin-bottom: 10px; }
 .input-row > div { flex: 1; }
 .input-group { margin-bottom: 10px; }
-input[type="range"] { width: 100%; accent-color: var(--accent); }
+input[type="range"] { width: 100%; }
 .range-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .range-row input[type="range"] { flex: 1; }
 .range-row .range-val {
@@ -230,7 +317,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   transition: background 0.15s, border-color 0.15s;
   white-space: nowrap;
 }
-.btn:hover { background: var(--bg-hover); border-color: rgba(255,255,255,0.22); }
+.btn:hover { background: var(--bg-hover); border-color: rgba(168,121,74,0.7); }
+.btn:active { transform: translateY(1px); }
 .btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .btn-primary {
   background: var(--accent);   /* functional: the primary action */
@@ -266,12 +354,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   display: flex;
   gap: 6px;
   align-items: center;
-  background: var(--glass);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
+  background: var(--face);
+  border: 1px solid var(--hairline-hi);
+  border-radius: var(--radius);
   padding: 5px 6px 5px 10px;
-  backdrop-filter: blur(14px) saturate(1.15);
-  -webkit-backdrop-filter: blur(14px) saturate(1.15);
 }
 #map-search svg { color: var(--text-muted); flex-shrink: 0; }
 #map-search input {
@@ -294,21 +380,19 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   right: 16px;
   width: min(560px, 44vw);
   height: min(480px, 55vh);
-  background: var(--glass);
-  border: 1px solid var(--hairline);
+  background: #141210;                 /* device bezel, darker than the bench */
+  border: 1px solid var(--hairline-hi);
   border-radius: var(--radius-lg);
   z-index: 800;
   overflow: hidden;
   box-shadow: 0 16px 56px rgba(0,0,0,0.6);
-  backdrop-filter: blur(16px) saturate(1.15);
-  -webkit-backdrop-filter: blur(16px) saturate(1.15);
 }
 #preview-panel .preview-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  background: rgba(0,0,0,0.35);
+  background: #1b1916;
   border-bottom: 1px solid var(--hairline);
   font-size: 10px;
   font-weight: 600;
@@ -324,7 +408,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   font-size: 15px;
   line-height: 1;
   padding: 2px 4px;
-  border-radius: 4px;
+  border-radius: var(--radius);
   transition: color 0.15s, background 0.15s;
 }
 #preview-panel .preview-header button:hover { color: var(--text-primary); background: rgba(255,255,255,0.06); }
@@ -357,7 +441,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 #preview-panel .btn-back-to-map {
   display: none;
   border: 1px solid var(--border-hi);
-  border-radius: 4px;
+  border-radius: var(--radius);
   padding: 2px 8px;
   font-size: 12px;
 }
@@ -370,7 +454,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
   bottom: 20px;
   left: 50%;
   transform: translateX(-50%) translateY(80px);
-  background: var(--glass-heavy);
+  background: var(--face-deep);
   border: 1px solid var(--hairline-hi);
   border-radius: var(--radius-lg);
   padding: 10px 20px;
@@ -379,8 +463,6 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
   opacity: 0;
   transition: all 0.25s ease;
   pointer-events: none;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
 }
 #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
 
@@ -389,8 +471,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
   display: none;
   position: absolute;
   inset: 0;
-  background: rgba(0,0,0,0.82);
-  backdrop-filter: blur(6px);
+  background: rgba(20,18,14,0.86);
   z-index: 900;
   justify-content: center;
   align-items: center;
@@ -414,7 +495,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
    Leaflet.Draw's sprite icons; the draw sprites are dark-on-light, so they get an invert
    filter to stay legible on the dark bar. */
 .leaflet-bar a {
-  background-color: var(--glass-heavy) !important;
+  background-color: var(--face-deep) !important;
   color: var(--text-primary) !important;
   border-color: var(--hairline) !important;
   box-shadow: none !important;
@@ -434,8 +515,43 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 .threshold-row span { font-size: 12px; color: var(--text-secondary); min-width: 60px; }
 .threshold-row input[type="number"] { width: 80px; padding: 4px 6px; font-size: 12px; }
 
+/* ─── Quad-sheet framing: neatline + corner ticks + coordinate marginalia ─── */
+#neatline {
+  position: absolute;
+  top: 10px; right: 10px; bottom: 10px;
+  left: 336px;                       /* clears the docked faceplate */
+  border: 1px solid rgba(168,121,74,0.38);
+  pointer-events: none;
+  z-index: 640;
+}
+#neatline::before, #neatline::after {
+  content: '';
+  position: absolute;
+  width: 15px; height: 15px;
+  background:
+    linear-gradient(var(--sepia), var(--sepia)) center / 1px 100% no-repeat,
+    linear-gradient(var(--sepia), var(--sepia)) center / 100% 1px no-repeat;
+  opacity: 0.7;
+}
+#neatline::before { top: -8px; left: -8px; }
+#neatline::after  { bottom: -8px; right: -8px; }
+#map-marginalia {
+  position: absolute;
+  left: 348px;
+  bottom: 16px;
+  z-index: 640;
+  pointer-events: none;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  color: #d9b98c;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.6);
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 768px) { #neatline, #map-marginalia { display: none; } }
+
 /* Keyboard focus: one visible treatment everywhere (functional blue, no glow) */
-:focus-visible { outline: 1px solid rgba(77,159,255,0.6); outline-offset: 2px; }
+:focus-visible { outline: 1px solid rgba(255,77,28,0.6); outline-offset: 2px; }
 
 /* Reduced motion: state changes become instant; nothing is information-gated on animation */
 @media (prefers-reduced-motion: reduce) {
@@ -455,9 +571,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
     position: absolute;
     left: 12px; right: 12px; bottom: 12px;
     z-index: 950;
-    background: var(--glass-heavy);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
+    background: var(--face-deep);
     border: 1px solid var(--hairline-hi);
     border-radius: var(--radius-lg);
     padding: 10px 14px;
@@ -477,6 +591,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
       <path d="M36 4 L47 26 L54 15 L64 40 L70 30 L78 55 L83 46 L89 71 L8 66 Z M91 56 L96 71 L84 70 Z"/>
     </svg>
     TerraPrint
+    <span id="status-led" title="Idle"></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-sm" onclick="Intro.show()" title="How it works">?</button>
@@ -779,7 +894,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
     <div class="panel-section collapsible collapsed" id="sec-features">
       <h3 onclick="UI.toggleSection(this)">Terrain Features</h3>
       <div class="section-body">
-        <div class="sub-head">Water</div>
+        <div class="sub-head sub-head-hydro">Water</div>
         <label class="input-group" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
           <input type="checkbox" id="water-detect" checked style="accent-color:var(--accent);width:16px;height:16px;">
           <span>Detect water (ocean + lakes)</span>
@@ -1034,6 +1149,8 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
              onkeydown="if(event.key==='Enter')Geocode.search()" autocomplete="off" spellcheck="false">
       <button class="btn btn-sm btn-primary" onclick="Geocode.search()">Go</button>
     </div>
+    <div id="neatline"></div>
+    <div id="map-marginalia"></div>
     <div id="mobile-note">TerraPrint needs a desktop-width window to configure and generate models — the map stays browsable here.</div>
     <div id="loading-overlay">
       <div class="spinner"></div>
@@ -1059,8 +1176,8 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 <div id="toast" role="status" aria-live="polite"></div>
 
 <!-- ─── First-visit intro / how-to ─── -->
-<div id="intro-modal" style="display:none;position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);justify-content:center;align-items:center;">
-  <div style="width:min(540px,92vw);max-height:86vh;overflow-y:auto;background:var(--glass-heavy);backdrop-filter:blur(18px) saturate(1.15);-webkit-backdrop-filter:blur(18px) saturate(1.15);border:1px solid var(--hairline-hi);border-radius:var(--radius-lg);padding:22px 24px 18px;">
+<div id="intro-modal" style="display:none;position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,0.55);justify-content:center;align-items:center;">
+  <div style="width:min(540px,92vw);max-height:86vh;overflow-y:auto;background:var(--face);border:1px solid var(--hairline-hi);outline:1px solid var(--hairline);outline-offset:-7px;border-radius:var(--radius-lg);padding:26px 28px 22px;">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
       <svg width="26" height="22" viewBox="0 0 96 80" fill="#fff"><path d="M36 4 L47 26 L54 15 L64 40 L70 30 L78 55 L83 46 L89 71 L8 66 Z M91 56 L96 71 L84 70 Z"/></svg>
       <div>
@@ -1087,8 +1204,8 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 </div>
 
 <!-- ─── Water Paint Modal (full screen) ─── -->
-<div id="paint-modal" style="display:none;position:fixed;inset:0;z-index:2000;background:#0a0c0e;flex-direction:column;">
-  <div style="display:flex;align-items:center;gap:14px;padding:10px 14px;border-bottom:1px solid var(--hairline);flex-wrap:wrap;background:var(--glass-heavy);">
+<div id="paint-modal" style="display:none;position:fixed;inset:0;z-index:2000;background:var(--bg-deep);flex-direction:column;">
+  <div style="display:flex;align-items:center;gap:14px;padding:10px 14px;border-bottom:1px solid var(--hairline);flex-wrap:wrap;background:var(--face-deep);">
     <strong id="paint-title" style="font-size:14px;">Water Paint</strong>
     <div class="btn-row" id="paint-water-modes" style="margin:0;">
       <button id="paint-mode-add" class="btn btn-sm btn-primary" onclick="Paint.setMode('add')">＋ Add</button>
@@ -1297,12 +1414,30 @@ function toast(msg, duration = 3000) {
   el._t = setTimeout(() => el.classList.remove('show'), duration);
 }
 
+// Header status LED: the instrument's one-glance state. working = orange blink,
+// ok = green hold, err = red hold; reduced-motion renders working as steady-on.
+const Led = {
+  _t: null,
+  set(state, holdMs) {
+    const el = document.getElementById('status-led');
+    if (!el) return;
+    el.className = state || '';
+    el.title = state === 'working' ? 'Generating…'
+             : state === 'ok' ? 'Done' : state === 'err' ? 'Error' : 'Idle';
+    clearTimeout(this._t);
+    if (holdMs) this._t = setTimeout(() => { el.className = ''; el.title = 'Idle'; }, holdMs);
+  },
+};
+
 function showLoading(msg) {
   document.getElementById('loading-text').textContent = msg;
   document.getElementById('loading-overlay').classList.add('active');
+  Led.set('working');
 }
 function hideLoading() {
   document.getElementById('loading-overlay').classList.remove('active');
+  const led = document.getElementById('status-led');
+  if (led && led.className === 'working') Led.set('');
 }
 
 function downloadBlob(blob, filename) {
@@ -5188,21 +5323,25 @@ const UI = {
     const el = document.getElementById('selection-info');
     if (!State.selectedBounds) {
       el.innerHTML = '<p style="font-size:12px;color:var(--text-muted);">Draw a rectangle or circle on the map to select an area.</p>';
+      const mg0 = document.getElementById('map-marginalia');
+      if (mg0) mg0.textContent = '';
       return;
     }
 
     const b = State.selectedBounds;
     const geo = (v, pos, neg) => `${Math.abs(v).toFixed(3)}°${v >= 0 ? pos : neg}`;
-    let html = `<div style="font-size:11px;color:var(--text-secondary);font-family:var(--mono);font-variant-numeric:tabular-nums;margin-bottom:12px;">
-      ${geo(b.getSouth(),'N','S')} – ${geo(b.getNorth(),'N','S')}<br>
-      ${geo(b.getWest(),'E','W')} – ${geo(b.getEast(),'E','W')}
-    </div>`;
+    // Selection coordinates print as map marginalia (where a quad sheet would carry them),
+    // not as a panel row.
+    const mg = document.getElementById('map-marginalia');
+    if (mg) mg.textContent =
+      `${geo(b.getSouth(),'N','S')}–${geo(b.getNorth(),'N','S')}  ·  ${geo(b.getWest(),'E','W')}–${geo(b.getEast(),'E','W')}`;
+    let html = '';
 
     html += `<button class="btn btn-primary btn-block" onclick="UI.generateModel()">Generate 3D Model</button>`;
 
     if (State.meshData) {
       html += `<div class="btn-row" style="margin-top:8px;">
-        <button class="btn" onclick="Paint.open()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3l3 3L10 17H7v-3z"/><path d="M3 21c2-.5 3-1.5 3.5-3.5"/></svg> Paint Water</button>
+        <button class="btn" style="color:var(--hydro)" onclick="Paint.open()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3l3 3L10 17H7v-3z"/><path d="M3 21c2-.5 3-1.5 3.5-3.5"/></svg> Paint Water</button>
         <button class="btn" onclick="Preview.showMesh(State.meshData)" title="Reopen the 3D preview"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/></svg> Preview</button>
       </div>`;
       // Color Correct only applies in the per-region colour modes (satellite/hybrid/land cover),
@@ -5416,12 +5555,14 @@ const UI = {
       Preview.showMesh(State.meshData);
 
       hideLoading();
+      Led.set('ok', 2000);
       this.updateSelectionInfo();
       const s = State.meshData.repairStats;
       const repairNote = s.issues.length ? ` · ${s.issues.join(', ')}` : '';
       toast(`${s.triangles.toLocaleString()} triangles · mesh sealed${repairNote}`);
     } catch (e) {
       hideLoading();
+      Led.set('err', 2500);
       console.error(e);
       toast('Error generating model: ' + e.message);
     }
@@ -5525,9 +5666,11 @@ const UI = {
       const zipBlob = await zip.generateAsync({ type: 'blob' });
       downloadBlob(zipBlob, exportName('zip', `_tiles_${rows}x${cols}`));
       hideLoading();
+      Led.set('ok', 2000);
       toast(`${total} tiles exported · assemble ${cols}×${rows} (${(cols*printSize)|0}×${(rows*printSize)|0} mm)`);
     } catch (e) {
       hideLoading();
+      Led.set('err', 2500);
       console.error(e);
       toast('Error generating tiles: ' + e.message);
     }

@@ -9,9 +9,10 @@ Strategic and visual context for any design work lives in:
 
 - **PRODUCT.md** — register (product), platform (web), users, purpose, positioning, brand
   personality, anti-references, and the five design principles. Read before UI changes.
-- **DESIGN.md** — the visual system ("The Cartographer's Light Table"): glass tokens, Signal Blue
-  functional accent, hairlines, mono numerals, component specs, and the named rules
-  (Functional Blue, Hairline, Mono Numerals, Glass Over Shadow).
+- **DESIGN.md** — the visual system ("The Quad Bench"): solid instrument surfaces, four ink roles
+  (Signal Orange action / Hydro Blue water / Contour Sepia structure / green success), rocker
+  switches, ruler sliders, status LED, quad-sheet neatline + marginalia, and the named rules
+  (One Orange, Ink Roles, Solid Surface, Mono Numerals, Bench Step).
 
 Core design principles, abbreviated: the terrain is the hero; print-ready is the bar; instrument,
 not app; every control earns its place; familiar to a slicer user. Anti-references: the vibe-coded
