@@ -952,7 +952,8 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
           <input type="checkbox" id="bnd-wild" style="accent-color:var(--accent);width:16px;height:16px;" onchange="Boundaries.refresh()">
           <span>Wilderness areas</span>
         </label>
-        <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0;">Click a boundary on the map to use it as a cutout — the model takes that area's shape.</p>
+        <p id="bnd-status" style="font-size:11px;color:var(--text-secondary);margin:8px 0 0;min-height:14px;"></p>
+        <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0;">Click an area on the map, then “Use as cutout” — the model takes that shape.</p>
 
         <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:12px;">
           <input type="checkbox" id="bnd-engrave" style="accent-color:var(--accent);width:16px;height:16px;" onchange="document.getElementById('bnd-engrave-opts').style.display=this.checked?'block':'none'">
@@ -2758,20 +2759,28 @@ const Gpx = {
 // Data comes from Overpass, the same keyless source as water and buildings.
 
 const Boundaries = {
+  // Map colour per class (distinct from the print inlay colour). US protected areas are
+  // tagged inconsistently — most national parks are boundary=protected_area with an IUCN
+  // protect_class, NOT boundary=national_park — so we query broadly and classify by tag.
   CLASSES: {
-    park:   { label: 'Parks',      mapColor: '#39B54A',
-              sel: (s,w,n,e) => `relation["boundary"="national_park"](${s},${w},${n},${e});` },
-    forest: { label: 'Forests',    mapColor: '#C9A227',
-              sel: (s,w,n,e) => `relation["boundary"="protected_area"]["protect_class"="6"](${s},${w},${n},${e});` },
-    wild:   { label: 'Wilderness', mapColor: '#A879E6',
-              sel: (s,w,n,e) => `relation["boundary"="protected_area"]["protect_class"="1b"](${s},${w},${n},${e});` },
+    park:   { label: 'Park',       mapColor: '#39B54A' },   // national/state parks, monuments
+    forest: { label: 'Forest',     mapColor: '#C9A227' },   // national forests (IUCN VI)
+    wild:   { label: 'Wilderness', mapColor: '#A879E6' },   // wilderness areas (IUCN Ib)
   },
+
+  // Public Overpass endpoints, tried in order — the canonical instance is frequently
+  // overloaded, so we fall back to mirrors instead of silently failing.
+  _endpoints: [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.private.coffee/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+  ],
 
   _layer: null,
   _t: null,             // moveend/toggle debounce timer
   _token: 0,            // stale-fetch guard (map may move mid-request)
-  _cache: new Map(),    // viewport+class → features (own cache; never evicts elevation)
-  _index: {},           // relId → { name, cls } for popup / cutout lookup
+  _cache: new Map(),    // rounded viewport bbox → features (own cache; never evicts elevation)
+  _index: {},           // composite id ("r123"/"w123") → { name, cls, etype, oid }
 
   _cacheGet(k) { return this._cache.get(k) || null; },
   _cacheSet(k, v) {
@@ -2781,6 +2790,36 @@ const Boundaries = {
 
   enabledClasses() {
     return Object.keys(this.CLASSES).filter(c => document.getElementById('bnd-' + c)?.checked);
+  },
+
+  // Classify a protected-area element from its tags into one of our three buckets, or null.
+  classify(t) {
+    if (!t) return null;
+    const pc = String(t.protect_class || '');
+    if (pc === '1b') return 'wild';
+    if (pc === '6')  return 'forest';
+    if (t.boundary === 'national_park' || pc === '2' || pc === '3') return 'park';
+    return null;
+  },
+
+  // POST an Overpass query, trying each endpoint until one returns parseable JSON. Overpass
+  // returns an HTML error page (sometimes with HTTP 200) when overloaded, so a JSON parse
+  // failure is treated as endpoint failure and we move on. Throws if all endpoints fail.
+  async _overpass(query) {
+    let lastErr = null;
+    for (const url of this._endpoints) {
+      try {
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'data=' + encodeURIComponent(query),
+        });
+        if (!resp.ok) { lastErr = new Error('HTTP ' + resp.status); continue; }
+        const txt = await resp.text();
+        return JSON.parse(txt);   // throws on an HTML error body → next endpoint
+      } catch (e) { lastErr = e; }
+    }
+    throw lastErr || new Error('All Overpass endpoints failed');
   },
 
   init() {
@@ -2794,53 +2833,60 @@ const Boundaries = {
     this._t = setTimeout(() => this._draw(), 450);
   },
 
-  // Fetch protected-area relations intersecting `bounds` (an L.LatLngBounds) for the given
-  // classes. Member way geometry arrives clipped via `out geom`, so huge National Forest
-  // relations stay affordable. Returns [{ cls, relId, name, paths:[[{lat,lon}…]…] }].
-  async fetch(bounds, classes) {
+  // Fetch every protected area intersecting `bounds` (an L.LatLngBounds) in one broad query,
+  // classify each by tag, and return them all. Callers filter by the enabled classes.
+  // Ways and relations are both accepted (some areas are a single closed way). Cached by
+  // rounded bbox. Returns [{ id, oid, etype, cls, name, paths:[[{lat,lon}…]…] }].
+  async fetch(bounds) {
     const s = bounds.getSouth(), w = bounds.getWest(), n = bounds.getNorth(), e = bounds.getEast();
-    const out = [];
-    for (const cls of classes) {
-      const ck = `${cls}:${s.toFixed(3)},${w.toFixed(3)},${n.toFixed(3)},${e.toFixed(3)}`;
-      let feats = this._cacheGet(ck);
-      if (!feats) {
-        const q = `[out:json][timeout:25];(${this.CLASSES[cls].sel(s, w, n, e)});out geom;`;
-        const resp = await fetch('https://overpass-api.de/api/interpreter', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: 'data=' + encodeURIComponent(q),
-        });
-        if (!resp.ok) throw new Error('Overpass HTTP ' + resp.status);
-        const data = await resp.json();
-        feats = [];
-        for (const el of (data.elements || [])) {
-          if (el.type !== 'relation') continue;
-          const name = el.tags?.name || this.CLASSES[cls].label;
-          const paths = (el.members || [])
-            .filter(m => m.type === 'way' && m.geometry && m.geometry.length >= 2)
-            .map(m => m.geometry.map(p => ({ lat: p.lat, lon: p.lon })));
-          if (paths.length) feats.push({ cls, relId: el.id, name, paths });
-        }
-        this._cacheSet(ck, feats);
+    const ck = `${s.toFixed(3)},${w.toFixed(3)},${n.toFixed(3)},${e.toFixed(3)}`;
+    let feats = this._cacheGet(ck);
+    if (feats) { for (const f of feats) this._index[f.id] = { name: f.name, cls: f.cls, etype: f.etype, oid: f.oid }; return feats; }
+
+    const bbox = `${s},${w},${n},${e}`;
+    const q = `[out:json][timeout:40];(`
+      + `nwr["boundary"="national_park"](${bbox});`
+      + `nwr["boundary"="protected_area"]["protect_class"~"^(1b|2|3|6)$"](${bbox});`
+      + `);out geom;`;
+    const data = await this._overpass(q);
+    feats = [];
+    for (const el of (data.elements || [])) {
+      if (el.type === 'node') continue;
+      const cls = this.classify(el.tags);
+      if (!cls) continue;
+      let paths = [];
+      if (el.type === 'way' && el.geometry) {
+        paths = [el.geometry.map(p => ({ lat: p.lat, lon: p.lon }))];
+      } else if (el.type === 'relation') {
+        paths = (el.members || [])
+          .filter(m => m.type === 'way' && m.geometry && m.geometry.length >= 2)
+          .map(m => m.geometry.map(p => ({ lat: p.lat, lon: p.lon })));
       }
-      for (const f of feats) { this._index[f.relId] = { name: f.name, cls: f.cls }; out.push(f); }
+      if (!paths.length) continue;
+      const id = el.type[0] + el.id;   // "r123" / "w123" (way/relation ids can collide)
+      const name = el.tags?.name || this.CLASSES[cls].label;
+      const f = { id, oid: el.id, etype: el.type, cls, name, paths };
+      this._index[id] = { name, cls, etype: el.type, oid: el.id };
+      feats.push(f);
     }
-    return out;
+    this._cacheSet(ck, feats);
+    return feats;
   },
 
-  // Fetch one relation's full (unclipped) geometry and assemble outer/inner rings for a
-  // cutout mask. Returns { name, outers:[[{lat,lon}…]…], inners:[…] }.
-  async fetchFull(relId) {
-    const q = `[out:json][timeout:30];relation(${relId});out geom;`;
-    const resp = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'data=' + encodeURIComponent(q),
-    });
-    if (!resp.ok) throw new Error('Overpass HTTP ' + resp.status);
-    const data = await resp.json();
-    const rel = (data.elements || []).find(el => el.type === 'relation') || null;
-    const name = rel?.tags?.name || 'Protected area';
+  // Fetch one area's full geometry (by composite id) and assemble outer/inner rings for a
+  // cutout mask. Handles both relations (multipolygon) and single closed ways.
+  async fetchFull(id) {
+    const meta = this._index[id];
+    if (!meta) throw new Error('Unknown boundary id ' + id);
+    if (meta.etype === 'way') {
+      const data = await this._overpass(`[out:json][timeout:40];way(${meta.oid});out geom;`);
+      const el = (data.elements || []).find(x => x.type === 'way');
+      const ring = (el?.geometry || []).map(p => ({ lat: p.lat, lon: p.lon }));
+      return { name: meta.name || el?.tags?.name || 'Protected area', outers: ring.length >= 4 ? [ring] : [], inners: [] };
+    }
+    const data = await this._overpass(`[out:json][timeout:40];relation(${meta.oid});out geom;`);
+    const rel = (data.elements || []).find(x => x.type === 'relation') || null;
+    const name = meta.name || rel?.tags?.name || 'Protected area';
     const outerWays = [], innerWays = [];
     for (const m of (rel?.members || [])) {
       if (m.type !== 'way' || !m.geometry || m.geometry.length < 2) continue;
@@ -2923,40 +2969,61 @@ const Boundaries = {
     return m;
   },
 
-  // Redraw the map overlay for the enabled classes over the current viewport.
+  _setStatus(html) {
+    const el = document.getElementById('bnd-status');
+    if (el) el.innerHTML = html;
+  },
+
+  // Redraw the map overlay for the enabled classes over the current viewport, with visible
+  // status (zoom hint / loading / count / busy-retry) so it never fails silently.
   async _draw() {
     if (!this._layer) return;
     this._layer.clearLayers();
     const classes = this.enabledClasses();
-    if (!classes.length || map.getZoom() < 7) return;
+    if (!classes.length) { this._setStatus(''); return; }
+    if (map.getZoom() < 7) { this._setStatus('Zoom in (≥ 7) to load boundaries in view.'); return; }
+    this._setStatus('Loading boundaries…');
     const token = ++this._token;
     let features;
-    try { features = await this.fetch(map.getBounds(), classes); }
-    catch (e) { console.warn('Boundary fetch failed:', e); return; }
+    try { features = await this.fetch(map.getBounds()); }
+    catch (e) {
+      console.warn('Boundary fetch failed:', e);
+      if (token === this._token) this._setStatus('Overpass is busy — <a href="#" onclick="Boundaries.refresh();return false;" style="color:var(--accent);">retry</a>.');
+      return;
+    }
     if (token !== this._token) return;   // map moved again — a newer draw owns the layer
+
+    const enabled = new Set(classes);
+    const shown = features.filter(f => enabled.has(f.cls));
     const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    for (const f of features) {
+    for (const f of shown) {
       const color = this.CLASSES[f.cls].mapColor;
-      const popup = `<div style="font:13px -apple-system,sans-serif;min-width:150px;">`
-        + `<div style="font-weight:600;margin-bottom:6px;">${esc(f.name)}</div>`
-        + `<button onclick="Boundaries.selectCutout(${f.relId})" style="width:100%;padding:5px 8px;border:1px solid #FF4D1C;background:#FF4D1C;color:#000;border-radius:2px;font:600 12px sans-serif;cursor:pointer;">Use as cutout</button></div>`;
+      const popup = `<div style="font:13px -apple-system,sans-serif;min-width:160px;">`
+        + `<div style="font-weight:600;margin-bottom:2px;">${esc(f.name)}</div>`
+        + `<div style="font-size:11px;color:#666;margin-bottom:8px;">${esc(this.CLASSES[f.cls].label)}</div>`
+        + `<button onclick="Boundaries.selectCutout('${f.id}')" style="width:100%;padding:6px 8px;border:1px solid #FF4D1C;background:#FF4D1C;color:#000;border-radius:2px;font:600 12px sans-serif;cursor:pointer;">Use as cutout</button></div>`;
+      // Dashed outline keeps the map legible; a wide transparent halo underneath makes the
+      // thin line easy to click. Both carry the popup.
       for (const path of f.paths) {
-        L.polyline(path.map(p => [p.lat, p.lon]), {
-          color, weight: 2, opacity: 0.9, dashArray: '5,4', interactive: true,
-        }).bindPopup(popup).addTo(this._layer);
+        const latlngs = path.map(p => [p.lat, p.lon]);
+        L.polyline(latlngs, { color: '#000', weight: 10, opacity: 0, interactive: true }).bindPopup(popup).addTo(this._layer);
+        L.polyline(latlngs, { color, weight: 2.5, opacity: 0.95, dashArray: '5,4', interactive: true }).bindPopup(popup).addTo(this._layer);
       }
     }
+    this._setStatus(shown.length
+      ? `${shown.length} area${shown.length > 1 ? 's' : ''} in view — click one, then “Use as cutout”.`
+      : 'No parks / forests / wilderness in this view.');
   },
 
   // Adopt a boundary as the model's cutout footprint: fetch its full rings, set the
   // selection to the ring bbox (padded), and switch selectionShape to 'boundary' so
   // MeshGen masks the terrain to the park's outline.
-  async selectCutout(relId) {
-    const meta = this._index[relId] || {};
+  async selectCutout(id) {
+    const meta = this._index[id] || {};
     showLoading('Loading boundary…');
     let poly;
-    try { poly = await this.fetchFull(relId); }
-    catch (e) { hideLoading(); console.warn('Boundary load failed:', e); toast('Could not load that boundary.'); return; }
+    try { poly = await this.fetchFull(id); }
+    catch (e) { hideLoading(); console.warn('Boundary load failed:', e); toast('Overpass is busy — could not load that boundary. Try again.'); return; }
     hideLoading();
     if (!poly.outers.length) { toast('That area has no usable boundary.'); return; }
 
@@ -5912,8 +5979,9 @@ const UI = {
       if (classes.length) {
         try {
           showLoading('Fetching boundaries…');
-          const feats = await Boundaries.fetch(bounds, classes);
-          for (const f of feats) for (const p of f.paths) State.engraveBoundaries.push(p);
+          const enabled = new Set(classes);
+          const feats = await Boundaries.fetch(bounds);
+          for (const f of feats) if (enabled.has(f.cls)) for (const p of f.paths) State.engraveBoundaries.push(p);
         } catch (e) { console.warn('Boundary engrave fetch failed:', e); }
       }
     }
