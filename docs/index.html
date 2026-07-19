@@ -2769,16 +2769,20 @@ const Boundaries = {
   },
 
   // Public Overpass endpoints, tried in order — the canonical instance is frequently
-  // overloaded, so we fall back to mirrors instead of silently failing.
+  // overloaded (and will refuse connections when rate-limiting an IP), so we fall back to
+  // mirrors instead of silently failing.
   _endpoints: [
     'https://overpass-api.de/api/interpreter',
     'https://overpass.private.coffee/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter',
   ],
+  _preferred: null,     // last endpoint that worked — tried first next time
 
   _layer: null,
   _t: null,             // moveend/toggle debounce timer
   _token: 0,            // stale-fetch guard (map may move mid-request)
+  _inflight: false,     // serialize: at most one Overpass request in flight
+  _fetched: null,       // { bbox:{s,w,n,e}, features } last successful padded fetch
   _cache: new Map(),    // rounded viewport bbox → features (own cache; never evicts elevation)
   _index: {},           // composite id ("r123"/"w123") → { name, cls, etype, oid }
 
@@ -2806,18 +2810,23 @@ const Boundaries = {
   // returns an HTML error page (sometimes with HTTP 200) when overloaded, so a JSON parse
   // failure is treated as endpoint failure and we move on. Throws if all endpoints fail.
   async _overpass(query) {
+    const order = this._preferred
+      ? [this._preferred, ...this._endpoints.filter(u => u !== this._preferred)]
+      : this._endpoints.slice();
     let lastErr = null;
-    for (const url of this._endpoints) {
+    for (const url of order) {
       try {
         const resp = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: 'data=' + encodeURIComponent(query),
         });
-        if (!resp.ok) { lastErr = new Error('HTTP ' + resp.status); continue; }
+        if (!resp.ok) { lastErr = new Error('HTTP ' + resp.status); if (this._preferred === url) this._preferred = null; continue; }
         const txt = await resp.text();
-        return JSON.parse(txt);   // throws on an HTML error body → next endpoint
-      } catch (e) { lastErr = e; }
+        const data = JSON.parse(txt);   // throws on an HTML error body → next endpoint
+        this._preferred = url;          // remember the winner so we don't retry a refusing host first
+        return data;
+      } catch (e) { lastErr = e; if (this._preferred === url) this._preferred = null; }
     }
     throw lastErr || new Error('All Overpass endpoints failed');
   },
@@ -2830,7 +2839,13 @@ const Boundaries = {
 
   refresh() {
     clearTimeout(this._t);
-    this._t = setTimeout(() => this._draw(), 450);
+    this._t = setTimeout(() => this._tick(), 700);
+  },
+
+  // Does the last fetched region fully contain this view?
+  _covers(b, view) {
+    return !!b && view.getSouth() >= b.s && view.getNorth() <= b.n
+             && view.getWest() >= b.w && view.getEast() <= b.e;
   },
 
   // Fetch every protected area intersecting `bounds` (an L.LatLngBounds) in one broad query,
@@ -2974,25 +2989,52 @@ const Boundaries = {
     if (el) el.innerHTML = html;
   },
 
-  // Redraw the map overlay for the enabled classes over the current viewport, with visible
-  // status (zoom hint / loading / count / busy-retry) so it never fails silently.
-  async _draw() {
+  // Decide what to do after a toggle/pan settles: redraw from the cached region when the
+  // view is still inside it (no network), otherwise fetch a fresh padded region. This is
+  // what keeps us from hammering Overpass on every pan (which gets the connection refused).
+  _tick() {
     if (!this._layer) return;
-    this._layer.clearLayers();
     const classes = this.enabledClasses();
-    if (!classes.length) { this._setStatus(''); return; }
-    if (map.getZoom() < 7) { this._setStatus('Zoom in (≥ 7) to load boundaries in view.'); return; }
+    if (!classes.length) { this._layer.clearLayers(); this._setStatus(''); this._fetched = null; return; }
+    if (map.getZoom() < 7) { this._layer.clearLayers(); this._setStatus('Zoom in (≥ 7) to load boundaries in view.'); this._fetched = null; return; }
+    const view = map.getBounds();
+    if (this._covers(this._fetched?.bbox, view)) {
+      this._render(this._fetched.features, classes);   // still covered → redraw, no fetch
+      return;
+    }
+    this._load(view, classes);
+  },
+
+  // Fetch a padded region around the view (so small pans stay cached) and redraw.
+  // Serialized: while a request is in flight, a later settle is dropped — the debounce
+  // will re-tick and pick up the final view once this one finishes.
+  async _load(view, classes) {
+    if (this._inflight) return;
+    this._inflight = true;
     this._setStatus('Loading boundaries…');
     const token = ++this._token;
+    const padded = view.pad(0.3);   // 30% buffer each side
     let features;
-    try { features = await this.fetch(map.getBounds()); }
-    catch (e) {
+    try {
+      features = await this.fetch(padded);
+    } catch (e) {
       console.warn('Boundary fetch failed:', e);
+      this._inflight = false;
       if (token === this._token) this._setStatus('Overpass is busy — <a href="#" onclick="Boundaries.refresh();return false;" style="color:var(--accent);">retry</a>.');
       return;
     }
-    if (token !== this._token) return;   // map moved again — a newer draw owns the layer
+    this._inflight = false;
+    if (token !== this._token) return;   // a newer request supersedes this one
+    this._fetched = {
+      bbox: { s: padded.getSouth(), w: padded.getWest(), n: padded.getNorth(), e: padded.getEast() },
+      features,
+    };
+    this._render(features, this.enabledClasses());
+  },
 
+  // Draw the enabled-class features onto the overlay and update the status line.
+  _render(features, classes) {
+    this._layer.clearLayers();
     const enabled = new Set(classes);
     const shown = features.filter(f => enabled.has(f.cls));
     const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
