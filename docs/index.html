@@ -952,8 +952,9 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
           <input type="checkbox" id="bnd-wild" style="accent-color:var(--accent);width:16px;height:16px;" onchange="Boundaries.refresh()">
           <span>Wilderness areas</span>
         </label>
+        <button class="btn btn-sm" style="margin-top:10px;width:100%;" onclick="Boundaries.reload()">↻ Load areas in view</button>
         <p id="bnd-status" style="font-size:11px;color:var(--text-secondary);margin:8px 0 0;min-height:14px;"></p>
-        <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0;">Click an area on the map, then “Use as cutout” — the model takes that shape.</p>
+        <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0;">Zoom to your area (≥ 7), enable a layer, then click an area on the map and choose “Use as cutout” — the model takes that shape.</p>
 
         <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:12px;">
           <input type="checkbox" id="bnd-engrave" style="accent-color:var(--accent);width:16px;height:16px;" onchange="document.getElementById('bnd-engrave-opts').style.display=this.checked?'block':'none'">
@@ -2762,10 +2763,16 @@ const Boundaries = {
   // Map colour per class (distinct from the print inlay colour). US protected areas are
   // tagged inconsistently — most national parks are boundary=protected_area with an IUCN
   // protect_class, NOT boundary=national_park — so we query broadly and classify by tag.
+  // Each class carries its own Overpass selector so we only fetch the enabled layers —
+  // national forests (protect_class 6) are enormous, so pulling them only when asked keeps
+  // requests light and far more likely to survive a busy server.
   CLASSES: {
-    park:   { label: 'Park',       mapColor: '#39B54A' },   // national/state parks, monuments
-    forest: { label: 'Forest',     mapColor: '#C9A227' },   // national forests (IUCN VI)
-    wild:   { label: 'Wilderness', mapColor: '#A879E6' },   // wilderness areas (IUCN Ib)
+    park:   { label: 'Park',       mapColor: '#39B54A',
+              sel: b => `nwr["boundary"="national_park"](${b});nwr["boundary"="protected_area"]["protect_class"~"^(2|3)$"](${b});` },
+    forest: { label: 'Forest',     mapColor: '#C9A227',
+              sel: b => `nwr["boundary"="protected_area"]["protect_class"="6"](${b});` },
+    wild:   { label: 'Wilderness', mapColor: '#A879E6',
+              sel: b => `nwr["boundary"="protected_area"]["protect_class"="1b"](${b});` },
   },
 
   // Public Overpass endpoints, tried in order — the canonical instance is frequently
@@ -2773,6 +2780,7 @@ const Boundaries = {
   // mirrors instead of silently failing.
   _endpoints: [
     'https://overpass-api.de/api/interpreter',
+    'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
     'https://overpass.private.coffee/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter',
   ],
@@ -2815,18 +2823,24 @@ const Boundaries = {
       : this._endpoints.slice();
     let lastErr = null;
     for (const url of order) {
+      // Browser fetch has no timeout — a stalled Overpass host would hang forever and leave
+      // the overlay stuck on "Loading…". Abort after 25s so we fail fast to the next mirror.
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 25000);
       try {
         const resp = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: 'data=' + encodeURIComponent(query),
+          signal: ctl.signal,
         });
+        clearTimeout(timer);
         if (!resp.ok) { lastErr = new Error('HTTP ' + resp.status); if (this._preferred === url) this._preferred = null; continue; }
         const txt = await resp.text();
         const data = JSON.parse(txt);   // throws on an HTML error body → next endpoint
         this._preferred = url;          // remember the winner so we don't retry a refusing host first
         return data;
-      } catch (e) { lastErr = e; if (this._preferred === url) this._preferred = null; }
+      } catch (e) { clearTimeout(timer); lastErr = e; if (this._preferred === url) this._preferred = null; }
     }
     throw lastErr || new Error('All Overpass endpoints failed');
   },
@@ -2842,27 +2856,40 @@ const Boundaries = {
     this._t = setTimeout(() => this._tick(), 700);
   },
 
+  // Explicit "Load areas in view" — forces a fresh fetch for the current view and clears
+  // any stuck in-flight flag. Also auto-enables Parks if the user hasn't picked a layer,
+  // so the button always does something visible.
+  reload() {
+    if (!this.enabledClasses().length) {
+      const pk = document.getElementById('bnd-park');
+      if (pk) pk.checked = true;
+    }
+    this._fetched = null;
+    this._inflight = false;
+    clearTimeout(this._t);
+    this._tick();
+  },
+
   // Does the last fetched region fully contain this view?
   _covers(b, view) {
     return !!b && view.getSouth() >= b.s && view.getNorth() <= b.n
              && view.getWest() >= b.w && view.getEast() <= b.e;
   },
 
-  // Fetch every protected area intersecting `bounds` (an L.LatLngBounds) in one broad query,
-  // classify each by tag, and return them all. Callers filter by the enabled classes.
-  // Ways and relations are both accepted (some areas are a single closed way). Cached by
-  // rounded bbox. Returns [{ id, oid, etype, cls, name, paths:[[{lat,lon}…]…] }].
-  async fetch(bounds) {
+  // Fetch protected areas of the given classes intersecting `bounds` (an L.LatLngBounds),
+  // classify each by tag, and return them. Ways and relations are both accepted (some areas
+  // are a single closed way). Cached by class-set + rounded bbox. Returns
+  // [{ id, oid, etype, cls, name, paths:[[{lat,lon}…]…] }].
+  async fetch(bounds, classes) {
+    classes = (classes && classes.length ? classes : Object.keys(this.CLASSES)).slice().sort();
     const s = bounds.getSouth(), w = bounds.getWest(), n = bounds.getNorth(), e = bounds.getEast();
-    const ck = `${s.toFixed(3)},${w.toFixed(3)},${n.toFixed(3)},${e.toFixed(3)}`;
+    const ck = `${classes.join('+')}:${s.toFixed(3)},${w.toFixed(3)},${n.toFixed(3)},${e.toFixed(3)}`;
     let feats = this._cacheGet(ck);
     if (feats) { for (const f of feats) this._index[f.id] = { name: f.name, cls: f.cls, etype: f.etype, oid: f.oid }; return feats; }
 
     const bbox = `${s},${w},${n},${e}`;
-    const q = `[out:json][timeout:40];(`
-      + `nwr["boundary"="national_park"](${bbox});`
-      + `nwr["boundary"="protected_area"]["protect_class"~"^(1b|2|3|6)$"](${bbox});`
-      + `);out geom;`;
+    const sel = classes.map(c => this.CLASSES[c].sel(bbox)).join('');
+    const q = `[out:json][timeout:40];(${sel});out geom;`;
     const data = await this._overpass(q);
     feats = [];
     for (const el of (data.elements || [])) {
@@ -2998,8 +3025,9 @@ const Boundaries = {
     if (!classes.length) { this._layer.clearLayers(); this._setStatus(''); this._fetched = null; return; }
     if (map.getZoom() < 7) { this._layer.clearLayers(); this._setStatus('Zoom in (≥ 7) to load boundaries in view.'); this._fetched = null; return; }
     const view = map.getBounds();
-    if (this._covers(this._fetched?.bbox, view)) {
-      this._render(this._fetched.features, classes);   // still covered → redraw, no fetch
+    const key = classes.slice().sort().join('+');
+    if (this._fetched && this._fetched.key === key && this._covers(this._fetched.bbox, view)) {
+      this._render(this._fetched.features, classes);   // same layers, still covered → redraw, no fetch
       return;
     }
     this._load(view, classes);
@@ -3013,19 +3041,20 @@ const Boundaries = {
     this._inflight = true;
     this._setStatus('Loading boundaries…');
     const token = ++this._token;
-    const padded = view.pad(0.3);   // 30% buffer each side
+    const padded = view.pad(0.25);   // 25% buffer each side
     let features;
     try {
-      features = await this.fetch(padded);
+      features = await this.fetch(padded, classes);
     } catch (e) {
       console.warn('Boundary fetch failed:', e);
       this._inflight = false;
-      if (token === this._token) this._setStatus('Overpass is busy — <a href="#" onclick="Boundaries.refresh();return false;" style="color:var(--accent);">retry</a>.');
+      if (token === this._token) this._setStatus('Overpass is busy — <a href="#" onclick="Boundaries.reload();return false;" style="color:var(--accent);">retry</a>.');
       return;
     }
     this._inflight = false;
     if (token !== this._token) return;   // a newer request supersedes this one
     this._fetched = {
+      key: classes.slice().sort().join('+'),
       bbox: { s: padded.getSouth(), w: padded.getWest(), n: padded.getNorth(), e: padded.getEast() },
       features,
     };
@@ -6021,9 +6050,8 @@ const UI = {
       if (classes.length) {
         try {
           showLoading('Fetching boundaries…');
-          const enabled = new Set(classes);
-          const feats = await Boundaries.fetch(bounds);
-          for (const f of feats) if (enabled.has(f.cls)) for (const p of f.paths) State.engraveBoundaries.push(p);
+          const feats = await Boundaries.fetch(bounds, classes);
+          for (const f of feats) for (const p of f.paths) State.engraveBoundaries.push(p);
         } catch (e) { console.warn('Boundary engrave fetch failed:', e); }
       }
     }
