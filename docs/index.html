@@ -937,6 +937,53 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
             <input type="number" id="building-min-height" value="6" min="2" max="100" step="1">
           </div>
         </div>
+
+        <div class="sub-head">Protected Areas</div>
+        <p style="font-size:11px;color:var(--text-muted);margin:0 0 8px;">Overlay park / forest / wilderness boundaries (OpenStreetMap). Lines load on the map at zoom ≥ 7.</p>
+        <label class="input-group" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="bnd-park" style="accent-color:var(--accent);width:16px;height:16px;" onchange="Boundaries.refresh()">
+          <span>National / state parks</span>
+        </label>
+        <label class="input-group" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:6px;">
+          <input type="checkbox" id="bnd-forest" style="accent-color:var(--accent);width:16px;height:16px;" onchange="Boundaries.refresh()">
+          <span>National forests</span>
+        </label>
+        <label class="input-group" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:6px;">
+          <input type="checkbox" id="bnd-wild" style="accent-color:var(--accent);width:16px;height:16px;" onchange="Boundaries.refresh()">
+          <span>Wilderness areas</span>
+        </label>
+        <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0;">Click a boundary on the map to use it as a cutout — the model takes that area's shape.</p>
+
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:12px;">
+          <input type="checkbox" id="bnd-engrave" style="accent-color:var(--accent);width:16px;height:16px;" onchange="document.getElementById('bnd-engrave-opts').style.display=this.checked?'block':'none'">
+          <label for="bnd-engrave" style="margin:0;cursor:pointer;">Engrave boundary lines</label>
+        </div>
+        <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0;">Carves the enabled boundaries as grooves into the printed surface.</p>
+        <div id="bnd-engrave-opts" style="display:none;margin-top:10px;">
+          <div class="input-group">
+            <label>Groove width (mm)</label>
+            <div class="range-row">
+              <input type="range" id="bnd-groove-width" min="0.8" max="3" step="0.1" value="1.5" oninput="document.getElementById('bnd-groove-width-val').textContent=this.value+'mm'">
+              <span class="range-val" id="bnd-groove-width-val">1.5mm</span>
+            </div>
+          </div>
+          <div class="input-group" style="margin-top:8px;">
+            <label>Groove depth (mm)</label>
+            <div class="range-row">
+              <input type="range" id="bnd-groove-depth" min="0.4" max="2" step="0.1" value="0.8" oninput="document.getElementById('bnd-groove-depth-val').textContent=this.value+'mm'">
+              <span class="range-val" id="bnd-groove-depth-val">0.8mm</span>
+            </div>
+          </div>
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="bnd-inlay" style="accent-color:var(--accent);width:15px;height:15px;" onchange="document.getElementById('bnd-inlay-opts').style.display=this.checked?'flex':'none'">
+            <label for="bnd-inlay" style="margin:0;cursor:pointer;">Color inlay <span style="color:var(--text-muted);font-size:11px;">(fills the groove)</span></label>
+          </div>
+          <div class="threshold-row" id="bnd-inlay-opts" style="display:none;margin-top:8px;">
+            <input type="color" id="bnd-inlay-color" value="#8A5A2B" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+            <span>Boundary color</span>
+            <span style="color:var(--text-muted);font-size:11px;">3MF</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1280,7 +1327,9 @@ let currentImagerySource = 'eox';
 
 const State = {
   selectedBounds: null,    // L.LatLngBounds of current selection
-  selectionShape: 'rect',  // 'rect' | 'circle' — circle masks the tile to a disc
+  selectionShape: 'rect',  // 'rect' | 'circle' | 'boundary' — masks the tile to a disc / park outline
+  boundaryPoly: null,      // { name, outers:[[{lat,lon}…]], inners:[…] } for a cutout selection
+  engraveBoundaries: null, // [[{lat,lon}…]…] boundary polylines to engrave into the print
   customRect: null,        // Leaflet rectangle layer for custom draw
   elevationData: null,     // {width, height, data: Float32Array, bounds}
   meshData: null,          // generated mesh
@@ -1530,6 +1579,7 @@ const MapModule = {
       // the generated tile to an inscribed disc.
       State.selectedBounds = e.layer.getBounds();
       State.selectionShape = e.layerType === 'circle' ? 'circle' : 'rect';
+      State.boundaryPoly = null;   // a fresh rect/circle supersedes any cutout
       State.customRect = e.layer;
       UI.updateSelectionInfo();
       drawTileGrid();
@@ -1537,12 +1587,14 @@ const MapModule = {
     map.on(L.Draw.Event.DELETED, () => {
       State.selectedBounds = null;
       State.selectionShape = 'rect';
+      State.boundaryPoly = null;
       State.customRect = null;
       UI.updateSelectionInfo();
       drawTileGrid();
     });
 
     tileGridLayer = L.layerGroup().addTo(map);
+    Boundaries.init();
   }
 };
 
@@ -2604,10 +2656,21 @@ const Gpx = {
   // RAISE mm above the surface and whose underside embeds EMBED mm into it (slicer unions
   // it with the terrain, same principle as the colour caps).
   extrude(points, ctx) {
+    const widthMM = parseFloat(document.getElementById('route-width')?.value) || 2;
+    return this._ribbon([points], ctx, { widthMM, raise: 1.0, embed: 0.8 });
+  },
+
+  // Shared ribbon builder (GPX route + protected-area boundary inlays).
+  //   paths: array of polylines, each an array of {lat,lon}.
+  //   opts:  { widthMM, raise, embed } — ribbon width and how far the top rides above /
+  //          the underside embeds below the (possibly grooved) terrain surface.
+  // Every polyline is clipped to the tile, resampled to grid-cell length, and extruded as
+  // a closed quad-strip. `data` is sampled bilinearly, so passing the grooved elevation
+  // grid makes the ribbon sit down inside an engraved channel. Returns {v,t} or null.
+  _ribbon(paths, ctx, opts) {
     const { data, w, h, bounds, meshW, meshH, minElev, elevScale, baseHeight } = ctx;
     const west = bounds.west, east = bounds.east, south = bounds.south, north = bounds.north;
-    const widthMM = parseFloat(document.getElementById('route-width')?.value) || 2;
-    const RAISE = 1.0, EMBED = 0.8, hw = widthMM / 2;
+    const RAISE = opts.raise, EMBED = opts.embed, hw = opts.widthMM / 2;
 
     const inB = p => p.lat >= south && p.lat <= north && p.lon >= west && p.lon <= east;
     const mx = p => (p.lon - west) / (east - west) * meshW;
@@ -2623,14 +2686,16 @@ const Gpx = {
       return (Math.max(0, e) - minElev) * elevScale + baseHeight;
     };
 
-    // Split into in-bounds sub-paths (mesh XY).
+    // Split every polyline into in-bounds sub-paths (mesh XY).
     const subs = [];
-    let cur = [];
-    for (const p of points) {
-      if (inB(p)) cur.push([mx(p), my(p)]);
-      else if (cur.length) { subs.push(cur); cur = []; }
+    for (const points of paths) {
+      let cur = [];
+      for (const p of points) {
+        if (inB(p)) cur.push([mx(p), my(p)]);
+        else if (cur.length) { subs.push(cur); cur = []; }
+      }
+      if (cur.length) { subs.push(cur); cur = []; }
     }
-    if (cur.length) subs.push(cur);
 
     const cell = Math.min(meshW / (w - 1), meshH / (h - 1));
     const V = [], T = [];
@@ -2678,6 +2743,245 @@ const Gpx = {
       T.push(idx(sN,0), idx(sN,2), idx(sN,1),  idx(sN,1), idx(sN,2), idx(sN,3));
     }
     return T.length ? { v: V, t: T } : null;
+  },
+};
+
+// ═══════════════════════════════════════════════
+//  PROTECTED-AREA BOUNDARIES  (OSM parks / forests / wilderness)
+// ═══════════════════════════════════════════════
+//
+// A toggleable map overlay plus two ways to put the boundary on the print:
+//   • engraved grooves (a recessed channel following each boundary line, optionally
+//     inlaid with one colour), and
+//   • a park-shaped cutout (the model's footprint IS the selected area — reuses the
+//     same shapeMask machinery as circle selections).
+// Data comes from Overpass, the same keyless source as water and buildings.
+
+const Boundaries = {
+  CLASSES: {
+    park:   { label: 'Parks',      mapColor: '#39B54A',
+              sel: (s,w,n,e) => `relation["boundary"="national_park"](${s},${w},${n},${e});` },
+    forest: { label: 'Forests',    mapColor: '#C9A227',
+              sel: (s,w,n,e) => `relation["boundary"="protected_area"]["protect_class"="6"](${s},${w},${n},${e});` },
+    wild:   { label: 'Wilderness', mapColor: '#A879E6',
+              sel: (s,w,n,e) => `relation["boundary"="protected_area"]["protect_class"="1b"](${s},${w},${n},${e});` },
+  },
+
+  _layer: null,
+  _t: null,             // moveend/toggle debounce timer
+  _token: 0,            // stale-fetch guard (map may move mid-request)
+  _cache: new Map(),    // viewport+class → features (own cache; never evicts elevation)
+  _index: {},           // relId → { name, cls } for popup / cutout lookup
+
+  _cacheGet(k) { return this._cache.get(k) || null; },
+  _cacheSet(k, v) {
+    this._cache.set(k, v);
+    if (this._cache.size > 24) this._cache.delete(this._cache.keys().next().value);
+  },
+
+  enabledClasses() {
+    return Object.keys(this.CLASSES).filter(c => document.getElementById('bnd-' + c)?.checked);
+  },
+
+  init() {
+    if (!map) return;
+    this._layer = L.layerGroup().addTo(map);
+    map.on('moveend', () => this.refresh());
+  },
+
+  refresh() {
+    clearTimeout(this._t);
+    this._t = setTimeout(() => this._draw(), 450);
+  },
+
+  // Fetch protected-area relations intersecting `bounds` (an L.LatLngBounds) for the given
+  // classes. Member way geometry arrives clipped via `out geom`, so huge National Forest
+  // relations stay affordable. Returns [{ cls, relId, name, paths:[[{lat,lon}…]…] }].
+  async fetch(bounds, classes) {
+    const s = bounds.getSouth(), w = bounds.getWest(), n = bounds.getNorth(), e = bounds.getEast();
+    const out = [];
+    for (const cls of classes) {
+      const ck = `${cls}:${s.toFixed(3)},${w.toFixed(3)},${n.toFixed(3)},${e.toFixed(3)}`;
+      let feats = this._cacheGet(ck);
+      if (!feats) {
+        const q = `[out:json][timeout:25];(${this.CLASSES[cls].sel(s, w, n, e)});out geom;`;
+        const resp = await fetch('https://overpass-api.de/api/interpreter', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'data=' + encodeURIComponent(q),
+        });
+        if (!resp.ok) throw new Error('Overpass HTTP ' + resp.status);
+        const data = await resp.json();
+        feats = [];
+        for (const el of (data.elements || [])) {
+          if (el.type !== 'relation') continue;
+          const name = el.tags?.name || this.CLASSES[cls].label;
+          const paths = (el.members || [])
+            .filter(m => m.type === 'way' && m.geometry && m.geometry.length >= 2)
+            .map(m => m.geometry.map(p => ({ lat: p.lat, lon: p.lon })));
+          if (paths.length) feats.push({ cls, relId: el.id, name, paths });
+        }
+        this._cacheSet(ck, feats);
+      }
+      for (const f of feats) { this._index[f.relId] = { name: f.name, cls: f.cls }; out.push(f); }
+    }
+    return out;
+  },
+
+  // Fetch one relation's full (unclipped) geometry and assemble outer/inner rings for a
+  // cutout mask. Returns { name, outers:[[{lat,lon}…]…], inners:[…] }.
+  async fetchFull(relId) {
+    const q = `[out:json][timeout:30];relation(${relId});out geom;`;
+    const resp = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'data=' + encodeURIComponent(q),
+    });
+    if (!resp.ok) throw new Error('Overpass HTTP ' + resp.status);
+    const data = await resp.json();
+    const rel = (data.elements || []).find(el => el.type === 'relation') || null;
+    const name = rel?.tags?.name || 'Protected area';
+    const outerWays = [], innerWays = [];
+    for (const m of (rel?.members || [])) {
+      if (m.type !== 'way' || !m.geometry || m.geometry.length < 2) continue;
+      const way = m.geometry.map(p => ({ lat: p.lat, lon: p.lon }));
+      (m.role === 'inner' ? innerWays : outerWays).push(way);
+    }
+    return { name, outers: this._stitch(outerWays), inners: this._stitch(innerWays) };
+  },
+
+  // Stitch member ways (each an array of {lat,lon}) into closed rings by matching shared
+  // endpoints — the standard OSM multipolygon assembly. Ways share exact nodes, so an
+  // endpoint key at 6-decimal precision matches reliably.
+  _stitch(ways) {
+    const key = p => `${p.lat.toFixed(6)},${p.lon.toFixed(6)}`;
+    const pool = ways.filter(w => w.length >= 2).map(w => w.slice());
+    const rings = [];
+    while (pool.length) {
+      let ring = pool.shift();
+      let closed = key(ring[0]) === key(ring[ring.length - 1]);
+      let guard = pool.length + 2;
+      while (!closed && guard-- > 0) {
+        const tail = key(ring[ring.length - 1]);
+        let found = -1, rev = false;
+        for (let i = 0; i < pool.length; i++) {
+          if (key(pool[i][0]) === tail) { found = i; rev = false; break; }
+          if (key(pool[i][pool[i].length - 1]) === tail) { found = i; rev = true; break; }
+        }
+        if (found < 0) break;
+        let seg = pool.splice(found, 1)[0];
+        if (rev) seg = seg.slice().reverse();
+        ring = ring.concat(seg.slice(1));
+        closed = key(ring[0]) === key(ring[ring.length - 1]);
+      }
+      if (ring.length >= 4) rings.push(ring);
+    }
+    return rings;
+  },
+
+  // Rasterize a cutout polygon (outer rings filled, inner rings punched out) into a
+  // grid-space mask — the exact water-relation rasterizer pattern. `bounds` is a plain
+  // {west,east,south,north}. Returns Uint8Array (1 = inside), or null.
+  rasterizeMask(poly, bounds, w, h) {
+    if (!poly || !poly.outers || !poly.outers.length) return null;
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const cx = cv.getContext('2d');
+    const X = lon => (lon - bounds.west) / (bounds.east - bounds.west) * w;
+    const Y = lat => (bounds.north - lat) / (bounds.north - bounds.south) * h;
+    const ring = r => { cx.beginPath(); r.forEach((p, i) => { const x = X(p.lon), y = Y(p.lat); i ? cx.lineTo(x, y) : cx.moveTo(x, y); }); cx.closePath(); cx.fill(); };
+    cx.fillStyle = '#fff';
+    for (const r of poly.outers) ring(r);
+    cx.save(); cx.globalCompositeOperation = 'destination-out';
+    for (const r of poly.inners) ring(r);
+    cx.restore();
+    const d = cx.getImageData(0, 0, w, h).data;
+    const m = new Uint8Array(w * h);
+    for (let i = 0; i < m.length; i++) m[i] = d[i * 4] > 128 ? 1 : 0;
+    return m;
+  },
+
+  // Rasterize boundary polylines as a stroked groove mask (1 = under the groove).
+  rasterizeGroove(paths, bounds, w, h, lineWidthPx) {
+    if (!paths || !paths.length) return null;
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const cx = cv.getContext('2d');
+    const X = lon => (lon - bounds.west) / (bounds.east - bounds.west) * w;
+    const Y = lat => (bounds.north - lat) / (bounds.north - bounds.south) * h;
+    cx.strokeStyle = '#fff';
+    cx.lineWidth = lineWidthPx;
+    cx.lineJoin = 'round';
+    cx.lineCap = 'round';
+    for (const path of paths) {
+      if (path.length < 2) continue;
+      cx.beginPath();
+      path.forEach((p, i) => { const x = X(p.lon), y = Y(p.lat); i ? cx.lineTo(x, y) : cx.moveTo(x, y); });
+      cx.stroke();
+    }
+    const d = cx.getImageData(0, 0, w, h).data;
+    const m = new Uint8Array(w * h);
+    for (let i = 0; i < m.length; i++) m[i] = d[i * 4] > 96 ? 1 : 0;
+    return m;
+  },
+
+  // Redraw the map overlay for the enabled classes over the current viewport.
+  async _draw() {
+    if (!this._layer) return;
+    this._layer.clearLayers();
+    const classes = this.enabledClasses();
+    if (!classes.length || map.getZoom() < 7) return;
+    const token = ++this._token;
+    let features;
+    try { features = await this.fetch(map.getBounds(), classes); }
+    catch (e) { console.warn('Boundary fetch failed:', e); return; }
+    if (token !== this._token) return;   // map moved again — a newer draw owns the layer
+    const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    for (const f of features) {
+      const color = this.CLASSES[f.cls].mapColor;
+      const popup = `<div style="font:13px -apple-system,sans-serif;min-width:150px;">`
+        + `<div style="font-weight:600;margin-bottom:6px;">${esc(f.name)}</div>`
+        + `<button onclick="Boundaries.selectCutout(${f.relId})" style="width:100%;padding:5px 8px;border:1px solid #FF4D1C;background:#FF4D1C;color:#000;border-radius:2px;font:600 12px sans-serif;cursor:pointer;">Use as cutout</button></div>`;
+      for (const path of f.paths) {
+        L.polyline(path.map(p => [p.lat, p.lon]), {
+          color, weight: 2, opacity: 0.9, dashArray: '5,4', interactive: true,
+        }).bindPopup(popup).addTo(this._layer);
+      }
+    }
+  },
+
+  // Adopt a boundary as the model's cutout footprint: fetch its full rings, set the
+  // selection to the ring bbox (padded), and switch selectionShape to 'boundary' so
+  // MeshGen masks the terrain to the park's outline.
+  async selectCutout(relId) {
+    const meta = this._index[relId] || {};
+    showLoading('Loading boundary…');
+    let poly;
+    try { poly = await this.fetchFull(relId); }
+    catch (e) { hideLoading(); console.warn('Boundary load failed:', e); toast('Could not load that boundary.'); return; }
+    hideLoading();
+    if (!poly.outers.length) { toast('That area has no usable boundary.'); return; }
+
+    let s = Infinity, n = -Infinity, w = Infinity, e = -Infinity;
+    for (const r of poly.outers) for (const p of r) {
+      if (p.lat < s) s = p.lat; if (p.lat > n) n = p.lat;
+      if (p.lon < w) w = p.lon; if (p.lon > e) e = p.lon;
+    }
+    const padLat = (n - s) * 0.02, padLon = (e - w) * 0.02;
+    const bnds = L.latLngBounds([s - padLat, w - padLon], [n + padLat, e + padLon]);
+
+    State.selectedBounds = bnds;
+    State.selectionShape = 'boundary';
+    State.boundaryPoly = { name: meta.name || poly.name, outers: poly.outers, inners: poly.inners };
+    State.customRect = null;
+
+    drawnItems.clearLayers();
+    for (const r of poly.outers) {
+      L.polygon(r.map(p => [p.lat, p.lon]), { color: '#FF4D1C', weight: 2, fill: true, fillOpacity: 0.08 }).addTo(drawnItems);
+    }
+    map.closePopup();
+    map.fitBounds(bnds);
+    UI.updateSelectionInfo();
+    drawTileGrid();
+    toast(`Cutout set: ${State.boundaryPoly.name}`);
   },
 };
 
@@ -2832,6 +3136,19 @@ const MeshGen = {
           shapeMask[row * w + col] = (dx*dx + dy*dy) <= R2 ? 1 : 0;
         }
       }
+    } else if (State.selectionShape === 'boundary' && State.boundaryPoly) {
+      // Park-shaped cutout: rasterize the boundary rings (outer filled, inner holes
+      // punched) into the same grid-space mask the disc path produces. The model's
+      // footprint becomes the protected area's outline; everything downstream (masked
+      // minElev, band-solid cliff walls, frame corner fill, export) follows the mask.
+      shapeMask = Boundaries.rasterizeMask(State.boundaryPoly, elevData.bounds, w, h);
+      let cnt = 0;
+      if (shapeMask) for (let i = 0; i < shapeMask.length; i++) cnt += shapeMask[i];
+      if (!shapeMask || cnt < shapeMask.length * 0.02) {
+        // Degenerate sliver (boundary barely covers the tile) — fall back to the bbox.
+        shapeMask = null;
+        toast('Boundary covers too little of the selection — using the full rectangle.');
+      }
     }
 
     // Elevation range of the clamped geometry — drives the z mapping and band heights.
@@ -2882,6 +3199,25 @@ const MeshGen = {
       if (tileScale.meshH    != null) meshH    = tileScale.meshH;
       if (tileScale.elevScale != null) elevScale = tileScale.elevScale;
       elevRange = maxElev - minElev;
+    }
+
+    // Optional engraved boundary grooves: depress the surface along protected-area boundary
+    // lines so they read as recessed channels (and can host the colour inlay). Applied after
+    // the elevation range is fixed — the groove never lowers minElev (base stays anchored to
+    // true terrain) and is clamped at minElev so it can't punch through the base. Downstream
+    // vertices, caps, STL and the inlay all sample this grooved `data`, so they stay in sync.
+    if (State.engraveBoundaries && State.engraveBoundaries.length) {
+      const depthMm = parseFloat(document.getElementById('bnd-groove-depth')?.value) || 0.8;
+      const widthMm = parseFloat(document.getElementById('bnd-groove-width')?.value) || 1.5;
+      const pxPerMm = ((w / meshW) + (h / meshH)) / 2;
+      const gmask = Boundaries.rasterizeGroove(State.engraveBoundaries, elevData.bounds, w, h,
+        Math.max(1, widthMm * pxPerMm));
+      if (gmask) {
+        const depthM = depthMm / elevScale;   // mm of groove → metres of elevation
+        for (let i = 0; i < data.length; i++) {
+          if (gmask[i]) data[i] = Math.max(minElev, data[i] - depthM);
+        }
+      }
     }
 
     // Generate vertices for the terrain surface
@@ -3834,6 +4170,17 @@ const MeshGen = {
       if (routeSolid === null) toast('Route does not cross the selected area.');
     }
 
+    // Optional protected-area boundary inlay: a colour ribbon seated in the engraved
+    // groove (rides the grooved surface, embeds into it — unioned by the slicer).
+    let boundaryInlay = null;
+    if (State.engraveBoundaries && State.engraveBoundaries.length &&
+        document.getElementById('bnd-inlay')?.checked) {
+      const widthMm = parseFloat(document.getElementById('bnd-groove-width')?.value) || 1.5;
+      boundaryInlay = Gpx._ribbon(State.engraveBoundaries, {
+        data, w, h, bounds: elevData.bounds, meshW, meshH, minElev, elevScale, baseHeight,
+      }, { widthMM: Math.max(0.4, widthMm - 0.3), raise: 0.05, embed: 0.8 });
+    }
+
     return {
       vertices: vertexArray,
       triangles: triangleArray,
@@ -3841,6 +4188,9 @@ const MeshGen = {
       buildingHex: document.getElementById('building-color')?.value || '#9A9A9A',
       route: routeSolid,
       routeHex: document.getElementById('route-color')?.value || '#E8442A',
+      boundaryInlay,
+      boundaryHex: document.getElementById('bnd-inlay-color')?.value || '#8A5A2B',
+      selectionShape: State.selectionShape,
       shapeMask,
       satellite,
       triColors,
@@ -3994,8 +4344,8 @@ const STLExport = {
       const c = this._combine(built.map(b => b.solid));
       v = c.v; t = c.t;
     } else {
-      // Rectangular tile: merge the terrain mesh with any overlay solids (buildings, route).
-      const extras = [mesh.buildings, mesh.route].filter(s => s && s.t && s.t.length);
+      // Rectangular tile: merge the terrain mesh with any overlay solids (buildings, route, boundary inlay).
+      const extras = [mesh.buildings, mesh.route, mesh.boundaryInlay].filter(s => s && s.t && s.t.length);
       if (extras.length) {
         const c = this._combine([{ v: mesh.vertices, t: mesh.triangles }, ...extras]);
         v = c.v; t = c.t;
@@ -4332,6 +4682,9 @@ const ThreeMFExport = {
     }
     if (mesh.route && mesh.route.t && mesh.route.t.length) {
       built.push({ name: 'Route', hex: mesh.routeHex || '#E8442A', solid: mesh.route });
+    }
+    if (mesh.boundaryInlay && mesh.boundaryInlay.t && mesh.boundaryInlay.t.length) {
+      built.push({ name: 'Boundary', hex: mesh.boundaryHex || '#8A5A2B', solid: mesh.boundaryInlay });
     }
   },
 
@@ -4951,7 +5304,8 @@ const ThreeMFExport = {
     const Y0 = Math.min(-(fw + ph), bottomY - pad);
 
     const objs = [];
-    const archOn = mesh.shapeMask && document.getElementById('frame-arch-on')?.checked;
+    // Arch math is disc-specific — only for circle selections, never boundary cutouts.
+    const archOn = mesh.selectionShape === 'circle' && mesh.shapeMask && document.getElementById('frame-arch-on')?.checked;
 
     if (archOn) {
       // ── Arched ("domed") frame for circular maps ────────────────────────────
@@ -5361,8 +5715,10 @@ const UI = {
     // Selection coordinates print as map marginalia (where a quad sheet would carry them),
     // not as a panel row.
     const mg = document.getElementById('map-marginalia');
-    if (mg) mg.textContent =
-      `${geo(b.getSouth(),'N','S')}–${geo(b.getNorth(),'N','S')}  ·  ${geo(b.getWest(),'E','W')}–${geo(b.getEast(),'E','W')}`;
+    const coordStr = `${geo(b.getSouth(),'N','S')}–${geo(b.getNorth(),'N','S')}  ·  ${geo(b.getWest(),'E','W')}–${geo(b.getEast(),'E','W')}`;
+    if (mg) mg.textContent = State.selectionShape === 'boundary' && State.boundaryPoly
+      ? `${State.boundaryPoly.name}  ·  ${coordStr}`
+      : coordStr;
     let html = '';
 
     html += `<button class="btn btn-primary btn-block" onclick="UI.generateModel()">Generate 3D Model</button>`;
@@ -5543,6 +5899,22 @@ const UI = {
         const cls = classifyLandcover(lcRgb, n);
         lcWaterMask = new Uint8Array(n);
         for (let i = 0; i < n; i++) if (cls[i] === LC_WATER) lcWaterMask[i] = 1;
+      }
+    }
+
+    // Optional protected-area boundary engraving (opt-in). Fetch the enabled classes'
+    // lines over this selection so MeshGen can carve grooves / seat the inlay. Failure is
+    // tolerated — never aborts the model. Cutout selections keep their own edge, so the
+    // padded-bbox lines aren't re-engraved there.
+    State.engraveBoundaries = [];
+    if (document.getElementById('bnd-engrave')?.checked && State.selectionShape !== 'boundary') {
+      const classes = Boundaries.enabledClasses();
+      if (classes.length) {
+        try {
+          showLoading('Fetching boundaries…');
+          const feats = await Boundaries.fetch(bounds, classes);
+          for (const f of feats) for (const p of f.paths) State.engraveBoundaries.push(p);
+        } catch (e) { console.warn('Boundary engrave fetch failed:', e); }
       }
     }
 
