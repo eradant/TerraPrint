@@ -23,6 +23,7 @@
   --bg-hover:   #37322a;
   /* Structure inks its rules in contour sepia — the quad sheet's skeleton */
   --sepia:       #a8794a;
+  --sepia-lit:   #d9b98c;  /* marginalia ink — lifted a stop for legibility on the map */
   --hairline:    rgba(168,121,74,0.30);
   --hairline-hi: rgba(168,121,74,0.55);
   --border:     var(--hairline);
@@ -475,7 +476,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
   display: none;
   position: absolute;
   inset: 0;
-  background: rgba(20,18,14,0.86);
+  background: var(--face-deep);   /* Solid Surface Rule — opaque, no alpha wash */
   z-index: 900;
   justify-content: center;
   align-items: center;
@@ -493,6 +494,28 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 #loading-text { font-size: 12px; color: var(--text-secondary); letter-spacing: 0.3px; }
+#loading-elapsed {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+  font-variant-numeric: tabular-nums;
+  min-width: 44px;
+  text-align: center;
+}
+#loading-cancel { margin-top: 6px; }
+#toast .toast-action {
+  margin-left: 10px;
+  padding: 3px 10px;
+  border: 1px solid var(--hairline-hi);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+#toast .toast-action:hover { background: var(--bg-hover); }
 
 /* ─── Leaflet overrides ─── */
 /* Glass-system controls. background-color (not the `background` shorthand) preserves
@@ -512,6 +535,50 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
   overflow: hidden;
 }
 .leaflet-draw-toolbar a { filter: invert(1) grayscale(1) brightness(1.35); }
+
+/* ─── Frame style: 4×2 grid of SVG silhouette chips, recognition-first alternative
+   to a blind <select>. Selected chip inverts to the Signal Orange border. ─── */
+.frame-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin: 0 0 10px;
+}
+.frame-chip {
+  padding: 6px 3px 5px;
+  background: var(--bg-surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  transition: border-color 120ms var(--ease-mech), background 120ms var(--ease-mech), color 120ms var(--ease-mech);
+}
+.frame-chip:hover { background: var(--bg-hover); border-color: var(--hairline-hi); color: var(--text-primary); }
+.frame-chip.selected { border-color: var(--accent); background: var(--bg-hover); color: var(--text-primary); }
+.frame-chip:active { transform: translateY(1px); }
+.frame-chip svg { display: block; width: 100%; height: auto; max-width: 60px; }
+.frame-chip .chip-label {
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  line-height: 1;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.frame-chip .chip-svg-frame { stroke: var(--sepia); fill: none; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.frame-chip .chip-svg-terrain { fill: var(--bg-deep); stroke: none; }
+.frame-chip .chip-svg-card { fill: var(--face); stroke: var(--sepia); stroke-width: 0.8; vector-effect: non-scaling-stroke; }
+.frame-chip .chip-svg-title { fill: var(--sepia); }
+.frame-chip.selected .chip-svg-frame,
+.frame-chip.selected .chip-svg-card { stroke: var(--accent); }
+.frame-chip.selected .chip-svg-title { fill: var(--accent); }
+
+/* ─── Muted parenthetical hint next to a label ("(edge-hug ↔ smooth)") ─── */
+.hint { color: var(--text-muted); font-size: 11px; }
 
 /* ─── Color threshold inputs ─── */
 .threshold-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
@@ -548,11 +615,52 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.4px;
-  color: #d9b98c;
+  color: var(--sepia-lit);
   text-shadow: 0 1px 2px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.6);
   font-variant-numeric: tabular-nums;
 }
 @media (max-width: 768px) { #neatline, #map-marginalia { display: none; } }
+
+/* First-visit callout: anchored beside the Leaflet.Draw toolbar (topright, below the zoom
+   control). Visible only while no selection has been made; UI.updateSelectionInfo hides it. */
+#draw-callout {
+  position: absolute;
+  top: 100px;
+  right: 50px;
+  z-index: 700;
+  display: none;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--sepia);
+  background: var(--face-deep);
+  border: 1px solid var(--hairline-hi);
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  pointer-events: none;
+  white-space: nowrap;
+}
+#draw-callout.show { display: block; animation: draw-callout-in 220ms var(--ease-mech); }
+@keyframes draw-callout-in {
+  from { opacity: 0; transform: translateX(4px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+#draw-callout::after {
+  content: '';
+  position: absolute;
+  right: -6px;
+  top: 50%;
+  width: 6px;
+  height: 10px;
+  transform: translateY(-50%);
+  background: var(--sepia);
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+}
+@media (max-width: 768px) { #draw-callout { display: none !important; } }
+@media (prefers-reduced-motion: reduce) {
+  #draw-callout.show { animation: none; }
+}
 
 /* Keyboard focus: one visible treatment everywhere (functional blue, no glow) */
 :focus-visible { outline: 1px solid rgba(255,77,28,0.6); outline-offset: 2px; }
@@ -636,7 +744,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
           </div>
         </div>
         <div class="input-group" style="display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" id="step-mode" style="accent-color:var(--accent);width:16px;height:16px;" onchange="document.getElementById('step-interval-group').style.display=this.checked?'block':'none'">
+          <input type="checkbox" id="step-mode" style="width:16px;height:16px;" onchange="document.getElementById('step-interval-group').style.display=this.checked?'block':'none'">
           <label for="step-mode" style="margin:0;cursor:pointer;">Contour steps (terraced layers)</label>
         </div>
         <div class="input-group" id="step-interval-group" style="margin-top:6px;display:none;">
@@ -664,7 +772,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
           </select>
         </div>
         <div class="input-group" id="imagery-source-group" style="display:none;">
-          <label>Base imagery <span style="color:var(--text-muted);font-size:11px;">(map + photo colors)</span></label>
+          <label>Base imagery <span class="hint">(map + photo colors)</span></label>
           <select id="imagery-source" onchange="setBaseImagery(this.value)">
             <option value="eox" selected>Sentinel-2 cloudless — global, clean</option>
             <option value="naip">NAIP / USGS — US only, high-res</option>
@@ -674,7 +782,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
           <div class="threshold-row">
             <span class="swatch" style="background:#2D6ABF"></span>
             <span>Water</span>
-            <span style="color:var(--text-muted);font-size:11px;">ocean + lakes</span>
+            <span class="hint">ocean + lakes</span>
           </div>
           <div class="threshold-row">
             <span class="swatch" style="background:var(--topo-flat)"></span>
@@ -700,7 +808,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
         <!-- Driven by the top Color source select; kept in the DOM (hidden) so all logic that
              reads adv-colors-on / adv-source keeps working unchanged. -->
         <label class="input-group" style="display:none;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px;">
-          <input type="checkbox" id="adv-colors-on" style="accent-color:var(--accent);width:16px;height:16px;" onchange="Advanced.toggle(this.checked)">
+          <input type="checkbox" id="adv-colors-on" style="width:16px;height:16px;" onchange="Advanced.toggle(this.checked)">
           <span>Enable — hypsometric or photographic (4 / 8 colors)</span>
         </label>
         <div id="adv-colors" style="display:none;">
@@ -723,7 +831,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
           <p id="sat-note" style="display:none;font-size:11px;color:var(--text-muted);margin:0 0 8px;">Colors below are auto-derived on Generate (satellite / hybrid = sampled photo; land cover = classified). They print only in the top "Color depth" mm; everything beneath prints in the single Base color.</p>
           <!-- Region shaping — how the colour bands are segmented -->
           <div id="sat-detail-group" class="input-group" style="display:none;">
-            <label>Detail <span style="color:var(--text-muted);font-size:11px;">(sharper ↔ cleaner blocks)</span></label>
+            <label>Detail <span class="hint">(sharper ↔ cleaner blocks)</span></label>
             <div class="range-row">
               <input type="range" id="sat-detail" min="1" max="15" step="1" value="5" oninput="document.getElementById('sat-detail-val').textContent=this.value">
               <span class="range-val" id="sat-detail-val">5</span>
@@ -731,14 +839,14 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
           </div>
           <div id="sat-shape-group" style="display:none;">
             <div class="input-group">
-              <label>Region shape <span style="color:var(--text-muted);font-size:11px;">(edge-hug ↔ smooth)</span></label>
+              <label>Region shape <span class="hint">(edge-hug ↔ smooth)</span></label>
               <div class="range-row">
                 <input type="range" id="sat-shape" min="1" max="40" step="1" value="10" oninput="document.getElementById('sat-shape-val').textContent=this.value">
                 <span class="range-val" id="sat-shape-val">10</span>
               </div>
             </div>
             <div class="input-group">
-              <label>Texture smoothing <span style="color:var(--text-muted);font-size:11px;">(crisp ↔ clean)</span></label>
+              <label>Texture smoothing <span class="hint">(crisp ↔ clean)</span></label>
               <div class="range-row">
                 <input type="range" id="sat-smooth" min="0" max="10" step="1" value="5" oninput="document.getElementById('sat-smooth-val').textContent=this.value=='0'?'off':this.value">
                 <span class="range-val" id="sat-smooth-val">5</span>
@@ -746,7 +854,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
             </div>
           </div>
           <div id="sat-feather-group" class="input-group" style="display:none;">
-            <label>Edge feather <span style="color:var(--text-muted);font-size:11px;">(off ↔ stippled transitions)</span></label>
+            <label>Edge feather <span class="hint">(off ↔ stippled transitions)</span></label>
             <div class="range-row">
               <input type="range" id="sat-feather" min="0" max="5" step="1" value="0" oninput="document.getElementById('sat-feather-val').textContent=this.value=='0'?'off':this.value">
               <span class="range-val" id="sat-feather-val">off</span>
@@ -760,7 +868,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
               <div class="sub-fold-body">
                 <p style="font-size:11px;color:var(--text-muted);margin:6px 0 8px;">Applied on Generate — these change the printed palette, not just a preview.</p>
                 <div class="input-group">
-                  <label>Saturation <span style="color:var(--text-muted);font-size:11px;">(separate ↔ muted)</span></label>
+                  <label>Saturation <span class="hint">(separate ↔ muted)</span></label>
                   <div class="range-row">
                     <input type="range" id="sat-satur" min="-50" max="80" step="5" value="0" oninput="document.getElementById('sat-satur-val').textContent=(this.value>0?'+':'')+this.value">
                     <span class="range-val" id="sat-satur-val">0</span>
@@ -785,14 +893,14 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
           </div>
           <!-- Satellite-photo-only refinements -->
           <div id="sat-cap-group" class="input-group" style="display:none;">
-            <label>Elevation cap <span style="color:var(--text-muted);font-size:11px;">(treeline — pushes shaded high slopes off low colors)</span></label>
+            <label>Elevation cap <span class="hint">(treeline — pushes shaded high slopes off low colors)</span></label>
             <div class="range-row">
               <input type="range" id="sat-cap" min="0" max="100" step="5" value="0" oninput="document.getElementById('sat-cap-val').textContent=this.value=='0'?'off':this.value+'%'">
               <span class="range-val" id="sat-cap-val">off</span>
             </div>
           </div>
           <div id="sat-high-group" class="input-group" style="display:none;align-items:center;gap:8px;">
-            <label style="margin:0;">High-elevation tints <span style="color:var(--text-muted);font-size:11px;">(split rock into light + shadow)</span></label>
+            <label style="margin:0;">High-elevation tints <span class="hint">(split rock into light + shadow)</span></label>
             <select id="sat-high" style="flex:0 0 auto;">
               <option value="0">Off</option>
               <option value="2" selected>2</option>
@@ -801,14 +909,14 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
           </div>
           <div id="sat-shell-group" style="display:none;">
             <div class="input-group">
-              <label>Color depth (mm) <span style="color:var(--text-muted);font-size:11px;">(top photo shell · auto-deepens on steep faces)</span></label>
+              <label>Color depth (mm) <span class="hint">(top photo shell · auto-deepens on steep faces)</span></label>
               <div class="range-row">
                 <input type="range" id="sat-depth" min="0.6" max="8" step="0.1" value="2.5" oninput="document.getElementById('sat-depth-val').textContent=this.value+'mm'">
                 <span class="range-val" id="sat-depth-val">2.5mm</span>
               </div>
             </div>
             <div class="input-group">
-              <label>Color overlap (mm) <span style="color:var(--text-muted);font-size:11px;">(fewer sliced gaps ↔ more bleed · 0 = off)</span></label>
+              <label>Color overlap (mm) <span class="hint">(fewer sliced gaps ↔ more bleed · 0 = off)</span></label>
               <div class="range-row">
                 <input type="range" id="color-overlap" min="0" max="0.6" step="0.05" value="0.15" oninput="document.getElementById('color-overlap-val').textContent=this.value=='0'?'off':this.value+'mm'">
                 <span class="range-val" id="color-overlap-val">0.15mm</span>
@@ -817,13 +925,13 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
             <div class="threshold-row">
               <input type="color" id="sat-base-color" value="#444444" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
               <span>Base</span>
-              <span style="color:var(--text-muted);font-size:11px;">under photo shell</span>
+              <span class="hint">under photo shell</span>
             </div>
           </div>
           <div class="threshold-row">
             <input type="color" id="adv-color-0" value="#2D6ABF" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
             <span>Water</span>
-            <span style="color:var(--text-muted);font-size:11px;">ocean + lakes</span>
+            <span class="hint">ocean + lakes</span>
           </div>
           <div class="threshold-row">
             <input type="color" id="adv-color-1" value="#2E7D32" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
@@ -875,16 +983,16 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 
         <div class="sub-head">Winter</div>
         <div class="input-group" style="display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" id="winter-on" style="accent-color:var(--accent);width:16px;height:16px;" onchange="document.getElementById('winter-opts').style.display=this.checked?'block':'none'">
+          <input type="checkbox" id="winter-on" style="width:16px;height:16px;" onchange="document.getElementById('winter-opts').style.display=this.checked?'block':'none'">
           <label for="winter-on" style="margin:0;cursor:pointer;">Winter mode (snow cap)</label>
         </div>
         <div id="winter-opts" style="display:none;margin-top:8px;">
           <div class="input-group">
-            <label>Snowline (m) <span style="color:var(--text-muted);font-size:11px;">(snow above · steep rock stays bare)</span></label>
+            <label>Snowline (m) <span class="hint">(snow above · steep rock stays bare)</span></label>
             <input type="number" id="snowline" value="1800" min="0" max="6000" step="50">
           </div>
           <div class="input-group">
-            <label>Transition (m) <span style="color:var(--text-muted);font-size:11px;">(feathered band above the line)</span></label>
+            <label>Transition (m) <span class="hint">(feathered band above the line)</span></label>
             <div class="range-row">
               <input type="range" id="snow-transition" min="50" max="400" step="25" value="150" oninput="document.getElementById('snow-transition-val').textContent=this.value+'m'">
               <span class="range-val" id="snow-transition-val">150m</span>
@@ -900,7 +1008,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
       <div class="section-body">
         <div class="sub-head sub-head-hydro">Water</div>
         <label class="input-group" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-          <input type="checkbox" id="water-detect" checked style="accent-color:var(--accent);width:16px;height:16px;">
+          <input type="checkbox" id="water-detect" checked style="width:16px;height:16px;">
           <span>Detect water (ocean + lakes)</span>
         </label>
         <div class="input-group" style="margin-top:10px;">
@@ -919,7 +1027,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
         </div>
         <div class="sub-head">Buildings (OSM)</div>
         <div class="input-group" style="display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" id="buildings-enable" style="accent-color:var(--accent);width:16px;height:16px;" onchange="document.getElementById('buildings-opts').style.display=this.checked?'block':'none'">
+          <input type="checkbox" id="buildings-enable" style="width:16px;height:16px;" onchange="document.getElementById('buildings-opts').style.display=this.checked?'block':'none'">
           <label for="buildings-enable" style="margin:0;cursor:pointer;">Add OSM buildings</label>
         </div>
         <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0;">Extrudes OpenStreetMap building footprints onto the terrain. Best for cities at small selections (high zoom). Off by default.</p>
@@ -927,7 +1035,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
           <div class="threshold-row">
             <input type="color" id="building-color" value="#9A9A9A" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
             <span>Building color</span>
-            <span style="color:var(--text-muted);font-size:11px;">3MF</span>
+            <span class="hint">3MF</span>
           </div>
           <div class="input-group" style="margin-top:10px;">
             <label>Height scale</label>
@@ -937,7 +1045,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
             </div>
           </div>
           <div class="input-group" style="margin-top:10px;">
-            <label>Default height (m) <span style="color:var(--text-muted);font-size:11px;">(untagged footprints)</span></label>
+            <label>Default height (m) <span class="hint">(untagged footprints)</span></label>
             <input type="number" id="building-min-height" value="6" min="2" max="100" step="1">
           </div>
         </div>
@@ -945,15 +1053,15 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
         <div class="sub-head">Protected Areas</div>
         <p style="font-size:11px;color:var(--text-muted);margin:0 0 8px;">Overlay park / forest / wilderness boundaries (OpenStreetMap). Lines load on the map at zoom ≥ 7.</p>
         <label class="input-group" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-          <input type="checkbox" id="bnd-park" style="accent-color:var(--accent);width:16px;height:16px;" onchange="Boundaries.refresh()">
+          <input type="checkbox" id="bnd-park" style="width:16px;height:16px;" onchange="Boundaries.refresh()">
           <span>National / state parks</span>
         </label>
         <label class="input-group" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:6px;">
-          <input type="checkbox" id="bnd-forest" style="accent-color:var(--accent);width:16px;height:16px;" onchange="Boundaries.refresh()">
+          <input type="checkbox" id="bnd-forest" style="width:16px;height:16px;" onchange="Boundaries.refresh()">
           <span>National forests</span>
         </label>
         <label class="input-group" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:6px;">
-          <input type="checkbox" id="bnd-wild" style="accent-color:var(--accent);width:16px;height:16px;" onchange="Boundaries.refresh()">
+          <input type="checkbox" id="bnd-wild" style="width:16px;height:16px;" onchange="Boundaries.refresh()">
           <span>Wilderness areas</span>
         </label>
         <button class="btn btn-sm" style="margin-top:10px;width:100%;" onclick="Boundaries.reload()">↻ Load areas in view</button>
@@ -961,7 +1069,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
         <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0;">Zoom to your area (≥ 7), enable a layer, then click an area on the map and choose “Use as cutout” — the model takes that shape.</p>
 
         <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:12px;">
-          <input type="checkbox" id="bnd-engrave" style="accent-color:var(--accent);width:16px;height:16px;" onchange="document.getElementById('bnd-engrave-opts').style.display=this.checked?'block':'none'">
+          <input type="checkbox" id="bnd-engrave" style="width:16px;height:16px;" onchange="document.getElementById('bnd-engrave-opts').style.display=this.checked?'block':'none'">
           <label for="bnd-engrave" style="margin:0;cursor:pointer;">Engrave boundary lines</label>
         </div>
         <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0;">Carves the enabled boundaries as grooves into the printed surface.</p>
@@ -981,13 +1089,13 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
             </div>
           </div>
           <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
-            <input type="checkbox" id="bnd-inlay" style="accent-color:var(--accent);width:15px;height:15px;" onchange="document.getElementById('bnd-inlay-opts').style.display=this.checked?'flex':'none'">
-            <label for="bnd-inlay" style="margin:0;cursor:pointer;">Color inlay <span style="color:var(--text-muted);font-size:11px;">(fills the groove)</span></label>
+            <input type="checkbox" id="bnd-inlay" style="width:15px;height:15px;" onchange="document.getElementById('bnd-inlay-opts').style.display=this.checked?'flex':'none'">
+            <label for="bnd-inlay" style="margin:0;cursor:pointer;">Color inlay <span class="hint">(fills the groove)</span></label>
           </div>
           <div class="threshold-row" id="bnd-inlay-opts" style="display:none;margin-top:8px;">
             <input type="color" id="bnd-inlay-color" value="#8A5A2B" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
             <span>Boundary color</span>
-            <span style="color:var(--text-muted);font-size:11px;">3MF</span>
+            <span class="hint">3MF</span>
           </div>
         </div>
       </div>
@@ -998,7 +1106,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
       <div class="section-body">
         <div class="sub-head">Frame &amp; Card</div>
         <div class="input-group" style="display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" id="frame-enable" style="accent-color:var(--accent);width:16px;height:16px;" onchange="document.getElementById('frame-opts').style.display=this.checked?'block':'none'">
+          <input type="checkbox" id="frame-enable" style="width:16px;height:16px;" onchange="document.getElementById('frame-opts').style.display=this.checked?'block':'none'">
           <label for="frame-enable" style="margin:0;cursor:pointer;">Add display frame</label>
         </div>
         <div id="frame-opts" style="display:none;margin-top:8px;">
@@ -1019,7 +1127,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
             <input type="text" id="frame-subtitle" placeholder="e.g. Cascade Range" value="">
           </div>
           <div class="input-group" style="margin-top:6px;">
-            <label>Text size <span style="color:var(--text-muted);font-size:11px;">(all cartouche text)</span></label>
+            <label>Text size <span class="hint">(all cartouche text)</span></label>
             <div class="range-row">
               <input type="range" id="frame-text-scale" min="0.7" max="2.5" step="0.1" value="1" oninput="document.getElementById('frame-text-scale-val').textContent=this.value+'×'">
               <span class="range-val" id="frame-text-scale-val">1×</span>
@@ -1036,18 +1144,43 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 
           <!-- Attached-frame options -->
           <div id="frame-opts-frame">
-            <div class="input-group" style="display:flex;align-items:center;gap:8px;margin:8px 0;">
-              <label style="margin:0;">Frame style</label>
-              <select id="frame-style" onchange="applyFramePreset(this.value)" style="flex:1 1 auto;">
-                <option value="custom" selected>Custom</option>
-                <option value="museum">Museum (recessed + lip)</option>
-                <option value="field">Field map (flat, full data)</option>
-                <option value="tray">Display tray (deep recess)</option>
-                <option value="medallion">Medallion (circular)</option>
-                <option value="minimal">Minimal slab</option>
-                <option value="gallery">Gallery (large card)</option>
-                <option value="plaque">Plaque (bold title)</option>
-              </select>
+            <label style="margin:8px 0 6px;">Frame style</label>
+            <!-- Hidden input carries the value so Settings.save/restore keep working unchanged;
+                 the chip grid is the visual/interaction surface. -->
+            <input type="hidden" id="frame-style" value="custom">
+            <div class="frame-grid" role="radiogroup" aria-label="Frame style">
+              <button type="button" class="frame-chip" role="radio" data-style="custom" onclick="selectFrameStyle('custom')" title="Custom — leaves your settings as-is">
+                <svg viewBox="0 0 60 40" aria-hidden="true"><rect class="chip-svg-frame" x="6" y="6" width="48" height="28" stroke-dasharray="3 2"/></svg>
+                <span class="chip-label">Custom</span>
+              </button>
+              <button type="button" class="frame-chip" role="radio" data-style="museum" onclick="selectFrameStyle('museum')" title="Museum — recessed terrain with a raised lip">
+                <svg viewBox="0 0 60 40" aria-hidden="true"><rect class="chip-svg-frame" x="4" y="4" width="52" height="32"/><rect class="chip-svg-frame" x="9" y="9" width="42" height="22"/><rect class="chip-svg-terrain" x="12" y="12" width="36" height="16"/></svg>
+                <span class="chip-label">Museum</span>
+              </button>
+              <button type="button" class="frame-chip" role="radio" data-style="field" onclick="selectFrameStyle('field')" title="Field map — thin frame, data corners, full bleed">
+                <svg viewBox="0 0 60 40" aria-hidden="true"><rect class="chip-svg-frame" x="4" y="4" width="52" height="32"/><rect class="chip-svg-terrain" x="7" y="7" width="46" height="26"/><path class="chip-svg-frame" d="M4 10h3M53 10h3M4 30h3M53 30h3M10 4v3M50 4v3M10 33v3M50 33v3" stroke-width="0.8"/></svg>
+                <span class="chip-label">Field</span>
+              </button>
+              <button type="button" class="frame-chip" role="radio" data-style="tray" onclick="selectFrameStyle('tray')" title="Display tray — deep terrain well, no border">
+                <svg viewBox="0 0 60 40" aria-hidden="true"><rect class="chip-svg-frame" x="4" y="4" width="52" height="32"/><rect class="chip-svg-frame" x="11" y="11" width="38" height="18"/><rect class="chip-svg-terrain" x="14" y="14" width="32" height="12"/></svg>
+                <span class="chip-label">Tray</span>
+              </button>
+              <button type="button" class="frame-chip" role="radio" data-style="medallion" onclick="selectFrameStyle('medallion')" title="Medallion — circular field, arched top">
+                <svg viewBox="0 0 60 40" aria-hidden="true"><rect class="chip-svg-frame" x="4" y="4" width="52" height="32"/><path class="chip-svg-frame" d="M14 22a16 16 0 0 1 32 0v10H14z"/><path class="chip-svg-terrain" d="M17 22a13 13 0 0 1 26 0v7H17z"/></svg>
+                <span class="chip-label">Medal</span>
+              </button>
+              <button type="button" class="frame-chip" role="radio" data-style="minimal" onclick="selectFrameStyle('minimal')" title="Minimal slab — tight margin, no border">
+                <svg viewBox="0 0 60 40" aria-hidden="true"><rect class="chip-svg-frame" x="6" y="6" width="48" height="28"/><rect class="chip-svg-terrain" x="8" y="8" width="44" height="24"/></svg>
+                <span class="chip-label">Minimal</span>
+              </button>
+              <button type="button" class="frame-chip" role="radio" data-style="gallery" onclick="selectFrameStyle('gallery')" title="Gallery — large cartouche card below the map">
+                <svg viewBox="0 0 60 40" aria-hidden="true"><rect class="chip-svg-frame" x="4" y="4" width="52" height="32"/><rect class="chip-svg-terrain" x="7" y="7" width="46" height="16"/><rect class="chip-svg-card" x="7" y="24" width="46" height="9"/><path class="chip-svg-frame" d="M14 27h20M14 30h14" stroke-width="0.7"/></svg>
+                <span class="chip-label">Gallery</span>
+              </button>
+              <button type="button" class="frame-chip" role="radio" data-style="plaque" onclick="selectFrameStyle('plaque')" title="Plaque — bold centered title">
+                <svg viewBox="0 0 60 40" aria-hidden="true"><rect class="chip-svg-frame" x="4" y="4" width="52" height="32"/><rect class="chip-svg-terrain" x="7" y="7" width="46" height="18"/><rect class="chip-svg-title" x="16" y="28" width="28" height="4"/></svg>
+                <span class="chip-label">Plaque</span>
+              </button>
             </div>
             <div class="input-row" style="margin-top:6px;">
               <div>
@@ -1060,11 +1193,11 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
               </div>
             </div>
             <div class="input-group" style="margin-top:6px;">
-              <label>Inset depth (mm) <span style="color:var(--text-muted);font-size:11px;">(0 = flush · &gt;0 = terrain recessed in a well)</span></label>
+              <label>Inset depth (mm) <span class="hint">(0 = flush · &gt;0 = terrain recessed in a well)</span></label>
               <input type="number" id="frame-inset" value="0" min="0" max="20" step="0.5">
             </div>
             <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
-              <input type="checkbox" id="frame-border-on" style="accent-color:var(--accent);width:15px;height:15px;" onchange="document.getElementById('frame-border-opts').style.display=this.checked?'flex':'none'">
+              <input type="checkbox" id="frame-border-on" style="width:15px;height:15px;" onchange="document.getElementById('frame-border-opts').style.display=this.checked?'flex':'none'">
               <label for="frame-border-on" style="margin:0;cursor:pointer;">Raised outer border</label>
             </div>
             <div class="input-row" id="frame-border-opts" style="display:none;margin-top:6px;">
@@ -1124,7 +1257,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
               </div>
             </div>
             <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
-              <input type="checkbox" id="card-border" style="accent-color:var(--accent);width:15px;height:15px;">
+              <input type="checkbox" id="card-border" style="width:15px;height:15px;">
               <label for="card-border" style="margin:0;cursor:pointer;">Raised card border</label>
             </div>
             <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0;">Prints beside the model in the same file — mount separately in a shadowbox.</p>
@@ -1132,18 +1265,18 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 
           <!-- Shared content toggles -->
           <div style="margin-top:8px;display:flex;flex-direction:column;gap:5px;">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-title-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Title text</label>
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-subtitle-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Subtitle text</label>
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-coords-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Coordinates</label>
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-legend-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Color key / legend</label>
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-scale-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Scale bar</label>
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-arch-on" checked style="accent-color:var(--accent);width:15px;height:15px;"> Arched top (circular maps)</label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-title-on" checked style="width:15px;height:15px;"> Title text</label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-subtitle-on" checked style="width:15px;height:15px;"> Subtitle text</label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-coords-on" checked style="width:15px;height:15px;"> Coordinates</label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-legend-on" checked style="width:15px;height:15px;"> Color key / legend</label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-scale-on" checked style="width:15px;height:15px;"> Scale bar</label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="frame-arch-on" checked style="width:15px;height:15px;"> Arched top (circular maps)</label>
           </div>
         </div>
 
         <div class="sub-head">Tiling (split area)</div>
         <div class="input-group" style="display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" id="tiling-enable" style="accent-color:var(--accent);width:16px;height:16px;" onchange="UI.toggleTiling(this.checked)">
+          <input type="checkbox" id="tiling-enable" style="width:16px;height:16px;" onchange="UI.toggleTiling(this.checked)">
           <label for="tiling-enable" style="margin:0;cursor:pointer;">Split into tiles</label>
         </div>
         <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0;">Print a large area in high detail by breaking it into a grid of tiles — each meshed at full resolution. Rectangle selection only.</p>
@@ -1170,7 +1303,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
         <div class="threshold-row">
           <input type="color" id="route-color" value="#E8442A" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
           <span>Route color</span>
-          <span style="color:var(--text-muted);font-size:11px;">raised ribbon</span>
+          <span class="hint">raised ribbon</span>
         </div>
         <div class="input-group" style="margin-top:8px;">
           <label>Route width (mm)</label>
@@ -1204,10 +1337,13 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
     </div>
     <div id="neatline"></div>
     <div id="map-marginalia"></div>
+    <div id="draw-callout" aria-hidden="true">Draw here →</div>
     <div id="mobile-note">TerraPrint needs a desktop-width window to configure and generate models — the map stays browsable here.</div>
     <div id="loading-overlay">
       <div class="spinner"></div>
       <div id="loading-text" aria-live="polite">Fetching elevation data…</div>
+      <div id="loading-elapsed" aria-hidden="true">0:00</div>
+      <button id="loading-cancel" class="btn btn-sm" onclick="UI.cancelRun()">Cancel</button>
     </div>
     <div id="preview-panel">
       <div id="preview-resize" title="Drag to resize"></div>
@@ -1229,7 +1365,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 <div id="toast" role="status" aria-live="polite"></div>
 
 <!-- ─── First-visit intro / how-to ─── -->
-<div id="intro-modal" style="display:none;position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,0.55);justify-content:center;align-items:center;">
+<div id="intro-modal" style="display:none;position:fixed;inset:0;z-index:3000;background:var(--bg-deep);justify-content:center;align-items:center;">
   <div style="width:min(540px,92vw);max-height:86vh;overflow-y:auto;background:var(--face);border:1px solid var(--hairline-hi);outline:1px solid var(--hairline);outline-offset:-7px;border-radius:var(--radius-lg);padding:26px 28px 22px;">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
       <svg width="26" height="22" viewBox="0 0 96 80" fill="#fff"><path d="M36 4 L47 26 L54 15 L64 40 L70 30 L78 55 L83 46 L89 71 L8 66 Z M91 56 L96 71 L84 70 Z"/></svg>
@@ -1248,7 +1384,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
     <p style="font-size:11px;color:var(--text-muted);margin:0 0 16px;">Settings persist between visits. Reopen this guide anytime with the <strong>?</strong> button in the header.</p>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid var(--hairline);padding-top:14px;">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text-secondary);margin:0;">
-        <input type="checkbox" id="intro-dismiss" style="accent-color:var(--accent);width:15px;height:15px;">
+        <input type="checkbox" id="intro-dismiss" style="width:15px;height:15px;">
         Don't show again
       </label>
       <button class="btn btn-primary" onclick="Intro.close()">Get started</button>
@@ -1399,6 +1535,9 @@ const Settings = {
     Advanced._updateSatHigh();
     // Mode-driven visibility for the Imagery & Color section (color-source is skip-dispatched).
     Advanced._updateSectionVisibility(document.getElementById('color-source')?.value || 'classic');
+    // Frame style chip grid — reflect the restored hidden-input value visually. The preset
+    // itself is NOT re-applied (would clobber the user's restored frame form controls).
+    _syncFrameChip();
     // Accordion collapse state.
     if (Array.isArray(saved.__collapsed)) {
       for (const id of this.SECTION_IDS) {
@@ -1461,12 +1600,52 @@ const Intro = {
 //  UTILITY
 // ═══════════════════════════════════════════════
 
-function toast(msg, duration = 3000) {
+// toast('msg')                           — 3s notice
+// toast('msg', 6000)                     — custom duration
+// toast('msg', { action, onAction })     — with an inline action button
+function toast(msg, opts = 3000) {
+  const isObj = opts && typeof opts === 'object';
+  const duration = isObj ? (opts.duration || 5000) : opts;
+  const action = isObj ? opts.action : null;
+  const onAction = isObj ? opts.onAction : null;
   const el = document.getElementById('toast');
   el.textContent = msg;
+  if (action && onAction) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'toast-action';
+    btn.textContent = action;
+    btn.addEventListener('click', () => { el.classList.remove('show'); onAction(); });
+    el.appendChild(document.createTextNode(' '));
+    el.appendChild(btn);
+  }
   el.classList.add('show');
   clearTimeout(el._t);
   el._t = setTimeout(() => el.classList.remove('show'), duration);
+}
+
+// Turn a raw exception into a user-facing sentence. Never surface e.message directly to users;
+// classify by phase so the copy is actionable ("elevation service didn't respond, retry" vs
+// "selection too small, lower resolution"). Raw error still goes to console.error for debugging.
+function _classifyError(e, phase) {
+  const msg = (e && e.message) || String(e || 'unknown error');
+  const label = { generate: 'Model', tiles: 'Tiles', stl: 'STL export', '3mf': '3MF export' }[phase] || 'Job';
+  const network = /tiles? (failed|to load)|Failed to fetch|NetworkError|network|timeout/i.test(msg)
+                  || (e && e.name === 'TypeError' && /fetch/i.test(msg));
+  if (/CORS|tainted|SecurityError/i.test(msg)) {
+    return { text: `${label} failed: imagery blocked by CORS. Try another Imagery source or lower Resolution.`, retryable: false };
+  }
+  if (network) {
+    return { text: `${label} failed: elevation service didn't respond. Check your connection and retry.`, retryable: true };
+  }
+  if (/selection too small|out of range|resolution/i.test(msg)) {
+    return { text: `${label} failed: try Resolution 256 or a larger selection.`, retryable: false };
+  }
+  if (/JSZip|zip|blob/i.test(msg)) {
+    return { text: `${label} failed while packaging. Retry — if it repeats, lower Resolution or tile count.`, retryable: true };
+  }
+  const trimmed = msg.length > 140 ? msg.slice(0, 137) + '…' : msg;
+  return { text: `${label} failed: ${trimmed}`, retryable: true };
 }
 
 // Header status LED: the instrument's one-glance state. working = orange blink,
@@ -1484,15 +1663,31 @@ const Led = {
   },
 };
 
+let _loadingTimer = null;
+let _loadingStart = 0;
+function _paintElapsed() {
+  const el = document.getElementById('loading-elapsed');
+  if (!el) return;
+  const s = Math.max(0, Math.floor((Date.now() - _loadingStart) / 1000));
+  el.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
 function showLoading(msg) {
   document.getElementById('loading-text').textContent = msg;
-  document.getElementById('loading-overlay').classList.add('active');
+  const overlay = document.getElementById('loading-overlay');
+  const wasActive = overlay.classList.contains('active');
+  overlay.classList.add('active');
   Led.set('working');
+  if (!wasActive) {
+    _loadingStart = Date.now();
+    _paintElapsed();
+    _loadingTimer = setInterval(_paintElapsed, 1000);
+  }
 }
 function hideLoading() {
   document.getElementById('loading-overlay').classList.remove('active');
   const led = document.getElementById('status-led');
   if (led && led.className === 'working') Led.set('');
+  if (_loadingTimer) { clearInterval(_loadingTimer); _loadingTimer = null; }
 }
 
 function downloadBlob(blob, filename) {
@@ -1526,6 +1721,12 @@ function exportName(ext, midfix = '') {
 // ═══════════════════════════════════════════════
 //  MAP MODULE
 // ═══════════════════════════════════════════════
+
+// Mirrors of the design-system ink pair for the primary "action" button in JS-generated
+// contexts (Leaflet popup HTML, canvas draws) where CSS custom properties can't be reached.
+// Update these in one place if --accent or on-accent text ever changes.
+const ACCENT_INK = '#FF4D1C';   // --accent (Signal Orange)
+const ON_ACCENT  = '#000';       // on-accent text (per DESIGN.md §5)
 
 let map, drawnItems, drawControl;
 let baseImageryLayer = null, labelLayer = null, tileGridLayer = null;
@@ -1566,7 +1767,7 @@ const MapModule = {
     }).addTo(map);
 
     drawnItems = L.featureGroup().addTo(map);
-    const shapeStyle = { color: '#f0b429', weight: 2, fillOpacity: 0.15 };
+    const shapeStyle = { color: '#F0A020', weight: 2, fillOpacity: 0.15 };
     drawControl = new L.Control.Draw({
       position: 'topright',
       draw: {
@@ -1619,7 +1820,7 @@ function drawTileGrid() {
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       L.rectangle([[s + r*dLat, w + c*dLon], [s + (r+1)*dLat, w + (c+1)*dLon]], {
-        color: '#f0b429', weight: 1, fill: false, interactive: false,
+        color: '#F0A020', weight: 1, fill: false, interactive: false,
       }).addTo(tileGridLayer);
     }
   }
@@ -1698,8 +1899,9 @@ const Elevation = {
     return Math.log(Math.tan(r) + 1 / Math.cos(r));
   },
 
-  // Fetch elevation data for bounds
-  async fetchElevation(bounds, resolution) {
+  // Fetch elevation data for bounds. `signal` is an optional AbortSignal — when it fires,
+  // in-flight image loads reject with AbortError and the outer Promise.all short-circuits.
+  async fetchElevation(bounds, resolution, signal = null) {
     const zoom = terrainZoomForBounds(bounds);
     console.log(`Fetching elevation at zoom ${zoom} for ${resolution}×${resolution} grid`);
     const sw = this.latLonToTile(bounds.getSouth(), bounds.getWest(), zoom);
@@ -1724,11 +1926,17 @@ const Elevation = {
     const total = tilesX * tilesY;
     let loaded = 0;
     let failed = 0;
+    const abortErr = () => new DOMException('Aborted', 'AbortError');
 
     const loadTile = (tx, ty) => new Promise((resolve, reject) => {
+      if (signal && signal.aborted) return reject(abortErr());
       const img = new Image();
       img.crossOrigin = 'anonymous';
+      const onAbort = () => { img.src = ''; reject(abortErr()); };
+      if (signal) signal.addEventListener('abort', onAbort, { once: true });
       img.onload = () => {
+        if (signal) signal.removeEventListener('abort', onAbort);
+        if (signal && signal.aborted) return reject(abortErr());
         const px = (tx - minTX) * tileSize;
         const py = (ty - minTY) * tileSize;
         ctx.drawImage(img, px, py);
@@ -1737,6 +1945,7 @@ const Elevation = {
         resolve();
       };
       img.onerror = () => {
+        if (signal) signal.removeEventListener('abort', onAbort);
         loaded++;
         failed++;
         showLoading(`Fetching tiles… ${loaded}/${total} (${tx},${ty} failed)`);
@@ -1862,7 +2071,9 @@ const Satellite = {
   // Composite the selected base imagery (IMAGERY_SOURCES[currentImagerySource]) for `bounds`
   // into a resolution×resolution RGB grid, aligned with the elevation grid (same bounds +
   // resample). Returns { width, height, rgb: Uint8Array(w*h*3) } or null on failure.
-  async fetch(bounds, resolution) {
+  // `signal` (optional) — user Cancel; rethrows AbortError so callers can distinguish it
+  // from an imagery-source failure (which returns null).
+  async fetch(bounds, resolution, signal = null) {
     try {
       const src = IMAGERY_SOURCES[currentImagerySource] || IMAGERY_SOURCES.eox;
       // Cap at the source's native zoom — alignment is by geographic bounds, not by matching
@@ -1881,11 +2092,23 @@ const Satellite = {
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
       const total = tilesX * tilesY; let loaded = 0, failed = 0;
-      const loadTile = (tx, ty) => new Promise(resolve => {
+      const abortErr = () => new DOMException('Aborted', 'AbortError');
+      const loadTile = (tx, ty) => new Promise((resolve, reject) => {
+        if (signal && signal.aborted) return reject(abortErr());
         const img = new Image();
         img.crossOrigin = 'anonymous';
-        img.onload = () => { ctx.drawImage(img, (tx-minTX)*tileSize, (ty-minTY)*tileSize); loaded++; showLoading(`Fetching imagery… ${loaded}/${total}`); resolve(); };
-        img.onerror = () => { loaded++; failed++; resolve(); };
+        const onAbort = () => { img.src = ''; reject(abortErr()); };
+        if (signal) signal.addEventListener('abort', onAbort, { once: true });
+        img.onload = () => {
+          if (signal) signal.removeEventListener('abort', onAbort);
+          if (signal && signal.aborted) return reject(abortErr());
+          ctx.drawImage(img, (tx-minTX)*tileSize, (ty-minTY)*tileSize);
+          loaded++; showLoading(`Fetching imagery… ${loaded}/${total}`); resolve();
+        };
+        img.onerror = () => {
+          if (signal) signal.removeEventListener('abort', onAbort);
+          loaded++; failed++; resolve();
+        };
         img.src = src.url.replace('{z}', zoom).replace('{y}', ty).replace('{x}', tx);
       });
       const promises = [];
@@ -1947,6 +2170,7 @@ const Satellite = {
       }
       return { width: w, height: h, rgb };
     } catch (e) {
+      if (e && e.name === 'AbortError') throw e;
       console.warn('Satellite imagery fetch/read failed:', e);
       return null;
     }
@@ -3076,7 +3300,7 @@ const Boundaries = {
       const popup = `<div style="font:13px -apple-system,sans-serif;min-width:160px;">`
         + `<div style="font-weight:600;margin-bottom:2px;">${esc(f.name)}</div>`
         + `<div style="font-size:11px;color:#666;margin-bottom:8px;">${esc(this.CLASSES[f.cls].label)}</div>`
-        + `<button onclick="Boundaries.selectCutout('${f.id}')" style="width:100%;padding:6px 8px;border:1px solid #FF4D1C;background:#FF4D1C;color:#000;border-radius:2px;font:600 12px sans-serif;cursor:pointer;">Use as cutout</button></div>`;
+        + `<button onclick="Boundaries.selectCutout('${f.id}')" style="width:100%;padding:6px 8px;border:1px solid ${ACCENT_INK};background:${ACCENT_INK};color:${ON_ACCENT};border-radius:2px;font:600 12px sans-serif;cursor:pointer;">Use as cutout</button></div>`;
       // Dashed outline keeps the map legible; a wide transparent halo underneath makes the
       // thin line easy to click. Both carry the popup.
       for (const path of f.paths) {
@@ -3117,7 +3341,7 @@ const Boundaries = {
 
     drawnItems.clearLayers();
     for (const r of poly.outers) {
-      L.polygon(r.map(p => [p.lat, p.lon]), { color: '#FF4D1C', weight: 2, fill: true, fillOpacity: 0.08 }).addTo(drawnItems);
+      L.polygon(r.map(p => [p.lat, p.lon]), { color: ACCENT_INK, weight: 2, fill: true, fillOpacity: 0.08 }).addTo(drawnItems);
     }
     map.closePopup();
     map.fitBounds(bnds);
@@ -3193,6 +3417,29 @@ function winterizeBands(cfg) {
     cfg.colors[cfg.colors.length - 1] = { name: 'Snow', hex: '#F2F5F7' };
   }
   return cfg;
+}
+
+// User-facing entry point for the Frame Style chip grid. Sets the hidden input value so
+// Settings.save persists it, syncs the chip .selected state, applies the preset (which
+// overwrites the frame form controls), and fires a change event so the debounced saver runs.
+function selectFrameStyle(style) {
+  const input = document.getElementById('frame-style');
+  if (!input) return;
+  input.value = style;
+  _syncFrameChip();
+  applyFramePreset(style);
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+// Reflect the hidden input's current value on the chip grid. Called on init/restore and
+// after every selectFrameStyle change so the visual state can never drift from the value.
+function _syncFrameChip() {
+  const v = document.getElementById('frame-style')?.value || 'custom';
+  document.querySelectorAll('.frame-chip').forEach(el => {
+    const on = el.getAttribute('data-style') === v;
+    el.classList.toggle('selected', on);
+    el.setAttribute('aria-checked', on ? 'true' : 'false');
+  });
 }
 
 // Frame style presets — set the frame controls to a coherent look in one click. "Custom"
@@ -5844,7 +6091,17 @@ const Preview = {
 // ═══════════════════════════════════════════════
 
 const UI = {
+  // First-visit hint anchored to the Leaflet.Draw toolbar. Shown whenever no area is
+  // selected (initial load and after the user deletes a selection); hidden the moment a
+  // selection lands. Called from updateSelectionInfo so every state change syncs it.
+  _syncDrawCallout() {
+    const el = document.getElementById('draw-callout');
+    if (!el) return;
+    el.classList.toggle('show', !State.selectedBounds);
+  },
+
   updateSelectionInfo() {
+    this._syncDrawCallout();
     const el = document.getElementById('selection-info');
     if (!State.selectedBounds) {
       el.innerHTML = '<p style="font-size:12px;color:var(--text-muted);">Draw a rectangle or circle on the map to select an area.</p>';
@@ -5931,9 +6188,11 @@ const UI = {
 
   // Fetch every layer for `bounds` (elevation, water, colour source, buildings, land-cover water
   // seed) and build + repair the mesh. `tileScale` forces a shared coordinate system (tiling).
+  // `signal` (optional) — cancels the run at the next phase boundary.
   // Returns { meshData, elevationData }. Pure builder — no preview / State writes / UI text.
-  async _buildMeshForBounds(bounds, resolution, tileScale = null) {
+  async _buildMeshForBounds(bounds, resolution, tileScale = null, signal = null) {
     const C = this._cache;
+    const chk = () => { if (signal && signal.aborted) throw new DOMException('Aborted', 'AbortError'); };
 
     // Elevation — cache a PRISTINE copy: flattenLakes mutates the array in place, so each run
     // gets its own clone of the cached original.
@@ -5943,8 +6202,9 @@ const UI = {
     if (ecached) {
       elevationData = { ...ecached, data: ecached.data.slice() };
     } else {
+      chk();
       showLoading('Fetching elevation data…');
-      elevationData = await Elevation.fetchElevation(bounds, resolution);
+      elevationData = await Elevation.fetchElevation(bounds, resolution, signal);
       C.set(ek, { ...elevationData, data: elevationData.data.slice() });
     }
 
@@ -5968,8 +6228,9 @@ const UI = {
       const k = C.key(bounds, 'sat', currentImagerySource, resolution);
       let v = C.get(k);
       if (!v) {
+        chk();
         showLoading('Fetching satellite imagery…');
-        v = await Satellite.fetch(bounds, resolution);
+        v = await Satellite.fetch(bounds, resolution, signal);
         if (v) C.set(k, v);
       }
       return v;
@@ -5978,6 +6239,7 @@ const UI = {
       const k = C.key(bounds, 'lc', resolution);
       let v = C.get(k);
       if (!v) {
+        chk();
         v = await Landcover.fetch(bounds, resolution);
         if (v) C.set(k, v);
       }
@@ -6016,6 +6278,7 @@ const UI = {
       const bk = C.key(bounds, 'bld');
       buildings = C.get(bk);
       if (!buildings) {
+        chk();
         showLoading('Fetching buildings…');
         buildings = await Buildings.fetch(bounds);
         if (buildings.length) C.set(bk, buildings);
@@ -6054,6 +6317,7 @@ const UI = {
       const classes = Boundaries.enabledClasses();
       if (classes.length) {
         try {
+          chk();
           showLoading('Fetching boundaries…');
           const feats = await Boundaries.fetch(bounds, classes);
           for (const f of feats) for (const p of f.paths) State.engraveBoundaries.push(p);
@@ -6061,10 +6325,12 @@ const UI = {
       }
     }
 
+    chk();
     showLoading('Generating mesh…');
     await new Promise(r => setTimeout(r, 50));
     const rawMesh = MeshGen.generate(elevationData, lakeMask, lakeElevMap, colorImage, buildings, lcWaterMask, tileScale);
 
+    chk();
     showLoading('Checking mesh…');
     await new Promise(r => setTimeout(r, 20));
     const meshData = MeshRepair.repair(rawMesh);
@@ -6081,6 +6347,18 @@ const UI = {
     return true;
   },
 
+  // Active AbortController for a running Generate / Tiles job. Set on entry; cleared in finally.
+  _runCtrl: null,
+
+  // Called from the Cancel button on the loading overlay.
+  cancelRun() {
+    if (this._runCtrl) {
+      this._runCtrl.abort();
+      const el = document.getElementById('loading-text');
+      if (el) el.textContent = 'Cancelling…';
+    }
+  },
+
   async generateModel() {
     if (!State.selectedBounds) {
       toast('Draw a rectangle on the map first.');
@@ -6088,11 +6366,14 @@ const UI = {
     }
     const resolution = parseInt(document.getElementById('mesh-res').value) || 512;
     if (!this._confirmHighRes(resolution)) return;
+    this._runCtrl = new AbortController();
+    const signal = this._runCtrl.signal;
     try {
-      const { meshData, elevationData } = await this._buildMeshForBounds(State.selectedBounds, resolution);
+      const { meshData, elevationData } = await this._buildMeshForBounds(State.selectedBounds, resolution, null, signal);
       State.elevationData = elevationData;
       State.meshData = meshData;
 
+      if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
       showLoading('Building preview…');
       await new Promise(r => setTimeout(r, 50));
       Preview.showMesh(State.meshData);
@@ -6105,9 +6386,21 @@ const UI = {
       toast(`${s.triangles.toLocaleString()} triangles · mesh sealed${repairNote}`);
     } catch (e) {
       hideLoading();
+      if (e && e.name === 'AbortError') {
+        Led.set('');
+        toast('Cancelled');
+        return;
+      }
       Led.set('err', 2500);
       console.error(e);
-      toast('Error generating model: ' + e.message);
+      const { text, retryable } = _classifyError(e, 'generate');
+      if (retryable) {
+        toast(text, { duration: 8000, action: 'Retry', onAction: () => this.generateModel() });
+      } else {
+        toast(text, 7000);
+      }
+    } finally {
+      this._runCtrl = null;
     }
   },
 
@@ -6167,11 +6460,14 @@ const UI = {
     const west = b.getWest(), east = b.getEast(), south = b.getSouth(), north = b.getNorth();
     const dLon = (east - west) / cols, dLat = (north - south) / rows;
 
+    this._runCtrl = new AbortController();
+    const signal = this._runCtrl.signal;
+    const chk = () => { if (signal.aborted) throw new DOMException('Aborted', 'AbortError'); };
     try {
       // Shared datum + scale across all tiles, computed once from a whole-area pass so the
       // pieces assemble into one continuous model (see MeshGen.generate `tileScale`).
       showLoading('Measuring area…');
-      const whole = await Elevation.fetchElevation(b, Math.min(resolution, 512));
+      const whole = await Elevation.fetchElevation(b, Math.min(resolution, 512), signal);
       let minElev = Infinity, maxElev = -Infinity;
       for (let i = 0; i < whole.data.length; i++) {
         const z = Math.max(0, whole.data[i]);   // clamp sub-sea like MeshGen
@@ -6194,17 +6490,19 @@ const UI = {
       // Row 0 = north (top); filenames read top-left → bottom-right.
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
+          chk();
           k++;
           showLoading(`Tile ${k}/${total} (r${r + 1} c${c + 1})…`);
           const ts = north - (r + 1) * dLat, tn = north - r * dLat;
           const tw = west + c * dLon, te = west + (c + 1) * dLon;
           const tb = L.latLngBounds([[ts, tw], [tn, te]]);
-          const { meshData } = await this._buildMeshForBounds(tb, resolution, tileScale);
+          const { meshData } = await this._buildMeshForBounds(tb, resolution, tileScale, signal);
           const { blob } = await ThreeMFExport.generate(meshData, { skipFrame: true });
           zip.file(`tile_r${r + 1}_c${c + 1}.3mf`, blob);
         }
       }
 
+      chk();
       showLoading('Packaging ZIP…');
       const zipBlob = await zip.generateAsync({ type: 'blob' });
       downloadBlob(zipBlob, exportName('zip', `_tiles_${rows}x${cols}`));
@@ -6213,9 +6511,21 @@ const UI = {
       toast(`${total} tiles exported · assemble ${cols}×${rows} (${(cols*printSize)|0}×${(rows*printSize)|0} mm)`);
     } catch (e) {
       hideLoading();
+      if (e && e.name === 'AbortError') {
+        Led.set('');
+        toast('Cancelled');
+        return;
+      }
       Led.set('err', 2500);
       console.error(e);
-      toast('Error generating tiles: ' + e.message);
+      const { text, retryable } = _classifyError(e, 'tiles');
+      if (retryable) {
+        toast(text, { duration: 8000, action: 'Retry', onAction: () => this.generateTiles() });
+      } else {
+        toast(text, 7000);
+      }
+    } finally {
+      this._runCtrl = null;
     }
   },
 
@@ -6230,7 +6540,9 @@ const UI = {
         toast('STL downloaded!');
       } catch (e) {
         hideLoading();
-        toast('STL export error: ' + e.message);
+        console.error(e);
+        const { text } = _classifyError(e, 'stl');
+        toast(text, 6000);
       }
     }, 50);
   },
@@ -6249,7 +6561,9 @@ const UI = {
       }
     } catch (e) {
       hideLoading();
-      toast('3MF export error: ' + e.message);
+      console.error(e);
+      const { text } = _classifyError(e, '3mf');
+      toast(text, 6000);
     }
   },
 };
@@ -6346,7 +6660,7 @@ const Paint = {
       const b = document.createElement('button');
       b.type = 'button';
       b.title = label;
-      b.style.cssText = `flex:0 0 auto;box-sizing:border-box;width:24px;height:24px;padding:0;border-radius:6px;cursor:pointer;` +
+      b.style.cssText = `flex:0 0 auto;box-sizing:border-box;width:24px;height:24px;padding:0;border-radius:2px;cursor:pointer;` +
         (hex ? `background:${hex};` : `background:repeating-conic-gradient(#555 0% 25%,#333 0% 50%) 50%/10px 10px;`) +
         `border:2px solid ${sel ? '#fff' : 'rgba(255,255,255,0.25)'};` +
         (sel ? 'outline:1px solid var(--accent);outline-offset:2px;' : '');
@@ -6829,6 +7143,8 @@ function initApp() {
   Preview.init();
   Settings.restore();   // after MapModule.init so setBaseImagery targets a live map
   Settings.attach();
+  _syncFrameChip();         // reflect the default 'custom' selection on the chip grid
+  UI._syncDrawCallout();  // show the [Draw here →] hint while no selection exists
   Intro.maybeShow();    // first-visit how-to (dismissible)
 
   // Keyboard floor: accordion + fold headers are real controls, so make them focusable and
