@@ -40,6 +40,11 @@
   --topo-flat:     #c47f17;
   --topo-hills:    #3d8c40;
   --topo-mountain: #c8c8c8;
+  /* Protected-area overlay ink — categorical map data (like the tile-grid amber), tuned to
+     read over satellite imagery. Single source for both the map lines and the panel legend. */
+  --bnd-park:   #4cc264;
+  --bnd-forest: #d1a33a;
+  --bnd-wild:   #b184ec;
   --danger:  #f85149;
   --warning: #f0a020;
   --success: #3fb950;
@@ -535,6 +540,38 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
   overflow: hidden;
 }
 .leaflet-draw-toolbar a { filter: invert(1) grayscale(1) brightness(1.35); }
+
+/* Popups match the faceplate rather than Leaflet's default white bubble — the instrument
+   stays consistent when a protected-area popup opens over the map. */
+.leaflet-popup-content-wrapper {
+  background: var(--face) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--hairline-hi) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: 0 10px 34px rgba(0,0,0,0.55) !important;
+}
+.leaflet-popup-tip {
+  background: var(--face) !important;
+  border: 1px solid var(--hairline-hi) !important;
+  box-shadow: none !important;
+}
+.leaflet-popup-content { margin: 11px 13px !important; font-size: 13px; line-height: 1.4; }
+.leaflet-popup-close-button { color: var(--text-muted) !important; padding: 6px 7px 0 0 !important; }
+.leaflet-popup-close-button:hover { color: var(--text-primary) !important; background: transparent !important; }
+
+/* Protected-area popup body. */
+.bnd-popup { min-width: 168px; }
+.bnd-popup-title { font-weight: 600; color: var(--text-primary); margin-bottom: 3px; }
+.bnd-popup-cls {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: 0.6px;
+  margin-bottom: 10px;
+}
+.bnd-popup-cls .dot { width: 9px; height: 9px; border-radius: 2px; flex: 0 0 auto; }
+
+/* Legend swatch beside each protected-area toggle — the colour that layer draws on the map. */
+.bnd-key { width: 11px; height: 11px; border-radius: 2px; flex: 0 0 auto; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.3); }
 
 /* ─── Frame style: 4×2 grid of SVG silhouette chips, recognition-first alternative
    to a blind <select>. Selected chip inverts to the Signal Orange border. ─── */
@@ -1054,14 +1091,17 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
         <p style="font-size:11px;color:var(--text-muted);margin:0 0 8px;">Overlay park / forest / wilderness boundaries (OpenStreetMap). Lines load on the map at zoom ≥ 7.</p>
         <label class="input-group" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
           <input type="checkbox" id="bnd-park" style="width:16px;height:16px;" onchange="Boundaries.refresh()">
+          <span class="bnd-key" style="background:var(--bnd-park);"></span>
           <span>National / state parks</span>
         </label>
         <label class="input-group" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:6px;">
           <input type="checkbox" id="bnd-forest" style="width:16px;height:16px;" onchange="Boundaries.refresh()">
+          <span class="bnd-key" style="background:var(--bnd-forest);"></span>
           <span>National forests</span>
         </label>
         <label class="input-group" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:6px;">
           <input type="checkbox" id="bnd-wild" style="width:16px;height:16px;" onchange="Boundaries.refresh()">
+          <span class="bnd-key" style="background:var(--bnd-wild);"></span>
           <span>Wilderness areas</span>
         </label>
         <button class="btn btn-sm" style="margin-top:10px;width:100%;" onclick="Boundaries.reload()">↻ Load areas in view</button>
@@ -1725,8 +1765,7 @@ function exportName(ext, midfix = '') {
 // Mirrors of the design-system ink pair for the primary "action" button in JS-generated
 // contexts (Leaflet popup HTML, canvas draws) where CSS custom properties can't be reached.
 // Update these in one place if --accent or on-accent text ever changes.
-const ACCENT_INK = '#FF4D1C';   // --accent (Signal Orange)
-const ON_ACCENT  = '#000';       // on-accent text (per DESIGN.md §5)
+const ACCENT_INK = '#FF4D1C';   // --accent (Signal Orange), for Leaflet vector strokes (need a literal)
 
 let map, drawnItems, drawControl;
 let baseImageryLayer = null, labelLayer = null, tileGridLayer = null;
@@ -2995,12 +3034,18 @@ const Boundaries = {
   // national forests (protect_class 6) are enormous, so pulling them only when asked keeps
   // requests light and far more likely to survive a busy server.
   CLASSES: {
-    park:   { label: 'Park',       mapColor: '#39B54A',
+    park:   { label: 'Park',
               sel: b => `nwr["boundary"="national_park"](${b});nwr["boundary"="protected_area"]["protect_class"~"^(2|3)$"](${b});` },
-    forest: { label: 'Forest',     mapColor: '#C9A227',
+    forest: { label: 'Forest',
               sel: b => `nwr["boundary"="protected_area"]["protect_class"="6"](${b});` },
-    wild:   { label: 'Wilderness', mapColor: '#A879E6',
+    wild:   { label: 'Wilderness',
               sel: b => `nwr["boundary"="protected_area"]["protect_class"="1b"](${b});` },
+  },
+
+  // Overlay colour per class, sourced from the CSS tokens so the map lines and the panel
+  // legend can never drift apart.
+  _color(cls) {
+    return getComputedStyle(document.documentElement).getPropertyValue('--bnd-' + cls).trim() || '#4cc264';
   },
 
   // Public Overpass endpoints, tried in order — the canonical instance is frequently
@@ -3294,13 +3339,14 @@ const Boundaries = {
     this._layer.clearLayers();
     const enabled = new Set(classes);
     const shown = features.filter(f => enabled.has(f.cls));
+    const colors = { park: this._color('park'), forest: this._color('forest'), wild: this._color('wild') };
     const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     for (const f of shown) {
-      const color = this.CLASSES[f.cls].mapColor;
-      const popup = `<div style="font:13px -apple-system,sans-serif;min-width:160px;">`
-        + `<div style="font-weight:600;margin-bottom:2px;">${esc(f.name)}</div>`
-        + `<div style="font-size:11px;color:#666;margin-bottom:8px;">${esc(this.CLASSES[f.cls].label)}</div>`
-        + `<button onclick="Boundaries.selectCutout('${f.id}')" style="width:100%;padding:6px 8px;border:1px solid ${ACCENT_INK};background:${ACCENT_INK};color:${ON_ACCENT};border-radius:2px;font:600 12px sans-serif;cursor:pointer;">Use as cutout</button></div>`;
+      const color = colors[f.cls];
+      const popup = `<div class="bnd-popup">`
+        + `<div class="bnd-popup-title">${esc(f.name)}</div>`
+        + `<div class="bnd-popup-cls"><span class="dot" style="background:${color};"></span>${esc(this.CLASSES[f.cls].label)}</div>`
+        + `<button class="btn btn-sm btn-primary btn-block" onclick="Boundaries.selectCutout('${f.id}')">Use as cutout</button></div>`;
       // Dashed outline keeps the map legible; a wide transparent halo underneath makes the
       // thin line easy to click. Both carry the popup.
       for (const path of f.paths) {
@@ -6660,10 +6706,13 @@ const Paint = {
       const b = document.createElement('button');
       b.type = 'button';
       b.title = label;
-      b.style.cssText = `flex:0 0 auto;box-sizing:border-box;width:24px;height:24px;padding:0;border-radius:2px;cursor:pointer;` +
+      // Selection reads as one Signal-Orange ring (the accent = state, per DESIGN.md's One
+      // Orange rule); an inset dark edge keeps every chip crisp against the toolbar. The
+      // transparent ring on unselected chips reserves the space so selecting never shifts layout.
+      b.style.cssText = `flex:0 0 auto;box-sizing:border-box;width:24px;height:24px;padding:0;border-radius:2px;cursor:pointer;border:none;` +
         (hex ? `background:${hex};` : `background:repeating-conic-gradient(#555 0% 25%,#333 0% 50%) 50%/10px 10px;`) +
-        `border:2px solid ${sel ? '#fff' : 'rgba(255,255,255,0.25)'};` +
-        (sel ? 'outline:1px solid var(--accent);outline-offset:2px;' : '');
+        `box-shadow:inset 0 0 0 1px rgba(0,0,0,0.35);` +
+        (sel ? 'outline:2px solid var(--accent);outline-offset:2px;' : 'outline:2px solid transparent;outline-offset:2px;');
       b.addEventListener('click', () => {
         this.selectedBand = band;
         this._buildPalette();
