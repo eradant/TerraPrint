@@ -114,11 +114,12 @@ header .header-actions { display: flex; align-items: center; gap: 8px; }
   left: 0;
   top: 0;
   bottom: 0;
-  width: 320px;
+  width: 360px;
   z-index: 900;
   background: var(--face);
   border-right: 1px solid var(--hairline-hi);
   overflow-y: auto;
+  overflow-x: hidden;   /* a vertical control stack never scrolls sideways — no stray bottom scrollbar */
   display: flex;
   flex-direction: column;
   padding: 4px 0 0;
@@ -627,7 +628,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 #neatline {
   position: absolute;
   top: 10px; right: 10px; bottom: 10px;
-  left: 336px;                       /* clears the docked faceplate */
+  left: 376px;                       /* clears the 360px docked faceplate + 16px */
   border: 1px solid rgba(168,121,74,0.38);
   pointer-events: none;
   z-index: 640;
@@ -645,7 +646,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 #neatline::after  { bottom: -8px; right: -8px; }
 #map-marginalia {
   position: absolute;
-  left: 348px;
+  left: 388px;
   bottom: 16px;
   z-index: 640;
   pointer-events: none;
