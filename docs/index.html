@@ -812,8 +812,8 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
   #draw-callout.show { animation: none; }
 }
 
-/* Keyboard focus: one visible treatment everywhere (functional blue, no glow) */
-:focus-visible { outline: 1px solid rgba(255,77,28,0.6); outline-offset: 2px; }
+/* Keyboard focus: one visible terracotta ring everywhere, no glow */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* Reduced motion: state changes become instant; nothing is information-gated on animation */
 @media (prefers-reduced-motion: reduce) {
@@ -1883,7 +1883,7 @@ function exportName(ext, midfix = '') {
 // Mirrors of the design-system ink pair for the primary "action" button in JS-generated
 // contexts (Leaflet popup HTML, canvas draws) where CSS custom properties can't be reached.
 // Update these in one place if --accent or on-accent text ever changes.
-const ACCENT_INK = '#FF4D1C';   // --accent (Signal Orange), for Leaflet vector strokes (need a literal)
+const ACCENT_INK = '#c67139';   // --accent (terracotta), for Leaflet vector strokes (need a literal)
 
 let map, drawnItems, drawControl;
 let baseImageryLayer = null, labelLayer = null, tileGridLayer = null;
@@ -6030,7 +6030,7 @@ const Preview = {
     this._initResize();
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x161b22);
+    this.scene.background = new THREE.Color(0x201e1d);   // match the canvas well
 
     this.camera = new THREE.PerspectiveCamera(45, wrap.clientWidth / wrap.clientHeight, 0.1, 5000);
 
