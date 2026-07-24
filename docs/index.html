@@ -196,7 +196,7 @@ header .header-actions { display: flex; align-items: center; gap: 10px; margin-l
   transition: box-shadow 0.18s var(--ease-mech), background 0.18s var(--ease-mech);
 }
 .panel-section:not(.collapsed) { box-shadow: var(--shadow-sm); }
-.panel-section.collapsed { background: color-mix(in srgb, var(--neutral-100) 55%, transparent); }
+.panel-section.collapsed { background: var(--sage-100); border-color: color-mix(in srgb, var(--accent-2) 32%, transparent); box-shadow: none; }
 .panel-section h3 {
   font-family: var(--font-heading);
   font-size: 17px;
@@ -214,7 +214,7 @@ header .header-actions { display: flex; align-items: center; gap: 10px; margin-l
   display: grid; place-items: center;
   font-family: var(--font-body); font-size: 12px; font-weight: 700;
 }
-.panel-section.collapsed h3::before { background: var(--neutral-400); color: var(--neutral-100); }
+.panel-section.collapsed h3::before { content: '\2713'; background: var(--accent-2); color: #fbfaf5; }
 .panel-section.collapsible h3 { cursor: pointer; user-select: none; }
 .panel-section.collapsible h3:hover { color: var(--accent-ink); }
 .panel-section.collapsible h3::after {
@@ -224,8 +224,20 @@ header .header-actions { display: flex; align-items: center; gap: 10px; margin-l
   transition: transform 0.2s var(--ease-mech);
   color: var(--neutral-500);
 }
-.panel-section.collapsed h3::after { transform: rotate(-90deg); }
+.panel-section.collapsed h3::after {
+  content: 'Edit';
+  transform: none;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--accent-ink);
+}
 .panel-section.collapsed .section-body { display: none; }
+/* Per-step one-line summary: only shown when the step is collapsed (done). */
+.step-titles { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.step-summary { display: none; font-family: var(--font-body); font-size: 12px; font-weight: 400; letter-spacing: 0; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.panel-section.collapsed .step-summary:not(:empty) { display: block; }
 .section-body { padding: 0 16px 16px; }
 /* Sub-heading inside a step (Water / Buildings / Tiling / …) — a small terracotta kicker */
 .sub-head {
@@ -843,7 +855,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
   <div class="panel" id="side-panel">
 
     <div class="panel-section collapsible" id="sec-model">
-      <h3 onclick="UI.toggleSection(this)">Model</h3>
+      <h3 onclick="UI.toggleSection(this)"><span class="step-titles"><span>Model</span><span class="step-summary" id="sum-model"></span></span></h3>
       <div class="section-body">
         <div class="input-group">
           <label>Print Size (mm per tile)</label>
@@ -885,7 +897,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
     </div>
 
     <div class="panel-section collapsible collapsed" id="sec-imagery">
-      <h3 onclick="UI.toggleSection(this)">Imagery &amp; Color</h3>
+      <h3 onclick="UI.toggleSection(this)"><span class="step-titles"><span>Imagery &amp; Color</span><span class="step-summary" id="sum-imagery"></span></span></h3>
       <div class="section-body">
         <!-- Mode switch: everything below shows/hides per mode (Advanced._updateSectionVisibility) -->
         <div class="input-group" style="display:flex;align-items:center;gap:8px;">
@@ -1131,7 +1143,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
     </div>
 
     <div class="panel-section collapsible collapsed" id="sec-features">
-      <h3 onclick="UI.toggleSection(this)">Terrain Features</h3>
+      <h3 onclick="UI.toggleSection(this)"><span class="step-titles"><span>Terrain Features</span><span class="step-summary" id="sum-features"></span></span></h3>
       <div class="section-body">
         <div class="sub-head sub-head-hydro">Water</div>
         <label class="input-group" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
@@ -1232,7 +1244,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
     </div>
 
     <div class="panel-section collapsible collapsed" id="sec-composition">
-      <h3 onclick="UI.toggleSection(this)">Composition</h3>
+      <h3 onclick="UI.toggleSection(this)"><span class="step-titles"><span>Composition</span><span class="step-summary" id="sum-composition"></span></span></h3>
       <div class="section-body">
         <div class="sub-head">Frame &amp; Card</div>
         <div class="input-group" style="display:flex;align-items:center;gap:8px;">
@@ -7281,7 +7293,7 @@ function initApp() {
     return;
   }
   MapModule.init();
-  Preview.init();
+  try { Preview.init(); } catch (e) { console.warn('3D preview unavailable (WebGL):', e && e.message); }
   Settings.restore();   // after MapModule.init so setBaseImagery targets a live map
   Settings.attach();
 
@@ -7310,8 +7322,32 @@ function initApp() {
     let n = 4; try { n = getBandConfig().colors.length; } catch (e) {}
     el.textContent = `${label} · ${n} color${n === 1 ? '' : 's'}`;
   };
-  document.getElementById('side-panel')?.addEventListener('change', syncContextTag);
+  // Per-step summaries shown when a step collapses (done). Defensive: missing ids are skipped.
+  const syncStepSummaries = () => {
+    const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+    const v = (id, d) => document.getElementById(id)?.value ?? d;
+    set('sum-model', `${v('print-size', 150)}mm · ${v('mesh-res', 512)} samples · ${v('vert-exag', 2)}× height`);
+    const advOn = document.getElementById('adv-colors-on')?.checked;
+    const src = advOn ? (document.getElementById('adv-source')?.value || 'elevation') : 'elevation';
+    const label = { elevation: 'Elevation', satellite: 'Satellite', hybrid: 'Hybrid', landcover: 'Land cover' }[src] || src;
+    let n = 4; try { n = getBandConfig().colors.length; } catch (e) {}
+    set('sum-imagery', `${label} · ${n} filaments`);
+    const feats = [];
+    if (document.getElementById('water-detect')?.checked) feats.push('water');
+    if (document.getElementById('buildings-enable')?.checked) feats.push('buildings');
+    if (document.getElementById('bnd-engrave')?.checked) feats.push('boundaries');
+    if (State.gpxTrack) feats.push('route');
+    set('sum-features', feats.length ? feats.join(' · ') : 'none added');
+    const frame = document.getElementById('frame-enable')?.checked;
+    const tiling = document.getElementById('tiling-enable')?.checked;
+    const grid = tiling ? `${v('tile-cols', 1)}×${v('tile-rows', 1)} tiles` : '';
+    set('sum-composition', [frame ? 'frame' : 'no frame', grid].filter(Boolean).join(' · '));
+  };
+  const panelEl = document.getElementById('side-panel');
+  panelEl?.addEventListener('change', () => { syncContextTag(); syncStepSummaries(); });
+  panelEl?.addEventListener('input', syncStepSummaries);
   syncContextTag();
+  syncStepSummaries();
 
   _syncFrameChip();         // reflect the default 'custom' selection on the chip grid
   UI._syncDrawCallout();  // show the [Draw here →] hint while no selection exists
