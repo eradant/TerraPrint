@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;700&display=swap">
+<script>/* Set theme before first paint (no flash): saved choice, else OS preference. */(function(){try{var k='terraprint-theme',t=localStorage.getItem(k);if(t!=='dark'&&t!=='light')t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -41,6 +42,7 @@
   --accent:      #c67139;               /* the fill (buttons, toggles, slider fill, selection) */
   --accent-hover: #b2622d;              /* accent-600 */
   --accent-ink:  #8c491a;               /* accent-700 — terracotta as TEXT/links on cream (5:1) */
+  --on-accent:   #faf6ef;               /* text on the accent fill (light on terracotta) */
   --accent-2:    #7a8a5e;               /* sage — fills: brand mark, done pills */
   --hydro:       #56633f;               /* water-role UI ink: sage-700, AA on cream (print water stays --topo-water) */
   /* Terracotta ramp (hover/press/tints) */
@@ -77,6 +79,39 @@
   --font-body: "Figtree", -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
+
+/* ── DARK MODE: same Organic system, warm-charcoal ground, BLUE action (replaces terracotta).
+   Only token VALUES change; every var() usage re-themes. Ramps invert (100 = raised-dark). ── */
+:root[data-theme="dark"] {
+  --bg-deep:    #1c1a17;                 /* warm-charcoal ground, header */
+  --face:       #262320;                 /* raised surface — cards, modals, toolbars */
+  --face-deep:  #201d1a;                 /* deeper surface — footers, map controls, wells */
+  --bg-surface: #2a2620;                 /* control fills */
+  --bg-hover:   #342f28;
+  --sepia:       #9a8f7e;
+  --sepia-lit:   #b7ac99;
+  --hairline:    color-mix(in srgb, #ece7de 12%, transparent);
+  --hairline-hi: color-mix(in srgb, #ece7de 22%, transparent);
+  --text-primary:   #ece7de;
+  --text-secondary: #b7ae9f;
+  --text-muted:     #948b7d;
+  --accent:      #3d7fc4;                /* blue action (replaces terracotta) */
+  --accent-hover: #4f8ecf;
+  --accent-ink:  #86b8ee;               /* blue as TEXT/links on dark */
+  --on-accent:   #ffffff;               /* text on the blue fill */
+  --accent-2:    #8ba871;               /* sage, lifted for dark */
+  --hydro:       #9db87f;               /* water-role ink on dark */
+  --accent-100: #17293c; --accent-200: #1f3a54; --accent-300: #2b527a;
+  --accent-500: #3f83c9; --accent-600: #4f8ecf; --accent-700: #92c0f0; --accent-800: #c4dcf7;
+  --sage-100: #1f2819; --sage-200: #2b3823; --sage-500: #7f9a6a;
+  --sage-600: #8ba871; --sage-700: #a8c091; --sage-800: #cfe0b3;
+  --neutral-100: #262320; --neutral-200: #2f2b26; --neutral-300: #3a352e;
+  --neutral-400: #4c453c; --neutral-500: #6d6559; --neutral-600: #948b7d;
+  --neutral-700: #b7ae9f; --neutral-800: #d6cec0; --neutral-900: #ece7de;
+  --danger:  #e5705f; --warning: #d6a24a; --success: #8ba871;
+}
+/* In dark mode, darken the satellite instead of brightening it. */
+:root[data-theme="dark"] .leaflet-tile-pane { filter: saturate(0.7) contrast(1.02) brightness(0.72); }
 
 body {
   font-family: var(--font-body);
@@ -154,7 +189,7 @@ header .header-actions { display: flex; align-items: center; gap: 10px; margin-l
 .intro-steps li::before {
   content: counter(instep); flex: none; margin-top: 1px;
   width: 26px; height: 26px; border-radius: 50%;
-  background: var(--accent); color: var(--bg-deep);
+  background: var(--accent); color: var(--on-accent);
   display: grid; place-items: center;
   font-weight: 700; font-size: 12px; font-variant-numeric: tabular-nums;
 }
@@ -424,7 +459,7 @@ input[type="range"] { width: 100%; }
 .btn-primary {
   background: var(--accent);   /* the one action color */
   border-color: var(--accent);
-  color: var(--bg-deep);
+  color: var(--on-accent);
 }
 .btn-primary:hover { background: var(--accent-600); border-color: var(--accent-600); }
 .btn-primary:active { background: var(--accent-700); border-color: var(--accent-700); }
@@ -440,6 +475,13 @@ input[type="range"] { width: 100%; }
   border-color: transparent; background: transparent; color: var(--accent-ink); padding-inline: 10px;
 }
 .btn-ghost:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); border-color: transparent; }
+/* Theme toggle: moon in light (→ go dark), sun in dark (→ go light). */
+.theme-toggle { padding: 6px 9px; display: inline-flex; align-items: center; }
+.theme-toggle svg { display: block; color: var(--text-secondary); }
+.theme-toggle:hover svg { color: var(--text-primary); }
+.theme-toggle .ico-sun { display: none; }
+:root[data-theme="dark"] .theme-toggle .ico-moon { display: none; }
+:root[data-theme="dark"] .theme-toggle .ico-sun { display: block; }
 
 /* ─── Map ─── */
 #map-container { flex: 1; position: relative; }
@@ -868,6 +910,10 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
   </div>
   <span class="tag tag-neutral" id="context-tag">satellite · 8 colors</span>
   <div class="header-actions">
+    <button class="btn btn-sm theme-toggle" onclick="Theme.toggle()" title="Toggle dark mode" aria-label="Toggle dark mode">
+      <svg class="ico-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      <svg class="ico-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    </button>
     <button class="btn btn-ghost btn-sm" onclick="Intro.show()" title="How it works">How it works</button>
     <button class="btn btn-sm" onclick="Settings.reset()" title="Reset all settings to defaults">↺ Reset</button>
   </div>
@@ -1738,6 +1784,17 @@ const Settings = {
 // ═══════════════════════════════════════════════
 //  INTRO  (first-visit how-to overlay)
 // ═══════════════════════════════════════════════
+
+// Light/dark theme. The value is applied to <html data-theme> before first paint by the
+// inline <head> script; this just flips + persists it. Every color re-themes via the tokens.
+const Theme = {
+  KEY: 'terraprint-theme',
+  toggle() {
+    const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem(this.KEY, next); } catch (e) {}
+  },
+};
 
 const Intro = {
   KEY: 'terraprint-intro-dismissed',
