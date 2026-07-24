@@ -21,11 +21,11 @@
   /* ── ORGANIC: warm cream ground, terracotta action, sage nature. Variable NAMES are kept
      from the old Quad Bench system so every var() usage across the file re-themes at once;
      only the values change. ── */
-  --bg-deep:    #f5ead8;                 /* cream page ground, header */
-  --face:       #ebddc5;                 /* surface — sidebar cards, modals, toolbars */
-  --face-deep:  #e3d4ba;                 /* deeper surface — footers, map controls, wells */
-  --bg-surface: #f1e7d5;                 /* raised control fills */
-  --bg-hover:   #e7d8bd;
+  --bg-deep:    #f4f1ea;                 /* warm-paper ground (chroma pulled off the beige tell) */
+  --face:       #e9e5dc;                 /* surface — sidebar cards, modals, toolbars */
+  --face-deep:  #e0dbd0;                 /* deeper surface — footers, map controls, wells */
+  --bg-surface: #f1ede6;                 /* raised control fills */
+  --bg-hover:   #e6e1d7;
   /* Structure: soft ink hairlines (neatline/marginalia retired) */
   --sepia:       #82796a;                /* was structure ink — now neutral-600 */
   --sepia-lit:   #645c50;
@@ -50,8 +50,8 @@
   --sage-100: #f0fae1; --sage-200: #e1eecc; --sage-500: #8fa073;
   --sage-600: #728157; --sage-700: #56633f; --sage-800: #3d472b;
   /* Neutrals (shared lightness scale) */
-  --neutral-100: #f9f4ed; --neutral-200: #eee7db; --neutral-300: #dcd3c4;
-  --neutral-400: #c0b6a5; --neutral-500: #a19786; --neutral-600: #82796a;
+  --neutral-100: #f7f4ee; --neutral-200: #ebe7df; --neutral-300: #d8d3c9;
+  --neutral-400: #bcb6ab; --neutral-500: #9c968b; --neutral-600: #7f776d;
   --neutral-700: #645c50; --neutral-800: #474238; --neutral-900: #2e2b25;
   /* Print-DATA colors are NOT theme colors — real filament hexes, shown as circular swatches */
   --topo-water:    #2d6abf;
@@ -206,15 +206,18 @@ header .header-actions { display: flex; align-items: center; gap: 10px; margin-l
   display: flex;
   align-items: center;
 }
+/* Status dot (not a step number — the cards are a free-form checklist, not an ordered wizard):
+   active step = terracotta ring, done step = filled sage check. */
 .panel-section h3::before {
-  content: counter(step);
-  width: 25px; height: 25px; flex: none; margin-right: 11px;
+  content: '';
+  width: 22px; height: 22px; flex: none; margin-right: 12px;
   border-radius: 50%;
-  background: var(--accent); color: var(--bg-deep);
+  background: var(--accent-100);
+  box-shadow: inset 0 0 0 2px var(--accent);
   display: grid; place-items: center;
   font-family: var(--font-body); font-size: 12px; font-weight: 700;
 }
-.panel-section.collapsed h3::before { content: '\2713'; background: var(--accent-2); color: #fbfaf5; }
+.panel-section.collapsed h3::before { content: '\2713'; background: var(--accent-2); color: #fbfaf5; box-shadow: none; }
 .panel-section.collapsible h3 { cursor: pointer; user-select: none; }
 .panel-section.collapsible h3:hover { color: var(--accent-ink); }
 .panel-section.collapsible h3::after {
@@ -1974,7 +1977,7 @@ function drawTileGrid() {
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       L.rectangle([[s + r*dLat, w + c*dLon], [s + (r+1)*dLat, w + (c+1)*dLon]], {
-        color: '#F0A020', weight: 1, fill: false, interactive: false,
+        color: '#c67139', weight: 1, fill: false, interactive: false,   // terracotta tile grid
       }).addTo(tileGridLayer);
     }
   }
