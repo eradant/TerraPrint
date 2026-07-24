@@ -32,17 +32,19 @@ backend.
 
 ## Brand Personality
 
-Precise, technical, quiet. An instrument, not an app: the terrain is the spectacle, the chrome
-stays out of the way. Reference feel: slicer software (OrcaSlicer / Bambu Studio) — a
-preview-centric dark workspace with dense, trustworthy right-panel controls where everything
-serves the model.
+Warm, tactile, encouraging — a field guide for making, not a cold instrument. The "Organic"
+system: a cream paper ground, soft rounded surface cards, one earthy terracotta for action, sage
+for nature/water, Caprasimo display headings over Figtree. The terrain is still the spectacle and
+the chrome still serves the model, but the mood is approachable and craft-like rather than
+industrial. The workflow reads as friendly numbered step cards.
 
 ## Anti-references
 
-- The vibe-coded AI aesthetic: big radii, glows, gradient text, pill buttons, cream backgrounds,
-  generic SaaS landing energy.
-- Toy/gamified map apps: cartoon markers, confetti, badges — anything that undercuts the
-  precision-instrument feel.
+- Cold, industrial dark-instrument UI (the prior "Quad Bench" direction): charcoal faceplates,
+  mechanical snaps, mono-everything, hard 2px corners. Warmth and roundness are the point now.
+- Generic SaaS-cream slop: gradient text, glows, hero-metric templates, tracked-eyebrow-on-every-
+  section. Organic warmth is carried by Caprasimo, terracotta, and real terrain — not by decoration.
+- Toy/gamified map apps: cartoon markers, confetti, badges — playful is fine, childish is not.
 
 ## Design Principles
 

@@ -2,86 +2,103 @@
 name: TerraPrint
 description: Client-side terrain-to-3D-print pipeline — map, mesh, multi-color export
 colors:
-  bench: "#191714"
-  faceplate: "#24211B"
-  faceplate-deep: "#201D17"
-  surface-raise: "#2E2A22"
-  surface-hover: "#37322A"
-  contour-sepia: "#A8794A"
-  rule: "#A8794A4D"
-  rule-strong: "#A8794A8C"
-  ink-primary: "#ECE7DE"
-  ink-secondary: "#ADA598"
-  ink-muted: "#9A9285"
-  signal-orange: "#FF4D1C"
-  signal-orange-bright: "#FF6A3D"
-  hydro-blue: "#4D9FFF"
+  bg: "#F5EAD8"
+  surface: "#EBDDC5"
+  surface-deep: "#E3D4BA"
+  surface-raise: "#F1E7D5"
+  surface-hover: "#E7D8BD"
+  ink-primary: "#201E1D"
+  ink-secondary: "#645C50"
+  ink-muted: "#675D50"
+  accent: "#C67139"
+  accent-hover: "#B2622D"
+  accent-ink: "#8C491A"
+  accent-2: "#7A8A5E"
+  sage-100: "#F0FAE1"
+  neutral-100: "#F9F4ED"
+  neutral-200: "#EEE7DB"
+  neutral-400: "#C0B6A5"
+  neutral-800: "#474238"
   topo-water: "#2D6ABF"
   topo-lowland: "#C47F17"
   topo-forest: "#3D8C40"
   topo-alpine: "#C8C8C8"
-  warning-amber: "#F0A020"
-  danger-red: "#F85149"
-  success-green: "#3FB950"
+  warning: "#C98A2B"
+  danger: "#B3402F"
+  success: "#728157"
 typography:
+  heading:
+    fontFamily: "'Caprasimo', Georgia, serif"
+    fontWeight: 400
+    letterSpacing: "-0.015em"
   title:
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
-    fontSize: "14px"
-    fontWeight: 600
-    letterSpacing: "0.4px"
+    fontFamily: "'Caprasimo', Georgia, serif"
+    fontSize: "17px"
+    fontWeight: 400
   body:
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+    fontFamily: "'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
     fontSize: "13px"
     fontWeight: 400
-    lineHeight: 1.4
+    lineHeight: 1.55
   label:
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
-    fontSize: "10px"
-    fontWeight: 600
-    letterSpacing: "1.2px"
+    fontFamily: "'Figtree', -apple-system, sans-serif"
+    fontSize: "12px"
+    fontWeight: 500
+  kicker:
+    fontFamily: "'Figtree', -apple-system, sans-serif"
+    fontSize: "11px"
+    fontWeight: 700
+    letterSpacing: "0.08em"
   data:
     fontFamily: "ui-monospace, 'SF Mono', Menlo, Consolas, monospace"
     fontSize: "11px"
     fontWeight: 400
 rounded:
-  sm: "2px"
+  pill: "999px"
+  md: "16px"
+  lg: "24px"
+  xl: "32px"
 spacing:
   xs: "4px"
   sm: "8px"
   md: "14px"
 components:
   button:
-    backgroundColor: "{colors.surface-raise}"
+    backgroundColor: "transparent"
+    borderColor: "{colors.neutral-400}"
     textColor: "{colors.ink-primary}"
-    rounded: "{rounded.sm}"
-    padding: "7px 14px"
-  button-hover:
-    backgroundColor: "{colors.surface-hover}"
+    rounded: "{rounded.pill}"
+    padding: "8px 16px"
   button-primary:
-    backgroundColor: "{colors.signal-orange}"
-    textColor: "#000000"
-    rounded: "{rounded.sm}"
-    padding: "7px 14px"
+    backgroundColor: "{colors.accent}"
+    textColor: "{colors.bg}"
+    rounded: "{rounded.pill}"
+    padding: "8px 16px"
   button-primary-hover:
-    backgroundColor: "{colors.signal-orange-bright}"
+    backgroundColor: "{colors.accent-hover}"
   input:
-    backgroundColor: "{colors.bench}"
+    backgroundColor: "{colors.neutral-100}"
     textColor: "{colors.ink-primary}"
-    rounded: "{rounded.sm}"
-    padding: "6px 10px"
+    rounded: "{rounded.pill}"
+    padding: "8px 14px"
+  card:
+    backgroundColor: "{colors.neutral-100}"
+    rounded: "{rounded.lg}"
 ---
 
 # Design System: TerraPrint
 
 ## 1. Overview
 
-**Creative North Star: "The Quad Bench"**
+**Creative North Star: "Organic"**
 
-A Teenage Engineering instrument faceplate bolted to an evening workbench, framing a USGS quad
-sheet. Every surface is **solid, opaque, matte** — warm charcoal panels with warm-white silk-screen
-ink, sepia contour rules for structure, and one loud Signal Orange for action. The glass era is
-over: nothing blurs, nothing floats translucently. The map is the quad sheet; the chrome is the
-hardware holding it down.
+A warm, tactile field-guide feel: a **cream** paper ground, soft rounded **surface cards**, and one
+earthy **terracotta** as the single action color, with **sage** carrying nature and water. Headings
+and buttons are set in **Caprasimo** (a chunky display serif); everything else is **Figtree**.
+Controls are friendly pills — pill buttons, pill inputs, 38×22 toggles, sage-track/terracotta-fill
+sliders. The workflow reads as **numbered step cards** (Model → … → Selected Area). The satellite is
+gently washed so the cream chrome floats cleanly over it. Print-data colors (filament swatches,
+painted water) keep their real hexes as circular swatches — they are data, not theme.
 
 The system is mechanical and trustworthy: controls snap rather than glide, switches rock, sliders
 run on ruler-tick tracks, and a status LED in the header tells you at a glance whether the

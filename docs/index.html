@@ -7,6 +7,9 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' fill='%23000'/><path d='M36 12 L47 34 L54 23 L64 48 L70 38 L78 63 L83 54 L89 79 L8 74 Z M91 64 L96 79 L84 78 Z' fill='%23fff'/></svg>">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;700&display=swap">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -15,47 +18,68 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* ── THE QUAD BENCH: solid instrument surfaces, evening-workshop warm charcoal ── */
-  --bg-deep:    #191714;                 /* the bench — page ground, header */
-  --face:       #24211b;                 /* faceplate — panel, modals, toolbars */
-  --face-deep:  #201d17;                 /* recessed faceplate — footer, toasts, map controls */
-  --bg-surface: #2e2a22;                 /* raised control fills (buttons, inputs) */
-  --bg-hover:   #37322a;
-  /* Structure inks its rules in contour sepia — the quad sheet's skeleton */
-  --sepia:       #a8794a;
-  --sepia-lit:   #d9b98c;  /* marginalia ink — lifted a stop for legibility on the map */
-  --hairline:    rgba(168,121,74,0.30);
-  --hairline-hi: rgba(168,121,74,0.55);
+  /* ── ORGANIC: warm cream ground, terracotta action, sage nature. Variable NAMES are kept
+     from the old Quad Bench system so every var() usage across the file re-themes at once;
+     only the values change. ── */
+  --bg-deep:    #f5ead8;                 /* cream page ground, header */
+  --face:       #ebddc5;                 /* surface — sidebar cards, modals, toolbars */
+  --face-deep:  #e3d4ba;                 /* deeper surface — footers, map controls, wells */
+  --bg-surface: #f1e7d5;                 /* raised control fills */
+  --bg-hover:   #e7d8bd;
+  /* Structure: soft ink hairlines (neatline/marginalia retired) */
+  --sepia:       #82796a;                /* was structure ink — now neutral-600 */
+  --sepia-lit:   #645c50;
+  --hairline:    color-mix(in srgb, #201e1d 14%, transparent);
+  --hairline-hi: color-mix(in srgb, #201e1d 22%, transparent);
   --border:     var(--hairline);
   --border-hi:  var(--hairline-hi);
-  /* Silk-screen ink: warm whites, printed on the faceplate */
-  --text-primary:   #ece7de;
-  --text-secondary: #ada598;
-  --text-muted:     #9a9285;
-  /* Four ink roles: orange = action, hydro = water, sepia = structure, green = success */
-  --accent:      #ff4d1c;                /* Signal Orange — THE action color */
-  --accent-hover: #ff6a3d;
-  --hydro:       #4d9fff;                /* water-role UI ink (data water stays --topo-water) */
+  /* Ink on cream */
+  --text-primary:   #201e1d;
+  --text-secondary: #645c50;            /* neutral-700 — 4.9:1 on surface */
+  --text-muted:     #675d50;            /* darkened for AA — 4.8:1 on surface (labels/sub-heads) */
+  /* Action = terracotta (the ONLY action color); water UI chrome = sage */
+  --accent:      #c67139;               /* the fill (buttons, toggles, slider fill, selection) */
+  --accent-hover: #b2622d;              /* accent-600 */
+  --accent-ink:  #8c491a;               /* accent-700 — terracotta as TEXT/links on cream (5:1) */
+  --accent-2:    #7a8a5e;               /* sage — fills: brand mark, done pills */
+  --hydro:       #56633f;               /* water-role UI ink: sage-700, AA on cream (print water stays --topo-water) */
+  /* Terracotta ramp (hover/press/tints) */
+  --accent-100: #fff2eb; --accent-200: #ffe1d0; --accent-300: #ffc6a5;
+  --accent-500: #d67f48; --accent-600: #b2622d; --accent-700: #8c491a; --accent-800: #643312;
+  /* Sage ramp */
+  --sage-100: #f0fae1; --sage-200: #e1eecc; --sage-500: #8fa073;
+  --sage-600: #728157; --sage-700: #56633f; --sage-800: #3d472b;
+  /* Neutrals (shared lightness scale) */
+  --neutral-100: #f9f4ed; --neutral-200: #eee7db; --neutral-300: #dcd3c4;
+  --neutral-400: #c0b6a5; --neutral-500: #a19786; --neutral-600: #82796a;
+  --neutral-700: #645c50; --neutral-800: #474238; --neutral-900: #2e2b25;
+  /* Print-DATA colors are NOT theme colors — real filament hexes, shown as circular swatches */
   --topo-water:    #2d6abf;
   --topo-flat:     #c47f17;
   --topo-hills:    #3d8c40;
   --topo-mountain: #c8c8c8;
-  /* Protected-area overlay ink — categorical map data (like the tile-grid amber), tuned to
-     read over satellite imagery. Single source for both the map lines and the panel legend. */
-  --bnd-park:   #4cc264;
-  --bnd-forest: #d1a33a;
-  --bnd-wild:   #b184ec;
-  --danger:  #f85149;
-  --warning: #f0a020;
-  --success: #3fb950;
-  --radius:    2px;
-  --radius-lg: 2px;
-  --ease-mech: cubic-bezier(0.16, 1, 0.3, 1);   /* out-expo: mechanical, decisive */
+  /* Protected-area overlay ink — categorical map data over satellite. */
+  --bnd-park:   #5b8c3e;
+  --bnd-forest: #c0863a;
+  --bnd-wild:   #7a6bb0;
+  --danger:  #b3402f;
+  --warning: #c98a2b;
+  --success: #728157;                   /* sage = watertight / done */
+  --radius:    999px;                   /* small controls: buttons, inputs, tags, toggles → pill */
+  --radius-md: 16px;                    /* medium: input rows, seg groups */
+  --radius-lg: 24px;                    /* cards, panels, step surfaces */
+  --radius-xl: 32px;                    /* preview card */
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #2e2b25 14%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #2e2b25 16%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #2e2b25 22%, transparent);
+  --ease-mech: cubic-bezier(0.22, 1, 0.36, 1);   /* soft ease — no mechanical snaps */
+  --font-heading: "Caprasimo", Georgia, serif;
+  --font-body: "Figtree", -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  font-family: var(--font-body);
   background: var(--bg-deep);
   color: var(--text-primary);
   height: 100vh;
@@ -68,42 +92,73 @@ body {
 header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 20px;
-  height: 52px;
+  gap: 14px;
+  padding: 0 22px;
+  height: 62px;
   background: var(--bg-deep);
-  border-bottom: 1px solid var(--hairline-hi);
+  border-bottom: 1px solid var(--hairline);
   flex-shrink: 0;
   z-index: 1000;
   position: relative;
 }
-/* Status LED: off → working (orange blink) → ok (green) / err (red). Reduced-motion turns
-   the blink into steady-on automatically via the global animation override. */
-#status-led {
-  width: 8px;
-  height: 8px;
+header .logo {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-family: var(--font-heading);
+  font-size: 21px;
+  letter-spacing: 0;
+  color: var(--text-primary);
+}
+header .brand-mark {
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  background: #3a342b;
-  border: 1px solid rgba(0,0,0,0.5);
-  margin-left: 4px;
+  background: var(--accent-2);
+  color: #fbfaf5;
+  display: grid;
+  place-items: center;
   flex-shrink: 0;
-  transition: background 120ms;
+}
+/* Status LED: idle → working (terracotta blink) → ok (sage) / err (red). Reduced-motion
+   turns the blink into steady-on via the global animation override. */
+#status-led {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--neutral-400);
+  margin-left: 2px;
+  flex-shrink: 0;
+  transition: background 180ms var(--ease-mech);
 }
 #status-led.working { background: var(--accent); animation: led-blink 0.9s steps(2, jump-none) infinite; }
 #status-led.ok  { background: var(--success); }
 #status-led.err { background: var(--danger); }
 @keyframes led-blink { 0% { opacity: 1; } 100% { opacity: 0.25; } }
-header .logo {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-weight: 600;
-  font-size: 14px;
-  letter-spacing: 0.4px;
-  color: var(--text-primary);
+#context-tag { margin-left: 2px; }
+header .header-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+
+/* — tags (context pill, coord pill, legend) — */
+.tag {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; letter-spacing: 0.02em; font-weight: 500;
+  padding: 4px 11px; border-radius: 999px; white-space: nowrap;
 }
-header .logo svg { color: #fff; }
-header .header-actions { display: flex; align-items: center; gap: 8px; }
+.tag-neutral   { background: var(--neutral-200); color: var(--neutral-800); }
+.tag-accent    { background: var(--accent-100);  color: var(--accent-800); }
+.tag-accent-2  { background: var(--sage-100);    color: var(--sage-800); }
+
+/* Intro dialog: numbered terracotta step circles */
+.intro-steps { list-style: none; margin: 4px 0 16px; padding: 0; display: flex; flex-direction: column; gap: 13px; counter-reset: instep; }
+.intro-steps li { counter-increment: instep; display: flex; gap: 12px; align-items: flex-start; font-size: 13px; color: var(--text-primary); line-height: 1.5; }
+.intro-steps li::before {
+  content: counter(instep); flex: none; margin-top: 1px;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--accent); color: var(--bg-deep);
+  display: grid; place-items: center;
+  font-weight: 700; font-size: 12px; font-variant-numeric: tabular-nums;
+}
+.intro-steps strong { font-weight: 700; }
 
 /* ─── Layout: full-bleed map, chrome floats above it ─── */
 .app-body { display: flex; flex: 1; overflow: hidden; position: relative; }
@@ -122,51 +177,65 @@ header .header-actions { display: flex; align-items: center; gap: 8px; }
   overflow-x: hidden;   /* a vertical control stack never scrolls sideways — no stray bottom scrollbar */
   display: flex;
   flex-direction: column;
-  padding: 4px 0 0;
+  padding: 10px 0 0;
+  counter-reset: step;
 }
 .panel::-webkit-scrollbar { width: 3px; }
 .panel::-webkit-scrollbar-track { background: transparent; }
 .panel::-webkit-scrollbar-thumb { background: var(--hairline-hi); }
 
-/* ─── Panel sections: flat groups separated by hairlines (no floating cards) ─── */
+/* ─── Steps: each config section is a numbered step card. Expanded = raised surface card;
+   collapsed = a quiet row. The number badge is auto-counted so markup keeps its IDs. ─── */
 .panel-section {
-  border-bottom: 1px solid var(--hairline);
+  counter-increment: step;
   flex-shrink: 0;
+  margin: 8px 12px 0;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--hairline);
+  background: var(--neutral-100);
+  transition: box-shadow 0.18s var(--ease-mech), background 0.18s var(--ease-mech);
 }
+.panel-section:not(.collapsed) { box-shadow: var(--shadow-sm); }
+.panel-section.collapsed { background: color-mix(in srgb, var(--neutral-100) 55%, transparent); }
 .panel-section h3 {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 1.2px;
-  color: var(--text-secondary);
-  font-weight: 600;
-  padding: 11px 14px 10px;
-}
-.panel-section.collapsible h3 {
-  cursor: pointer;
+  font-family: var(--font-heading);
+  font-size: 17px;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  padding: 14px 16px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  user-select: none;
 }
-.panel-section.collapsible h3:hover { color: var(--text-primary); }
+.panel-section h3::before {
+  content: counter(step);
+  width: 25px; height: 25px; flex: none; margin-right: 11px;
+  border-radius: 50%;
+  background: var(--accent); color: var(--bg-deep);
+  display: grid; place-items: center;
+  font-family: var(--font-body); font-size: 12px; font-weight: 700;
+}
+.panel-section.collapsed h3::before { background: var(--neutral-400); color: var(--neutral-100); }
+.panel-section.collapsible h3 { cursor: pointer; user-select: none; }
+.panel-section.collapsible h3:hover { color: var(--accent-ink); }
 .panel-section.collapsible h3::after {
   content: '▾';
-  font-size: 9px;
-  transition: transform 0.15s var(--ease-mech);
-  color: var(--sepia);
+  margin-left: auto;
+  font-size: 11px;
+  transition: transform 0.2s var(--ease-mech);
+  color: var(--neutral-500);
 }
 .panel-section.collapsed h3::after { transform: rotate(-90deg); }
 .panel-section.collapsed .section-body { display: none; }
-.section-body { padding: 2px 14px 14px; }
-/* Sub-heading inside a merged group (Water / Buildings / Tiling / …) */
+.section-body { padding: 0 16px 16px; }
+/* Sub-heading inside a step (Water / Buildings / Tiling / …) — a small terracotta kicker */
 .sub-head {
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--text-muted);
-  font-weight: 600;
-  margin: 14px 0 8px;
-  padding-top: 12px;
+  letter-spacing: 0.08em;
+  color: var(--accent-ink);
+  font-weight: 700;
+  margin: 16px 0 9px;
+  padding-top: 13px;
   border-top: 1px solid var(--hairline);
 }
 .sub-head:first-child { margin-top: 2px; padding-top: 0; border-top: none; }
@@ -193,103 +262,113 @@ header .header-actions { display: flex; align-items: center; gap: 8px; }
 .panel-footer {
   position: sticky;
   bottom: 0;
-  margin-top: auto;
+  margin: 12px 0 0;
+  padding: 14px 16px 16px;
   z-index: 5;
-  background: var(--face-deep);
-  border-bottom: none;
+  background: var(--face);
   border-top: 1px solid var(--hairline);
 }
 
 /* ─── Form Controls ─── */
 label {
   display: block;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-secondary);
   margin-bottom: 5px;
   font-weight: 500;
 }
 input[type="number"], input[type="text"], select {
   width: 100%;
-  padding: 6px 10px;
-  background: var(--bg-deep);
+  padding: 8px 14px;
+  background: var(--neutral-100);
   border: 1px solid var(--hairline);
-  border-radius: var(--radius);
+  border-radius: var(--radius);   /* pill */
   color: var(--text-primary);
   font-size: 13px;
   outline: none;
-  transition: border-color 0.15s;
+  caret-color: var(--accent);
+  transition: border-color 0.18s var(--ease-mech);
 }
 input[type="number"] { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
-input[type="number"]:focus, input[type="text"]:focus, select:focus {
-  border-color: rgba(255,77,28,0.55);   /* functional: focus */
+input[type="number"]:hover, input[type="text"]:hover, select:hover { border-color: var(--neutral-400); }
+input[type="number"]:focus, input[type="text"]:focus, select:focus,
+input[type="number"]:focus-visible, input[type="text"]:focus-visible, select:focus-visible {
+  border-color: var(--accent);
 }
-/* Rocker switches (checkboxes): thumb snaps left/right, orange when engaged. Uses layered
-   backgrounds (no pseudo-elements on the input) for cross-engine reliability. */
+
+/* Pill toggles (checkboxes): 38×22 track with a sliding white thumb, terracotta when on.
+   Layered backgrounds only (no pseudo-elements) for cross-engine reliability. */
 #side-panel input[type="checkbox"], #paint-modal input[type="checkbox"],
 #intro-modal input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
-  width: 28px !important;
-  height: 15px !important;
-  border: 1px solid var(--hairline-hi);
-  border-radius: var(--radius);
+  width: 38px !important;
+  height: 22px !important;
+  border: none;
+  border-radius: 999px;
   background:
-    radial-gradient(circle closest-side, var(--text-muted) 0 92%, transparent 96%)
-      left 3px center / 9px 9px no-repeat,
-    var(--bg-deep);
+    radial-gradient(circle closest-side, #fff 0 90%, transparent 94%)
+      left 3px center / 16px 16px no-repeat,
+    var(--neutral-400);
   cursor: pointer;
   vertical-align: middle;
   flex-shrink: 0;
-  transition: background-color 120ms;
+  box-shadow: inset 0 1px 2px rgba(46,43,37,0.18);
+  transition: background-color 200ms var(--ease-mech), background-position 200ms var(--ease-mech);
 }
 #side-panel input[type="checkbox"]:checked, #paint-modal input[type="checkbox"]:checked,
 #intro-modal input[type="checkbox"]:checked {
   background:
-    radial-gradient(circle closest-side, var(--accent) 0 92%, transparent 96%)
-      right 3px center / 9px 9px no-repeat,
-    #2a2017;
-  border-color: rgba(255,77,28,0.5);
+    radial-gradient(circle closest-side, #fff 0 90%, transparent 94%)
+      right 3px center / 16px 16px no-repeat,
+    var(--accent);
 }
+#side-panel input[type="checkbox"]:focus-visible, #paint-modal input[type="checkbox"]:focus-visible,
+#intro-modal input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* Ruler-tick sliders: sepia tick track, orange thumb — a fader on the faceplate. */
+/* Sliders: sage track, terracotta fill (driven by --pct, set on input in JS), round terracotta thumb. */
 #side-panel input[type="range"], #paint-modal input[type="range"] {
   appearance: none;
   -webkit-appearance: none;
-  height: 16px;
+  height: 20px;
   background: transparent;
   cursor: pointer;
+  --pct: 0%;
 }
 #side-panel input[type="range"]::-webkit-slider-runnable-track,
 #paint-modal input[type="range"]::-webkit-slider-runnable-track {
-  height: 16px;
-  background:
-    linear-gradient(var(--hairline-hi), var(--hairline-hi)) 0 center / 100% 1px no-repeat,
-    repeating-linear-gradient(90deg, var(--hairline) 0 1px, transparent 1px 10%) 0 center / 100% 7px no-repeat;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(var(--accent), var(--accent)) 0 / var(--pct) 100% no-repeat, var(--sage-200);
 }
 #side-panel input[type="range"]::-webkit-slider-thumb,
 #paint-modal input[type="range"]::-webkit-slider-thumb {
   appearance: none;
   -webkit-appearance: none;
-  width: 9px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
+  margin-top: -4.5px;
   background: var(--accent);
-  border: 1px solid rgba(0,0,0,0.55);
-  border-radius: 1px;
+  border: 2px solid var(--bg-deep);
+  border-radius: 50%;
+  box-shadow: var(--shadow-sm);
 }
 #side-panel input[type="range"]::-moz-range-track,
 #paint-modal input[type="range"]::-moz-range-track {
-  height: 16px;
-  background:
-    linear-gradient(var(--hairline-hi), var(--hairline-hi)) 0 center / 100% 1px no-repeat,
-    repeating-linear-gradient(90deg, var(--hairline) 0 1px, transparent 1px 10%) 0 center / 100% 7px no-repeat;
+  height: 6px; border-radius: 999px; background: var(--sage-200);
+}
+#side-panel input[type="range"]::-moz-range-progress,
+#paint-modal input[type="range"]::-moz-range-progress {
+  height: 6px; border-radius: 999px; background: var(--accent);
 }
 #side-panel input[type="range"]::-moz-range-thumb,
 #paint-modal input[type="range"]::-moz-range-thumb {
-  width: 9px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   background: var(--accent);
-  border: 1px solid rgba(0,0,0,0.55);
-  border-radius: 1px;
+  border: 2px solid var(--bg-deep);
+  border-radius: 50%;
+  box-shadow: var(--shadow-sm);
 }
 
 .input-row { display: flex; gap: 8px; margin-bottom: 10px; }
@@ -301,7 +380,7 @@ input[type="range"] { width: 100%; }
 .range-row .range-val {
   min-width: 44px;
   text-align: right;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-secondary);
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
@@ -313,38 +392,39 @@ input[type="range"] { width: 100%; }
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 7px 14px;
+  padding: 8px 16px;
   border: 1px solid var(--hairline-hi);
-  border-radius: var(--radius);
-  background: var(--bg-surface);
+  border-radius: var(--radius);   /* pill */
+  background: transparent;
   color: var(--text-primary);
-  font-size: 13px;
+  font-family: var(--font-heading);
+  font-size: 14px;
   cursor: pointer;
-  font-weight: 500;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.18s var(--ease-mech), border-color 0.18s var(--ease-mech);
   white-space: nowrap;
 }
-.btn:hover { background: var(--bg-hover); border-color: rgba(168,121,74,0.7); }
-.btn:active { transform: translateY(1px); }
-.btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn:hover { background: color-mix(in srgb, var(--text-primary) 7%, transparent); border-color: var(--neutral-400); }
+.btn:active { background: color-mix(in srgb, var(--text-primary) 12%, transparent); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-primary {
-  background: var(--accent);   /* functional: the primary action */
+  background: var(--accent);   /* the one action color */
   border-color: var(--accent);
-  color: #000;
-  font-weight: 600;
+  color: var(--bg-deep);
 }
-.btn-primary:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-}
-.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn-primary:hover { background: var(--accent-600); border-color: var(--accent-600); }
+.btn-primary:active { background: var(--accent-700); border-color: var(--accent-700); }
+.btn-sm { padding: 6px 13px; font-size: 13px; }
 .btn-block { width: 100%; }
 .btn-row { display: flex; gap: 8px; margin-top: 8px; }
 .btn-row .btn { flex: 1; }
-.btn-danger { border-color: rgba(248,81,73,0.35); color: var(--danger); }
-.btn-danger:hover { background: rgba(248,81,73,0.10); }
-.btn-success { border-color: rgba(63,185,80,0.35); color: var(--success); }
-.btn-success:hover { background: rgba(63,185,80,0.10); }
+.btn-danger { border-color: color-mix(in srgb, var(--danger) 45%, transparent); color: var(--danger); }
+.btn-danger:hover { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.btn-success { border-color: color-mix(in srgb, var(--success) 45%, transparent); color: var(--success); }
+.btn-success:hover { background: color-mix(in srgb, var(--success) 10%, transparent); }
+.btn-ghost {
+  border-color: transparent; background: transparent; color: var(--accent-ink); padding-inline: 10px;
+}
+.btn-ghost:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); border-color: transparent; }
 
 /* ─── Map ─── */
 #map-container { flex: 1; position: relative; }
@@ -383,47 +463,59 @@ input[type="range"] { width: 100%; }
 #preview-panel {
   display: none;
   position: absolute;
-  bottom: 16px;
-  right: 16px;
+  bottom: 20px;
+  right: 20px;
   width: min(560px, 44vw);
   height: min(480px, 55vh);
-  background: #141210;                 /* device bezel, darker than the bench */
-  border: 1px solid var(--hairline-hi);
-  border-radius: var(--radius-lg);
+  background: var(--face);            /* cream surface card holding a dark canvas well */
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-xl);
   z-index: 800;
   overflow: hidden;
-  box-shadow: 0 16px 56px rgba(0,0,0,0.6);
+  box-shadow: var(--shadow-lg);
 }
 #preview-panel .preview-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
-  background: #1b1916;
+  padding: 13px 15px 11px;
+  background: var(--face);
   /* Keep the header (and its ← Map / ✕ buttons) above the WebGL canvas, which can create
      its own stacking context and otherwise capture clicks in fullscreen. */
   position: relative;
   z-index: 3;
-  border-bottom: 1px solid var(--hairline);
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 1.2px;
-  color: var(--text-secondary);
+  font-family: var(--font-heading);
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
 }
 #preview-panel .preview-header button {
-  background: none;
+  background: var(--neutral-200);
   border: none;
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1;
-  padding: 2px 4px;
-  border-radius: var(--radius);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
   transition: color 0.15s, background 0.15s;
 }
-#preview-panel .preview-header button:hover { color: var(--text-primary); background: rgba(255,255,255,0.06); }
-#preview-canvas-wrap { width: 100%; height: calc(100% - 36px); }
+#preview-panel .preview-header button.btn-back-to-map {
+  width: auto; border-radius: 999px; padding: 0 12px; font-size: 13px;
+}
+#preview-panel .preview-header button:hover { color: var(--text-primary); background: var(--neutral-300); }
+#preview-canvas-wrap {
+  width: calc(100% - 20px);
+  height: calc(100% - 56px);
+  margin: 0 10px 10px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: #201e1d;               /* dark canvas well */
+}
+#preview-panel.fullscreen #preview-canvas-wrap { width: 100%; height: calc(100% - 52px); margin: 0; border-radius: 0; }
 canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 #preview-panel.fullscreen {
   position: fixed;
@@ -516,7 +608,7 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
   border: 1px solid var(--hairline-hi);
   border-radius: var(--radius);
   background: var(--bg-surface);
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: 12px;
   cursor: pointer;
   font-family: inherit;
@@ -524,23 +616,29 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 #toast .toast-action:hover { background: var(--bg-hover); }
 
 /* ─── Leaflet overrides ─── */
-/* Glass-system controls. background-color (not the `background` shorthand) preserves
-   Leaflet.Draw's sprite icons; the draw sprites are dark-on-light, so they get an invert
-   filter to stay legible on the dark bar. */
+/* Organic map controls: cream circular buttons in floating clusters; the active draw tool
+   fills terracotta. Draw sprites are dark-on-transparent, so they read directly on cream. */
+.leaflet-bar { border: none !important; box-shadow: none !important; background: transparent !important; }
 .leaflet-bar a {
-  background-color: var(--face-deep) !important;
+  background-color: var(--bg-deep) !important;
   color: var(--text-primary) !important;
-  border-color: var(--hairline) !important;
-  box-shadow: none !important;
+  border: 1px solid var(--hairline) !important;
+  border-radius: 50% !important;
+  width: 34px !important; height: 34px !important; line-height: 32px !important;
+  margin-bottom: 7px !important;
+  box-shadow: var(--shadow-sm) !important;
+  transition: background-color 0.18s var(--ease-mech);
 }
-.leaflet-bar a:hover { background-color: rgba(32,36,40,0.94) !important; }
-.leaflet-bar {
-  box-shadow: none !important;
-  border: 1px solid var(--hairline-hi) !important;
-  border-radius: var(--radius) !important;
-  overflow: hidden;
+.leaflet-bar a:hover { background-color: var(--bg-hover) !important; }
+.leaflet-bar a.leaflet-disabled { opacity: 0.45; }
+/* Active draw tool → solid terracotta circle with light icon. */
+.leaflet-draw-toolbar .leaflet-draw-toolbar-button-enabled {
+  background-color: var(--accent) !important;
+  border-color: var(--accent) !important;
+  filter: invert(1) brightness(1.6) saturate(0);
 }
-.leaflet-draw-toolbar a { filter: invert(1) grayscale(1) brightness(1.35); }
+/* Gently wash the satellite so cream chrome reads cleanly over it (per Organic spec). */
+.leaflet-tile-pane { filter: saturate(0.72) contrast(0.94) brightness(1.05); }
 
 /* Popups match the faceplate rather than Leaflet's default white bubble — the instrument
    stays consistent when a protected-area popup opens over the map. */
@@ -624,26 +722,9 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 .threshold-row span { font-size: 12px; color: var(--text-secondary); min-width: 60px; }
 .threshold-row input[type="number"] { width: 80px; padding: 4px 6px; font-size: 12px; }
 
-/* ─── Quad-sheet framing: neatline + corner ticks + coordinate marginalia ─── */
-#neatline {
-  position: absolute;
-  top: 10px; right: 10px; bottom: 10px;
-  left: 376px;                       /* clears the 360px docked faceplate + 16px */
-  border: 1px solid rgba(168,121,74,0.38);
-  pointer-events: none;
-  z-index: 640;
-}
-#neatline::before, #neatline::after {
-  content: '';
-  position: absolute;
-  width: 15px; height: 15px;
-  background:
-    linear-gradient(var(--sepia), var(--sepia)) center / 1px 100% no-repeat,
-    linear-gradient(var(--sepia), var(--sepia)) center / 100% 1px no-repeat;
-  opacity: 0.7;
-}
-#neatline::before { top: -8px; left: -8px; }
-#neatline::after  { bottom: -8px; right: -8px; }
+/* Neatline retired in the Organic system. */
+#neatline { display: none; }
+/* Coordinate readout → a neutral pill bottom-left of the map (tabular numerals). */
 #map-marginalia {
   position: absolute;
   left: 388px;
@@ -651,13 +732,18 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
   z-index: 640;
   pointer-events: none;
   font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.4px;
-  color: var(--sepia-lit);
-  text-shadow: 0 1px 2px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.6);
+  font-size: 11px;
+  letter-spacing: 0.2px;
   font-variant-numeric: tabular-nums;
+  color: var(--neutral-800);
+  background: var(--bg-deep);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 5px 12px;
+  box-shadow: var(--shadow-sm);
 }
-@media (max-width: 768px) { #neatline, #map-marginalia { display: none; } }
+#map-marginalia:empty { display: none; }
+@media (max-width: 768px) { #map-marginalia { display: none; } }
 
 /* First-visit callout: anchored beside the Leaflet.Draw toolbar (topright, below the zoom
    control). Visible only while no selection has been made; UI.updateSelectionInfo hides it. */
@@ -736,16 +822,19 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 
 <header>
   <div class="logo">
-    <!-- SRL mark: faceted peak, shoulder summit, sawtooth ridge, detached foothill -->
-    <svg width="26" height="22" viewBox="0 0 96 80" fill="currentColor" aria-label="SRL">
-      <path d="M36 4 L47 26 L54 15 L64 40 L70 30 L78 55 L83 46 L89 71 L8 66 Z M91 56 L96 71 L84 70 Z"/>
-    </svg>
+    <span class="brand-mark">
+      <!-- SRL mark: faceted peak, shoulder summit, sawtooth ridge, detached foothill -->
+      <svg width="21" height="18" viewBox="0 0 96 80" fill="currentColor" aria-label="TerraPrint">
+        <path d="M36 4 L47 26 L54 15 L64 40 L70 30 L78 55 L83 46 L89 71 L8 66 Z M91 56 L96 71 L84 70 Z"/>
+      </svg>
+    </span>
     TerraPrint
     <span id="status-led" title="Idle"></span>
   </div>
+  <span class="tag tag-neutral" id="context-tag">satellite · 8 colors</span>
   <div class="header-actions">
-    <button class="btn btn-sm" onclick="Intro.show()" title="How it works">?</button>
-    <button class="btn btn-sm" onclick="Settings.reset()" title="Reset all settings to defaults">↺ Defaults</button>
+    <button class="btn btn-ghost btn-sm" onclick="Intro.show()" title="How it works">How it works</button>
+    <button class="btn btn-sm" onclick="Settings.reset()" title="Reset all settings to defaults">↺ Reset</button>
   </div>
 </header>
 
@@ -1406,16 +1495,18 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
 <div id="toast" role="status" aria-live="polite"></div>
 
 <!-- ─── First-visit intro / how-to ─── -->
-<div id="intro-modal" style="display:none;position:fixed;inset:0;z-index:3000;background:var(--bg-deep);justify-content:center;align-items:center;">
-  <div style="width:min(540px,92vw);max-height:86vh;overflow-y:auto;background:var(--face);border:1px solid var(--hairline-hi);outline:1px solid var(--hairline);outline-offset:-7px;border-radius:var(--radius-lg);padding:26px 28px 22px;">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-      <svg width="26" height="22" viewBox="0 0 96 80" fill="#fff"><path d="M36 4 L47 26 L54 15 L64 40 L70 30 L78 55 L83 46 L89 71 L8 66 Z M91 56 L96 71 L84 70 Z"/></svg>
+<div id="intro-modal" style="display:none;position:fixed;inset:0;z-index:3000;background:color-mix(in srgb, #2e2b25 45%, transparent);justify-content:center;align-items:center;padding:20px;">
+  <div style="width:min(540px,92vw);max-height:86vh;overflow-y:auto;background:var(--face);border:1px solid var(--hairline);border-radius:var(--radius-xl);box-shadow:var(--shadow-lg);padding:26px 28px 22px;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+      <span class="brand-mark" style="width:44px;height:44px;">
+        <svg width="26" height="22" viewBox="0 0 96 80" fill="#fbfaf5"><path d="M36 4 L47 26 L54 15 L64 40 L70 30 L78 55 L83 46 L89 71 L8 66 Z M91 56 L96 71 L84 70 Z"/></svg>
+      </span>
       <div>
-        <div style="font-size:15px;font-weight:600;letter-spacing:0.3px;">TerraPrint</div>
-        <div style="font-size:11px;color:var(--text-secondary);">Turn real terrain into multi-color 3D-printable models</div>
+        <div style="font-family:var(--font-heading);font-size:23px;line-height:1.1;">Print the places you love</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">Real terrain → multi-color 3D-printable models</div>
       </div>
     </div>
-    <ol style="margin:0 0 14px 18px;display:flex;flex-direction:column;gap:9px;font-size:12.5px;color:var(--text-primary);">
+    <ol class="intro-steps">
       <li><strong>Find a place</strong> — search by name or pan the map, then draw a <em>rectangle</em> or <em>circle</em> with the tools on the right.</li>
       <li><strong>Pick a color source</strong> (Imagery &amp; Color) — elevation bands for classic hypsometric tints, or satellite / land-cover for photographic color. 3MF exports print each color as its own filament (AMS/MMU).</li>
       <li><strong>Generate</strong> — elevation is fetched from USGS/Terrarium data at up to ~10 m detail and meshed into a watertight model. Check the size readout in Selected Area.</li>
@@ -1807,7 +1898,7 @@ const MapModule = {
     }).addTo(map);
 
     drawnItems = L.featureGroup().addTo(map);
-    const shapeStyle = { color: '#F0A020', weight: 2, fillOpacity: 0.15 };
+    const shapeStyle = { color: '#c67139', weight: 2.5, fillColor: '#c67139', fillOpacity: 0.14 };
     drawControl = new L.Control.Draw({
       position: 'topright',
       draw: {
@@ -3322,7 +3413,7 @@ const Boundaries = {
     } catch (e) {
       console.warn('Boundary fetch failed:', e);
       this._inflight = false;
-      if (token === this._token) this._setStatus('Overpass is busy — <a href="#" onclick="Boundaries.reload();return false;" style="color:var(--accent);">retry</a>.');
+      if (token === this._token) this._setStatus('Overpass is busy — <a href="#" onclick="Boundaries.reload();return false;" style="color:var(--accent-ink);">retry</a>.');
       return;
     }
     this._inflight = false;
@@ -7193,6 +7284,35 @@ function initApp() {
   Preview.init();
   Settings.restore();   // after MapModule.init so setBaseImagery targets a live map
   Settings.attach();
+
+  // Organic sliders: paint the terracotta fill by setting --pct from the value (WebKit needs
+  // it; Firefox uses ::-moz-range-progress natively). One delegated listener covers every
+  // range, including ones built later (advanced palette thresholds).
+  const paintRange = el => {
+    const min = parseFloat(el.min) || 0, max = parseFloat(el.max);
+    const pct = max > min ? ((parseFloat(el.value) - min) / (max - min)) * 100 : 0;
+    el.style.setProperty('--pct', Math.max(0, Math.min(100, pct)) + '%');
+  };
+  document.addEventListener('input', e => {
+    if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'range') paintRange(e.target);
+  }, true);
+  const sweepRanges = () => document.querySelectorAll('input[type="range"]').forEach(paintRange);
+  sweepRanges();
+  window._sweepRanges = sweepRanges;   // callable after dynamic UI (e.g. Advanced rebuilds)
+
+  // Header context tag: reflect the live color source + filament count ("satellite · 8 colors").
+  const syncContextTag = () => {
+    const el = document.getElementById('context-tag');
+    if (!el) return;
+    const advOn = document.getElementById('adv-colors-on')?.checked;
+    const src = advOn ? (document.getElementById('adv-source')?.value || 'elevation') : 'elevation';
+    const label = { elevation: 'elevation', satellite: 'satellite', hybrid: 'hybrid', landcover: 'land cover' }[src] || src;
+    let n = 4; try { n = getBandConfig().colors.length; } catch (e) {}
+    el.textContent = `${label} · ${n} color${n === 1 ? '' : 's'}`;
+  };
+  document.getElementById('side-panel')?.addEventListener('change', syncContextTag);
+  syncContextTag();
+
   _syncFrameChip();         // reflect the default 'custom' selection on the chip grid
   UI._syncDrawCallout();  // show the [Draw here →] hint while no selection exists
   Intro.maybeShow();    // first-visit how-to (dismissible)
