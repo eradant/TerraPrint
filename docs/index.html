@@ -21,11 +21,11 @@
   /* ── ORGANIC: warm cream ground, terracotta action, sage nature. Variable NAMES are kept
      from the old Quad Bench system so every var() usage across the file re-themes at once;
      only the values change. ── */
-  --bg-deep:    #f4f1ea;                 /* warm-paper ground (chroma pulled off the beige tell) */
-  --face:       #e9e5dc;                 /* surface — sidebar cards, modals, toolbars */
-  --face-deep:  #e0dbd0;                 /* deeper surface — footers, map controls, wells */
-  --bg-surface: #f1ede6;                 /* raised control fills */
-  --bg-hover:   #e6e1d7;
+  --bg-deep:    #e8e3d9;                 /* toned warm-paper ground (low chroma, not bright white) */
+  --face:       #ded8ca;                 /* surface — sidebar cards, modals, toolbars */
+  --face-deep:  #d3ccbd;                 /* deeper surface — footers, map controls, wells */
+  --bg-surface: #e5dfd2;                 /* raised control fills */
+  --bg-hover:   #dad3c5;
   /* Structure: soft ink hairlines (neatline/marginalia retired) */
   --sepia:       #82796a;                /* was structure ink — now neutral-600 */
   --sepia-lit:   #645c50;
@@ -36,7 +36,7 @@
   /* Ink on cream */
   --text-primary:   #201e1d;
   --text-secondary: #645c50;            /* neutral-700 — 4.9:1 on surface */
-  --text-muted:     #675d50;            /* darkened for AA — 4.8:1 on surface (labels/sub-heads) */
+  --text-muted:     #5e5648;            /* AA with headroom on the toned surface (labels/sub-heads) */
   /* Action = terracotta (the ONLY action color); water UI chrome = sage */
   --accent:      #c67139;               /* the fill (buttons, toggles, slider fill, selection) */
   --accent-hover: #b2622d;              /* accent-600 */
@@ -50,8 +50,8 @@
   --sage-100: #f0fae1; --sage-200: #e1eecc; --sage-500: #8fa073;
   --sage-600: #728157; --sage-700: #56633f; --sage-800: #3d472b;
   /* Neutrals (shared lightness scale) */
-  --neutral-100: #f7f4ee; --neutral-200: #ebe7df; --neutral-300: #d8d3c9;
-  --neutral-400: #bcb6ab; --neutral-500: #9c968b; --neutral-600: #7f776d;
+  --neutral-100: #ece7dc; --neutral-200: #ded8cc; --neutral-300: #cbc4b6;
+  --neutral-400: #b6afa3; --neutral-500: #968f84; --neutral-600: #7b7369;
   --neutral-700: #645c50; --neutral-800: #474238; --neutral-900: #2e2b25;
   /* Print-DATA colors are NOT theme colors — real filament hexes, shown as circular swatches */
   --topo-water:    #2d6abf;
@@ -92,9 +92,9 @@ body {
 header {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 0 22px;
-  height: 62px;
+  gap: 13px;
+  padding: 0 20px;
+  height: 50px;
   background: var(--bg-deep);
   border-bottom: 1px solid var(--hairline);
   flex-shrink: 0;
@@ -104,15 +104,15 @@ header {
 header .logo {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 10px;
   font-family: var(--font-heading);
-  font-size: 21px;
+  font-size: 19px;
   letter-spacing: 0;
   color: var(--text-primary);
 }
 header .brand-mark {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: var(--accent-2);
   color: #fbfaf5;
@@ -652,6 +652,15 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
   border-color: var(--accent) !important;
   filter: invert(1) brightness(1.6) saturate(0);
 }
+/* Re-center the draw sprites: they're authored for Leaflet's ~26px button, so in our 34px
+   circular buttons they sit top-left. Shift each +4px right/down to center (!important beats
+   both Leaflet's touch and non-touch rules). */
+.leaflet-draw-toolbar .leaflet-draw-draw-rectangle { background-position: -58px 2px !important; }
+.leaflet-draw-toolbar .leaflet-draw-draw-circle    { background-position: -88px 2px !important; }
+.leaflet-draw-toolbar .leaflet-draw-edit-edit      { background-position: -148px 2px !important; }
+.leaflet-draw-toolbar .leaflet-draw-edit-remove    { background-position: -178px 2px !important; }
+.leaflet-draw-toolbar .leaflet-draw-edit-edit.leaflet-disabled   { background-position: -208px 2px !important; }
+.leaflet-draw-toolbar .leaflet-draw-edit-remove.leaflet-disabled { background-position: -238px 2px !important; }
 /* Gently wash the satellite so cream chrome reads cleanly over it (per Organic spec). */
 .leaflet-tile-pane { filter: saturate(0.72) contrast(0.94) brightness(1.05); }
 
