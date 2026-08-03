@@ -952,6 +952,10 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
           </div>
         </div>
         <div class="input-group" style="display:flex;align-items:center;gap:8px;">
+          <label for="filament-cost" style="margin:0;flex:1;">Filament cost <span class="hint">($/kg, for the estimate)</span></label>
+          <input type="number" id="filament-cost" value="25" min="0" max="200" step="1" style="width:64px;">
+        </div>
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;">
           <input type="checkbox" id="step-mode" style="width:16px;height:16px;" onchange="document.getElementById('step-interval-group').style.display=this.checked?'block':'none'">
           <label for="step-mode" style="margin:0;cursor:pointer;">Contour steps (terraced layers)</label>
         </div>
@@ -5044,6 +5048,93 @@ let COLOR_OVERLAP_MM = 0.15;
 // Purely internal (never a visible surface), so it's a fixed value, not a user control.
 const CAP_BASE_OVERLAP_MM = 0.4;
 
+// ═══════════════════════════════════════════════
+//  PRINT ESTIMATE  (filament / time / cost + AMS tool-change optimizer)
+// ═══════════════════════════════════════════════
+//
+// All values are estimates (≈). The time + tool-change model is calibrated to one real Bambu
+// slice (the "mtra" model: ~132 g, 253 tool changes, 12 h 33 m at 0.2 mm). Computed once per
+// generate from the height grid + per-pixel bands — never in the render path. The colour model
+// is "one full-footprint base + thin per-band caps", so tool changes are driven by how much the
+// caps overlap in elevation: photographic (satellite) colours spread across many heights (many
+// swaps), elevation bands are thin non-overlapping slabs (few swaps).
+const PrintEstimate = {
+  LAYER_H: 0.2, DENSITY: 1.24, FILL: 0.4,   // PLA g/cm³ · effective fill (walls + infill + base)
+  T_PER_G: 0.077, T_PER_CHANGE: 0.0097,     // hours; from the mtra calibration
+
+  // Heightfield volume + per-band surface-Z ranges, straight from meshData (no solid rebuild).
+  _scan(md) {
+    const gw = md.gridW, gh = md.gridH, V = md.vertices, pb = md.pixelBands, sm = md.shapeMask;
+    const n = getBandConfig().colors.length;
+    const cellArea = (md.meshW * md.meshH) / (gw * gh);   // mm² per grid vertex (heightfield)
+    let vol = 0;
+    const bMin = new Float64Array(n).fill(Infinity), bMax = new Float64Array(n).fill(-Infinity);
+    const heights = [];
+    for (let gi = 0; gi < gw * gh; gi++) {
+      if (sm && !sm[gi]) continue;
+      const z = V[gi * 3 + 2];              // printed column height (mm) at this grid vertex
+      vol += z * cellArea;
+      heights.push(z);
+      const b = pb ? pb[gi] : 0;
+      if (b >= 0 && b < n) { if (z < bMin[b]) bMin[b] = z; if (z > bMax[b]) bMax[b] = z; }
+    }
+    return { vol, bMin, bMax, n, heights, base: md.baseHeight };
+  },
+
+  // Tool changes ≈ per-layer count of caps present (the base is the background colour; each cap
+  // exposed in a layer costs a swap). A cap follows the surface, so it spans [minSurfZ − capDepth,
+  // maxSurfZ] in Z. Photographic caps overlap in elevation (many per layer); elevation slabs don't.
+  _changes(bMin, bMax, n, capDepth, base) {
+    const ranges = [];
+    let maxZ = base;
+    for (let b = 0; b < n; b++) {
+      if (bMax[b] < bMin[b]) continue;      // colour absent from the model
+      ranges.push([bMin[b] - capDepth, bMax[b]]);
+      if (bMax[b] > maxZ) maxZ = bMax[b];
+    }
+    let changes = 0;
+    for (let z = base; z <= maxZ + 1e-6; z += this.LAYER_H) {
+      let c = 0;
+      for (const r of ranges) if (z >= r[0] && z <= r[1]) c++;
+      changes += c;
+    }
+    return { changes: Math.round(changes), present: ranges.length };
+  },
+
+  // "What-if K colours": re-bin the surface heights into K equal-range bands and re-estimate.
+  _changesForK(heights, lo, hi, K, capDepth) {
+    if (!heights.length || K < 1) return 0;
+    const span = (hi - lo) || 1;
+    const bMin = new Float64Array(K).fill(Infinity), bMax = new Float64Array(K).fill(-Infinity);
+    for (const z of heights) {
+      let k = Math.floor((z - lo) / span * K); if (k < 0) k = 0; if (k >= K) k = K - 1;
+      if (z < bMin[k]) bMin[k] = z; if (z > bMax[k]) bMax[k] = z;
+    }
+    return this._changes(bMin, bMax, K, capDepth, lo).changes;
+  },
+
+  compute(md) {
+    const { vol, bMin, bMax, n, heights, base } = this._scan(md);
+    const capDepth = parseFloat(document.getElementById('sat-depth')?.value) || 2.5;
+    const { changes, present } = this._changes(bMin, bMax, n, capDepth, base);
+    const grams = (vol / 1000) * this.DENSITY * this.FILL;         // mm³→cm³ × g/cm³ × fill
+    const hours = grams * this.T_PER_G + changes * this.T_PER_CHANGE;
+    const kg = parseFloat(document.getElementById('filament-cost')?.value) || 25;
+    const cost = grams * kg / 1000;
+    // Optimizer preview at 4 colours (only meaningful when currently > 4).
+    const maxZ = (md.maxElev - md.minElev) * md.elevScale + md.baseHeight;
+    const changes4 = present > 4 ? this._changesForK(heights, base, maxZ, 4, capDepth) : changes;
+    const hours4 = grams * this.T_PER_G + changes4 * this.T_PER_CHANGE;
+    return { grams: Math.round(grams), hours, cost, changes, colors: present, changes4, hours4 };
+  },
+
+  fmtTime(h) {
+    if (!isFinite(h) || h <= 0) return '—';
+    const H = Math.floor(h), m = Math.round((h - H) * 60);
+    return H > 0 ? `${H}h ${m}m` : `${m}m`;
+  },
+};
+
 const ThreeMFExport = {
   COLORS: [
     { name: 'Water',   hex: '#2D6ABF' },
@@ -6381,10 +6472,16 @@ const UI = {
         const maxZ = (md.maxElev - md.minElev) * md.elevScale + md.baseHeight;
         const estMB = s.triangles * 22e-6;   // ≈ bytes/triangle in a zipped 3MF, from real exports
         const estStr = estMB >= 1 ? `≈${estMB.toFixed(0)} MB` : `≈${Math.max(1, Math.round(estMB * 1000))} KB`;
+        // Print estimate (filament / time / cost / AMS changes) + the fewer-colours optimizer.
+        const pe = md.printEstimate;
+        const est = pe ? `
+          <div style="font-size:11px;color:var(--text-secondary);font-family:var(--mono);font-variant-numeric:tabular-nums;margin-bottom:3px;">≈${pe.grams} g · ≈${PrintEstimate.fmtTime(pe.hours)} · ≈$${pe.cost.toFixed(2)}</div>
+          <div style="font-size:11px;color:var(--text-secondary);font-family:var(--mono);font-variant-numeric:tabular-nums;margin-bottom:3px;" title="Estimated AMS filament changes — the dominant print-time cost on multi-color prints">AMS: ${pe.changes.toLocaleString()} changes · ${pe.colors} color${pe.colors === 1 ? '' : 's'}</div>
+          ${(pe.colors > 4 && pe.changes4 < pe.changes) ? `<button class="btn btn-ghost btn-sm" style="margin:2px 0 4px;padding:3px 9px;font-size:11px;" onclick="UI.optimizeColors()" title="Re-generate at 4 filament colors to cut tool changes">↓ 4 colors → ≈${pe.changes4.toLocaleString()} changes, save ≈${PrintEstimate.fmtTime(pe.hours - pe.hours4)}</button>` : ''}` : '';
         html += `<div style="margin-top:10px;padding:9px 11px;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius);">
           <div style="font-size:11px;font-weight:700;color:${color};margin-bottom:5px;">${icon} Model</div>
-          <div style="font-size:11px;color:var(--text-secondary);font-family:var(--mono);margin-bottom:3px;">${md.meshW.toFixed(0)} × ${md.meshH.toFixed(0)} × ${maxZ.toFixed(1)} mm</div>
-          <div style="font-size:11px;color:var(--text-secondary);font-family:var(--mono);margin-bottom:3px;">${s.triangles.toLocaleString()} tri · 3MF ${estStr}</div>
+          <div style="font-size:11px;color:var(--text-secondary);font-family:var(--mono);font-variant-numeric:tabular-nums;margin-bottom:3px;">${md.meshW.toFixed(0)} × ${md.meshH.toFixed(0)} × ${maxZ.toFixed(1)} mm</div>
+          <div style="font-size:11px;color:var(--text-secondary);font-family:var(--mono);font-variant-numeric:tabular-nums;margin-bottom:3px;">${s.triangles.toLocaleString()} tri · 3MF ${estStr}</div>${est}
           <div style="font-size:11px;color:var(--text-muted);">${detail}</div>
         </div>`;
       }
@@ -6589,6 +6686,19 @@ const UI = {
     }
   },
 
+  // One-tap optimizer from the estimate card: drop to 4 filament colors and re-generate, which
+  // cuts AMS tool changes (the dominant multi-color print-time cost). Only reachable when the
+  // model already uses >4 colors, so advanced mode is on — just narrow the count and rebuild.
+  optimizeColors() {
+    const advOn = document.getElementById('adv-colors-on');
+    if (advOn && !advOn.checked) { advOn.checked = true; Advanced.toggle(true); }
+    const sel = document.getElementById('adv-count');
+    if (sel) sel.value = '4';
+    Advanced.setCount('4');
+    Settings.save();
+    this.generateModel();
+  },
+
   async generateModel() {
     if (!State.selectedBounds) {
       toast('Draw a rectangle on the map first.');
@@ -6602,6 +6712,8 @@ const UI = {
       const { meshData, elevationData } = await this._buildMeshForBounds(State.selectedBounds, resolution, null, signal);
       State.elevationData = elevationData;
       State.meshData = meshData;
+      // Print estimate (filament / time / cost / AMS changes) — computed once, cached, shown in the card.
+      try { meshData.printEstimate = PrintEstimate.compute(meshData); } catch (e) { console.warn('Print estimate failed:', e); }
 
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
       showLoading('Building preview…');
