@@ -896,6 +896,45 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
   #poster-overlay { left: 0; }
 }
 
+/* ─── Poster slot rows ───
+   One row per captured tile. Values live in PosterDoc, not Settings — the inputs carry
+   `data-nosave` so the panel sweep skips them. */
+.pslot {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 0;
+}
+.pslot + .pslot { border-top: 1px solid var(--hairline); }
+.pslot .pslot-n {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  width: 15px;
+  flex: 0 0 auto;
+}
+.pslot input[type="text"] { flex: 1 1 auto; min-width: 0; padding: 3px 6px; font-size: 12px; }
+.pslot input[type="number"] { width: 52px; flex: 0 0 auto; padding: 3px 4px; font-size: 12px; }
+.pslot .pslot-warn {
+  font-size: 10px;
+  color: var(--warning);
+  flex: 0 0 auto;
+  max-width: 90px;
+}
+.pslot button {
+  flex: 0 0 auto;
+  width: 20px; height: 20px;
+  padding: 0;
+  line-height: 1;
+  font-size: 11px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.pslot button:hover { background: var(--bg-hover); color: var(--text-primary); }
+
 /* ─── Poster printing ───
    Everything but the poster host is hidden, and print-color-adjust is forced — without it
    Chrome drops flood grounds and light tints, which is exactly what the poster themes are.
@@ -1555,6 +1594,25 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
       <div class="section-body">
         <p style="font-size:11px;color:var(--text-muted);margin:0 0 10px;">A printed sheet the tile mounts onto — the tile's footprint is left as an open aperture.</p>
 
+        <div class="sub-head">Tiles</div>
+        <!-- Slot rows are STATIC (six, hidden until used): Settings.restore iterates the live DOM
+             at init and could never rehydrate rows created later. Slot values live in PosterDoc
+             under its own storage key, so these controls deliberately carry no persisted state. -->
+        <p id="poster-slot-empty" style="font-size:11px;color:var(--text-muted);margin:0 0 8px;">
+          One tile, taken from the current model. Add more to build a multi-map sheet — up to six.</p>
+        <div id="poster-slot-list" style="display:none;margin-bottom:8px;">
+          <div class="pslot" id="pslot-0" style="display:none;"><span class="pslot-n" id="pslot-num-0">1.</span><input type="text" id="pslot-title-0" data-nosave oninput="Poster.editSlot(0,'title',this.value)" placeholder="auto"><input type="number" id="pslot-size-0" data-nosave min="10" max="300" step="5" oninput="Poster.editSlot(0,'printSize',this.value)" title="Printed size, mm"><span class="pslot-warn" id="pslot-warn-0"></span><button type="button" onclick="Poster.updateSlot(0)" title="Re-capture from the current model">⟳</button><button type="button" onclick="Poster.moveSlot(0,-1)" title="Move up">↑</button><button type="button" onclick="Poster.moveSlot(0,1)" title="Move down">↓</button><button type="button" onclick="Poster.removeSlot(0)" title="Remove">✕</button></div>
+          <div class="pslot" id="pslot-1" style="display:none;"><span class="pslot-n" id="pslot-num-1">2.</span><input type="text" id="pslot-title-1" data-nosave oninput="Poster.editSlot(1,'title',this.value)" placeholder="auto"><input type="number" id="pslot-size-1" data-nosave min="10" max="300" step="5" oninput="Poster.editSlot(1,'printSize',this.value)" title="Printed size, mm"><span class="pslot-warn" id="pslot-warn-1"></span><button type="button" onclick="Poster.updateSlot(1)" title="Re-capture from the current model">⟳</button><button type="button" onclick="Poster.moveSlot(1,-1)" title="Move up">↑</button><button type="button" onclick="Poster.moveSlot(1,1)" title="Move down">↓</button><button type="button" onclick="Poster.removeSlot(1)" title="Remove">✕</button></div>
+          <div class="pslot" id="pslot-2" style="display:none;"><span class="pslot-n" id="pslot-num-2">3.</span><input type="text" id="pslot-title-2" data-nosave oninput="Poster.editSlot(2,'title',this.value)" placeholder="auto"><input type="number" id="pslot-size-2" data-nosave min="10" max="300" step="5" oninput="Poster.editSlot(2,'printSize',this.value)" title="Printed size, mm"><span class="pslot-warn" id="pslot-warn-2"></span><button type="button" onclick="Poster.updateSlot(2)" title="Re-capture from the current model">⟳</button><button type="button" onclick="Poster.moveSlot(2,-1)" title="Move up">↑</button><button type="button" onclick="Poster.moveSlot(2,1)" title="Move down">↓</button><button type="button" onclick="Poster.removeSlot(2)" title="Remove">✕</button></div>
+          <div class="pslot" id="pslot-3" style="display:none;"><span class="pslot-n" id="pslot-num-3">4.</span><input type="text" id="pslot-title-3" data-nosave oninput="Poster.editSlot(3,'title',this.value)" placeholder="auto"><input type="number" id="pslot-size-3" data-nosave min="10" max="300" step="5" oninput="Poster.editSlot(3,'printSize',this.value)" title="Printed size, mm"><span class="pslot-warn" id="pslot-warn-3"></span><button type="button" onclick="Poster.updateSlot(3)" title="Re-capture from the current model">⟳</button><button type="button" onclick="Poster.moveSlot(3,-1)" title="Move up">↑</button><button type="button" onclick="Poster.moveSlot(3,1)" title="Move down">↓</button><button type="button" onclick="Poster.removeSlot(3)" title="Remove">✕</button></div>
+          <div class="pslot" id="pslot-4" style="display:none;"><span class="pslot-n" id="pslot-num-4">5.</span><input type="text" id="pslot-title-4" data-nosave oninput="Poster.editSlot(4,'title',this.value)" placeholder="auto"><input type="number" id="pslot-size-4" data-nosave min="10" max="300" step="5" oninput="Poster.editSlot(4,'printSize',this.value)" title="Printed size, mm"><span class="pslot-warn" id="pslot-warn-4"></span><button type="button" onclick="Poster.updateSlot(4)" title="Re-capture from the current model">⟳</button><button type="button" onclick="Poster.moveSlot(4,-1)" title="Move up">↑</button><button type="button" onclick="Poster.moveSlot(4,1)" title="Move down">↓</button><button type="button" onclick="Poster.removeSlot(4)" title="Remove">✕</button></div>
+          <div class="pslot" id="pslot-5" style="display:none;"><span class="pslot-n" id="pslot-num-5">6.</span><input type="text" id="pslot-title-5" data-nosave oninput="Poster.editSlot(5,'title',this.value)" placeholder="auto"><input type="number" id="pslot-size-5" data-nosave min="10" max="300" step="5" oninput="Poster.editSlot(5,'printSize',this.value)" title="Printed size, mm"><span class="pslot-warn" id="pslot-warn-5"></span><button type="button" onclick="Poster.updateSlot(5)" title="Re-capture from the current model">⟳</button><button type="button" onclick="Poster.moveSlot(5,-1)" title="Move up">↑</button><button type="button" onclick="Poster.moveSlot(5,1)" title="Move down">↓</button><button type="button" onclick="Poster.removeSlot(5)" title="Remove">✕</button></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-sm" id="poster-add-slot" onclick="Poster.captureSlot()" title="Snapshot the current model's size, coordinates and palette into a tile">+ Add current model</button>
+          <button class="btn btn-sm btn-ghost" id="poster-clear-slots" style="display:none;" onclick="Poster.clearSlots()">Clear all</button>
+        </div>
+
         <div class="sub-head">Sheet</div>
         <!-- Hidden input carries the value so Settings.save/restore keep working unchanged;
              the chip grid is the visual/interaction surface (same pattern as Frame style). -->
@@ -1618,6 +1676,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
             <option value="blank">Blank paper</option>
           </select>
         </div>
+        <p id="poster-field-hint" class="hint" style="display:none;margin:2px 0 0;">Graticule needs a single tile — each tile carries its own scale bar.</p>
         <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:6px;">
           <label style="margin:0;">Units</label>
           <select id="poster-units" onchange="Poster.refresh()" style="flex:1 1 auto;">
@@ -1891,6 +1950,7 @@ const State = {
   colorOverride: null,     // { w, h, band:Int8Array } manual band recolour (-1 = auto)
   advNames: null,          // per-band names for the legend (land-cover mode)
   gpxTrack: null,          // { name, points:[{lat,lon,ele?}…] } loaded GPX route (ele may be NaN)
+  poster: null,            // PosterDoc document: { v, slots:[…], active } — see PosterDoc
 };
 
 // ═══════════════════════════════════════════════
@@ -1907,7 +1967,7 @@ const Settings = {
   // plus the accordion collapse state.
   save() {
     const out = {};
-    document.querySelectorAll('#side-panel input[id], #side-panel select[id]').forEach(el => {
+    document.querySelectorAll('#side-panel input[id]:not([data-nosave]), #side-panel select[id]:not([data-nosave])').forEach(el => {
       out[el.id] = el.type === 'checkbox' ? el.checked : el.value;
     });
     out.__collapsed = this.SECTION_IDS.filter(id =>
@@ -1926,7 +1986,7 @@ const Settings = {
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem(this.KEY) || 'null'); } catch (e) {}
     if (!saved) return;
-    const els = document.querySelectorAll('#side-panel input[id], #side-panel select[id]');
+    const els = document.querySelectorAll('#side-panel input[id]:not([data-nosave]), #side-panel select[id]:not([data-nosave])');
     els.forEach(el => {
       if (!(el.id in saved)) return;
       if (el.type === 'checkbox') el.checked = !!saved[el.id];
@@ -2139,10 +2199,14 @@ function exportName(ext, midfix = '') {
     slug = `${Math.abs(c.lat).toFixed(2)}${c.lat >= 0 ? 'n' : 's'}-${Math.abs(c.lng).toFixed(2)}${c.lng >= 0 ? 'e' : 'w'}`;
   }
   if (!slug) slug = 'terrain';
-  const ps = parseFloat(document.getElementById('print-size')?.value) || 150;
+  // On a multi-tile poster the live Print Size describes nothing on the sheet, so the tile count
+  // stands in for it — "cascade-volcanoes_poster_4-tiles_2026-09-02.svg".
+  const nSlots = (typeof PosterDoc !== 'undefined') ? PosterDoc.count() : 0;
+  const ps = nSlots > 1 ? `${nSlots}-tiles`
+                        : (parseFloat(document.getElementById('print-size')?.value) || 150) + 'mm';
   const d = new Date();
   const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  return `${slug}${midfix}_${ps}mm_${date}.${ext}`;
+  return `${slug}${midfix}_${ps}_${date}.${ext}`;
 }
 
 
@@ -6396,6 +6460,250 @@ const ThreeMFExport = {
 //   2. NO dominant-baseline — Illustrator and older RIPs ignore it and the text jumps. Position
 //      by explicit baseline `y` plus text-anchor.
 //   3. NO vector-effect="non-scaling-stroke" — these strokes ARE physical widths in mm.
+
+// ─── The poster document ───
+// A sheet can carry 1–6 tiles. This object owns that document: the slot list, its validation,
+// and its persistence. It touches NO DOM and knows nothing about SVG — so it is testable on its
+// own, and the layout code below can stay about geometry.
+//
+// The key idea is CAPTURE, not generation. You build a model the normal way (select → generate →
+// paint → export), and when it's right you snapshot it into a slot. A slot therefore stores a
+// `digest`: the ~300 bytes of a meshData that the poster actually reads. That matters for three
+// reasons:
+//   • A full meshData is ~40 MB at res 512 (triElevations/triSlopes are plain Arrays). Six would
+//     be ~240 MB. Six digests are ~2 KB.
+//   • A digest is duck-type-compatible with a meshData for every reader here — _metrics,
+//     _blkElevation, _blkModel and _apPath all work on one unchanged.
+//   • It captures `palette` AT CAPTURE TIME. MeshGen writes its derived k-means colours back into
+//     the shared adv-color-* pickers (4593-4597), so a palette read later would be whatever was
+//     generated last. Capturing at the moment of the click is what makes per-slot colour correct
+//     without any state-swapping machinery.
+//
+// Persistence deliberately does NOT go through Settings: Settings.save() is a flat sweep of
+// `#side-panel input[id]` and restore() iterates the LIVE DOM at init, so slot values would save
+// but never restore. We use our own key, as Preview does for its panel size.
+const PosterDoc = {
+  V: 1,
+  KEY: 'terraprint-poster-v1',
+  MAX_SLOTS: 6,
+  MAX_BYTES: 400 * 1024,   // well under the 5 MB origin quota, leaving room for Settings et al.
+
+  // Migration chain: add `1: doc => …` here and bump V. An UNKNOWN (newer) version is discarded
+  // wholesale rather than half-read — a corrupt slot prints a wrong physical object, which is
+  // worse than a missing one.
+  _MIGRATE: {},
+
+  _saveT: null,
+
+  _newId() { return 'sl_' + Math.random().toString(36).slice(2, 8); },
+
+  _empty() { return { v: this.V, slots: [], active: 0 }; },
+
+  // The live document, created on first use.
+  doc() {
+    if (!State.poster) State.poster = this._empty();
+    return State.poster;
+  },
+
+  slots() { return this.doc().slots; },
+  count() { return this.doc().slots.length; },
+
+  // ─── bounds round-trip ───
+  // Stored as the plain {north,south,east,west} that mesh.bounds already uses (which is why
+  // _metrics can read b.north directly). Leaflet's LatLngBounds appears only at the map boundary.
+  _toLL(b)    { return L.latLngBounds([[b.south, b.west], [b.north, b.east]]); },
+  _fromLL(lb) { return { south: lb.getSouth(), west: lb.getWest(),
+                         north: lb.getNorth(), east: lb.getEast() }; },
+
+  // ─── validation ───
+  _num(n) { return typeof n === 'number' && isFinite(n); },
+
+  _validBounds(b) {
+    return !!b && this._num(b.north) && this._num(b.south) && this._num(b.east) && this._num(b.west)
+      && b.north > b.south && b.east > b.west
+      && Math.abs(b.north) <= 90 && Math.abs(b.south) <= 90;
+  },
+
+  // A digest missing any field the layout depends on is worse than no digest: the slot would
+  // render at NaN. Reject the whole thing and let the slot show as "not captured".
+  _validDigest(d) {
+    if (!d) return null;
+    const need = ['meshW', 'meshH', 'minElev', 'maxElev', 'elevScale', 'baseHeight'];
+    for (const k of need) if (!this._num(d[k])) return null;
+    if (d.meshW <= 0 || d.meshH <= 0) return null;
+    if (!this._validBounds(d.bounds)) return null;
+    if (!Array.isArray(d.palette) || !d.palette.length) return null;
+    return {
+      meshW: d.meshW, meshH: d.meshH, minElev: d.minElev, maxElev: d.maxElev,
+      elevScale: d.elevScale, baseHeight: d.baseHeight,
+      bounds: { north: +d.bounds.north, south: +d.bounds.south,
+                east: +d.bounds.east, west: +d.bounds.west },
+      selectionShape: ['rect', 'circle', 'boundary'].includes(d.selectionShape) ? d.selectionShape : 'rect',
+      bands: Array.isArray(d.bands) ? d.bands.filter(n => this._num(n)) : null,
+      palette: d.palette.filter(c => c && typeof c.hex === 'string')
+                        .map(c => ({ name: String(c.name || ''), hex: c.hex })),
+      advNames: Array.isArray(d.advNames) ? d.advNames.map(String) : null,
+      res: this._num(d.res) ? d.res : null,
+      at: this._num(d.at) ? d.at : null,
+    };
+  },
+
+  _validate(raw) {
+    if (!raw || typeof raw !== 'object') return this._empty();
+    let doc = raw, v = raw.v | 0;
+    while (v < this.V && this._MIGRATE[v]) { doc = this._MIGRATE[v](doc); v++; }
+    if (v !== this.V) return this._empty();
+    const slots = (Array.isArray(doc.slots) ? doc.slots : [])
+      .filter(s => s && this._validBounds(s.bounds))
+      .slice(0, this.MAX_SLOTS)
+      .map(s => ({
+        id: String(s.id || this._newId()),
+        title: String(s.title || ''),
+        subtitle: String(s.subtitle || ''),
+        place: String(s.place || ''),
+        bounds: { north: +s.bounds.north, south: +s.bounds.south,
+                  east: +s.bounds.east, west: +s.bounds.west },
+        shape: ['rect', 'circle', 'boundary'].includes(s.shape) ? s.shape : 'rect',
+        boundaryPoly: s.shape === 'boundary' && s.boundaryPoly ? s.boundaryPoly : null,
+        printSize: Math.max(10, Math.min(300, +s.printSize || 150)),
+        vertExag: this._num(s.vertExag) ? s.vertExag : null,
+        polyDropped: !!s.polyDropped,
+        digest: this._validDigest(s.digest),
+      }));
+    return { v: this.V, slots, active: Math.max(0, Math.min(slots.length - 1, doc.active | 0)) };
+  },
+
+  // ─── persistence ───
+  load() {
+    let raw = null;
+    try { raw = JSON.parse(localStorage.getItem(this.KEY) || 'null'); } catch (e) { /* corrupt */ }
+    State.poster = this._validate(raw);
+    return State.poster;
+  },
+
+  // Debounced, mirroring Settings' 300ms saver. Returns nothing; call saveNow() for the result.
+  save() {
+    clearTimeout(this._saveT);
+    this._saveT = setTimeout(() => this.saveNow(), 400);
+  },
+
+  // → { ok, dropped } — `dropped` counts boundary outlines shed to fit the quota, so the caller
+  // can tell the user. Park outlines carry thousands of vertices; losing an outline is far better
+  // than losing the whole document to a QuotaExceededError.
+  saveNow() {
+    const doc = this.doc();
+    let json = JSON.stringify(doc), dropped = 0;
+    if (json.length > this.MAX_BYTES) {
+      const heavy = doc.slots.filter(s => s.boundaryPoly)
+        .sort((a, b) => this._polySize(b) - this._polySize(a));
+      for (const s of heavy) {
+        s.boundaryPoly = null; s.polyDropped = true; dropped++;
+        json = JSON.stringify(doc);
+        if (json.length <= this.MAX_BYTES) break;
+      }
+    }
+    try { localStorage.setItem(this.KEY, json); } catch (e) { return { ok: false, dropped }; }
+    return { ok: true, dropped };
+  },
+
+  _polySize(s) {
+    const rings = [...(s.boundaryPoly?.outers || []), ...(s.boundaryPoly?.inners || [])];
+    return rings.reduce((n, r) => n + (r ? r.length : 0), 0);
+  },
+
+  // Drop points closer together than `eps` degrees. The aperture path already discards anything
+  // under 0.15mm apart in sheet space, so this is invisible on the sheet; it exists to keep the
+  // stored document small. Always keeps the first and last point so the ring still closes.
+  _decimate(ring, eps) {
+    if (!Array.isArray(ring) || ring.length < 3) return ring || [];
+    const out = [ring[0]];
+    for (let i = 1; i < ring.length - 1; i++) {
+      const p = ring[i], q = out[out.length - 1];
+      if (Math.abs(p.lat - q.lat) + Math.abs(p.lon - q.lon) >= eps) out.push(p);
+    }
+    out.push(ring[ring.length - 1]);
+    return out;
+  },
+
+  // Decimate a whole polygon to roughly `budget` points, sized from its own bbox so the epsilon
+  // scales with the feature rather than being a fixed angular constant.
+  _decimatePoly(poly, budget = 600) {
+    if (!poly) return null;
+    const rings = [...(poly.outers || []), ...(poly.inners || [])];
+    const total = rings.reduce((n, r) => n + (r ? r.length : 0), 0);
+    if (total <= budget) return poly;
+    let lat0 = Infinity, lat1 = -Infinity, lon0 = Infinity, lon1 = -Infinity;
+    for (const r of rings) for (const p of (r || [])) {
+      if (p.lat < lat0) lat0 = p.lat; if (p.lat > lat1) lat1 = p.lat;
+      if (p.lon < lon0) lon0 = p.lon; if (p.lon > lon1) lon1 = p.lon;
+    }
+    const span = Math.max(lat1 - lat0, lon1 - lon0);
+    let eps = span / 2000, guard = 0;
+    let cut = { name: poly.name, outers: (poly.outers || []).map(r => this._decimate(r, eps)),
+                                 inners: (poly.inners || []).map(r => this._decimate(r, eps)) };
+    while (this._polySize({ boundaryPoly: cut }) > budget && guard++ < 12) {
+      eps *= 1.8;
+      cut = { name: poly.name, outers: (poly.outers || []).map(r => this._decimate(r, eps)),
+                               inners: (poly.inners || []).map(r => this._decimate(r, eps)) };
+    }
+    return cut;
+  },
+
+  // ─── slot CRUD ───
+  add(slot) {
+    const d = this.doc();
+    if (d.slots.length >= this.MAX_SLOTS) return null;
+    const s = { id: this._newId(), title: '', subtitle: '', place: '',
+                bounds: null, shape: 'rect', boundaryPoly: null,
+                printSize: 150, vertExag: null, polyDropped: false, digest: null, ...slot };
+    d.slots.push(s);
+    d.active = d.slots.length - 1;
+    this.save();
+    return s;
+  },
+
+  remove(i) {
+    const d = this.doc();
+    if (i < 0 || i >= d.slots.length) return;
+    d.slots.splice(i, 1);
+    d.active = Math.max(0, Math.min(d.slots.length - 1, d.active));
+    this.save();
+  },
+
+  move(i, dir) {
+    const d = this.doc(), j = i + dir;
+    if (i < 0 || i >= d.slots.length || j < 0 || j >= d.slots.length) return;
+    const t = d.slots[i]; d.slots[i] = d.slots[j]; d.slots[j] = t;
+    d.active = j;
+    this.save();
+  },
+
+  update(i, patch) {
+    const d = this.doc();
+    if (i < 0 || i >= d.slots.length) return;
+    Object.assign(d.slots[i], patch);
+    this.save();
+  },
+
+  // Scale every slot's printed size by `f`, keeping their relative sizing. Used by the
+  // "shrink to fit" action when no paper can hold the set at its current sizes. The digest is
+  // scaled too so the sheet redraws immediately — the printed tile only matches again once the
+  // model is regenerated at the new size, so the slot is marked dirty to say so.
+  scaleAll(f) {
+    for (const s of this.doc().slots) {
+      s.printSize = Math.max(10, Math.round(s.printSize * f));
+      if (s.digest) {
+        s.digest.meshW *= f; s.digest.meshH *= f;
+        s.digest.elevScale *= f;
+        s.resized = true;
+      }
+    }
+    this.save();
+  },
+
+  clear() { State.poster = this._empty(); this.save(); },
+};
+
 const Poster = {
   MM_IN: 25.4,
 
@@ -6434,6 +6742,15 @@ const Poster = {
     GRAT_TARGET: 14,      // desired graticule spacing on paper → drives the interval choice
     BAND_PAD: 8,          // marginalia inset from the neatline
     BLOCK_GAP: 4.5,       // vertical gap between marginalia blocks
+    // Multi-tile grid. Every one of these is multiplied by (cols-1), (rows-1), or a caption
+    // height that is zero at n=1 — so a single-tile sheet is dimensionally untouched by them.
+    CELL_GUT_X: 10,       // minimum clear paper between adjacent aperture columns
+    CELL_GUT_Y: 12,       // minimum between one row's captions and the next row's apertures
+    CELL_GUT_MAX_X: 34,   // …and the most surplus paper we let pool between them
+    CELL_GUT_MAX_Y: 30,   // (uncapped, two tiles on a big sheet would drift to opposite corners)
+    CAP_GAP: 4,           // aperture bottom → caption top
+    CAP_MIN_W: 55,        // a column is never narrower than this, so captions keep a readable measure
+    CAP_MIN_FRAC: 0.7,    // a caption never narrows below this fraction of its column
   },
 
   // Round "nice" distances — the same ladder ThreeMFExport uses for the 3D scale bar, shared here
@@ -6509,7 +6826,13 @@ const Poster = {
   // cartouche use (111320 m per degree of longitude at the equator, cos-corrected) so the poster's
   // scale bar and the printed model's scale bar can never disagree.
   _metrics(mesh) {
-    const b = mesh.bounds;
+    const b = mesh && mesh.bounds;
+    // An empty sheet (or a slot still awaiting capture) has no ground to measure. Return a null
+    // scale rather than propagating NaN into every coordinate on the page.
+    if (!b || !isFinite(b.north) || !isFinite(mesh.meshW)) {
+      const z = { distM: 0, distFt: 0, barMM: 0, label: '—' };
+      return { realWm: 0, realHm: 0, mmPerM: 0, ratio: 0, ratioStr: '—', bar: z, barI: z };
+    }
     const midLatR = (b.north + b.south) / 2 * Math.PI / 180;
     const realWm = Math.abs(b.east - b.west) * Math.cos(midLatR) * 111320;
     const realHm = Math.abs(b.north - b.south) * 111320;
@@ -6535,37 +6858,174 @@ const Poster = {
   // 24000 → "24 000" (thin space). Reads as a scale, not a phone number.
   _group(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); },
 
+  // ─── tiles ──────────────────────────────────────────────────────────────
+
+  // The sheet's tiles, in order. With no captured slots this is LIVE MODE — one tile fed by the
+  // State.meshData singleton, exactly as the poster has always worked. Captured slots replace it.
+  //
+  // `src` carries what the aperture path needs (shape / bounds / boundary rings), which used to be
+  // read straight off State. Routing it through here is what lets six tiles each keep their own.
+  _tiles() {
+    const doc = PosterDoc.doc();
+    if (!doc.slots.length) {
+      const m = State.meshData;
+      return m ? [{ live: true, slot: null, mesh: m,
+                    src: { selectionShape: m.selectionShape, bounds: m.bounds,
+                           boundaryPoly: State.boundaryPoly } }] : [];
+    }
+    return doc.slots.map(s => {
+      // A slot with no digest has not been captured yet. It still holds a cell so the grid keeps
+      // its shape while you fill it in — sized from its own printSize, and marked so captions
+      // don't try to print elevations it doesn't have.
+      const mesh = s.digest || { meshW: s.printSize, meshH: s.printSize,
+                                 bounds: s.bounds, selectionShape: s.shape, placeholder: true };
+      return { live: false, slot: s, mesh,
+               src: { selectionShape: mesh.selectionShape || s.shape,
+                      bounds: mesh.bounds || s.bounds, boundaryPoly: s.boundaryPoly } };
+    });
+  },
+
+  // Normalise whatever a caller passed into a tile array. Existing callers hand us a bare
+  // meshData; the multi-slot paths hand us _tiles(). Both work.
+  _asTiles(x) {
+    if (Array.isArray(x)) return x;
+    if (!x) return [];
+    return [{ live: true, slot: null, mesh: x,
+              src: { selectionShape: x.selectionShape, bounds: x.bounds,
+                     boundaryPoly: State.boundaryPoly } }];
+  },
+
+  // Rows × cols from the tile count and the FIELD's aspect, scored rather than looked up so it
+  // adapts to orientation on its own: six tiles go 2 cols × 3 rows on a portrait sheet and
+  // 3 × 2 in landscape, with no table to keep in sync.
+  _grid(n, field, tiles) {
+    if (n <= 1) return { rows: 1, cols: 1 };
+    const L = this.L;
+    // Mean tile aspect, so a sheet of wide valley tiles columnises differently from square peaks.
+    const ta = tiles.reduce((a, t) => a + (t.mesh && t.mesh.meshH ? t.mesh.meshW / t.mesh.meshH : 1), 0) / n || 1;
+    const maxW = tiles.reduce((m, t) => Math.max(m, t.mesh ? t.mesh.meshW : 0), 0);
+    const maxH = tiles.reduce((m, t) => Math.max(m, t.mesh ? t.mesh.meshH : 0), 0);
+    let best = null;
+    for (let cols = 1; cols <= n; cols++) {
+      const rows = Math.ceil(n / cols);
+      if ((rows - 1) * cols >= n) continue;              // would leave an entirely empty last row
+      const colW = (field.w - 2 * L.APERTURE_CLEAR - (cols - 1) * L.CELL_GUT_X) / cols;
+      const cellH = (field.h - (rows - 1) * L.CELL_GUT_Y) / rows;
+      if (colW <= 0 || cellH <= 0) continue;
+      // Distance from the cell's aspect to a tile's, in log space so "twice too wide" and
+      // "twice too tall" cost the same. Tie-break gently toward fewer, larger rows.
+      let score = Math.abs(Math.log((colW / cellH) / ta)) + rows * 0.02;
+      // A handsome arrangement that doesn't fit is worse than a plain one that does, so an
+      // arrangement the tiles overflow is pushed below every fitting candidate — but still
+      // ranked among its peers, so a hopeless set gets the least-bad grid rather than none.
+      const fitsW = maxW <= colW;
+      const fitsH = rows * maxH + (rows - 1) * L.CELL_GUT_Y + L.APERTURE_CLEAR + L.MIN_HEADROOM <= field.h;
+      if (!fitsW) score += 10 + (maxW - colW) / Math.max(1, field.w);
+      if (!fitsH) score += 10;
+      if (!best || score < best.score) best = { rows, cols, score };
+    }
+    return best || { rows: n, cols: 1 };
+  },
+
   // Pure sheet geometry. The marginalia band is sized from what is actually IN it (see _bandPlan)
   // rather than a fixed fraction of the sheet — a fixed fraction either overflows on a small sheet
   // or leaves a dead strip on a large one.
-  _layout(mesh, sheet, probe = false) {
+  //
+  // Tiles are laid on a grid of uniform columns with content-driven row heights. At one tile the
+  // whole thing reduces algebraically to the single centred aperture it has always produced —
+  // there is deliberately no `if (n === 1)` branch, because a branch is a thing that can drift.
+  // `lay.ap` stays an alias for `aps[0]` so every existing reader is untouched.
+  _layout(input, sheet, probe = false) {
     const L = this.L;
+    const tiles = this._asTiles(input);
+    const n = tiles.length;
     const M = Math.max(9, Math.min(20, 0.05 * Math.min(sheet.wMM, sheet.hMM)));
     const live = { x: M, y: M, w: sheet.wMM - 2 * M, h: sheet.hMM - 2 * M };
-    const plan = this._bandPlan(live, mesh);
+    const plan = this._bandPlan(live, tiles[0] ? tiles[0].mesh : null, tiles);
     const bandH = plan.bandH;
     const band = { x: live.x, y: live.y + live.h - bandH, w: live.w, h: bandH };
     const field = { x: live.x, y: live.y, w: live.w, h: live.h - bandH };
 
-    const ap = { w: mesh.meshW, h: mesh.meshH };
-    ap.cx = field.x + field.w / 2;
-    ap.cy = field.y + field.h / 2 - L.OPTICAL_RISE * field.h;   // optically centred = slightly high
-    // A tall tile would collide with the top neatline; give the rise back rather than overlap.
-    if (ap.cy - ap.h / 2 - field.y < L.MIN_HEADROOM) ap.cy = field.y + L.MIN_HEADROOM + ap.h / 2;
-    ap.x = ap.cx - ap.w / 2; ap.y = ap.cy - ap.h / 2;
+    const grid = this._grid(n, field, tiles);
+    const { rows, cols } = grid;
+    const CLEAR = L.APERTURE_CLEAR;
+    const maxApW = tiles.reduce((m, t) => Math.max(m, t.mesh ? t.mesh.meshW : 0), 0);
 
-    const needW = ap.w + 2 * L.APERTURE_CLEAR;
-    const needH = ap.h + L.APERTURE_CLEAR + L.MIN_HEADROOM;
-    const fit = { ok: needW <= field.w && needH <= field.h, needW, needH, minPaper: null };
-    if (!fit.ok && !probe) fit.minPaper = this._smallestFitting(mesh);
-    return { live, band, field, ap, fit, M, plan };
+    // Columns are sized to their CONTENT, not stretched to fill the field — stretching leaves
+    // each tile marooned in the middle of a column three times its width. The surplus becomes
+    // gutter (capped) and the whole grid is then centred, so the tiles read as a group.
+    // At one column this is `colW = ap.w` centred in the field, i.e. exactly the old behaviour.
+    const colW = cols > 1 ? Math.max(maxApW, L.CAP_MIN_W) : maxApW;
+    let gutX = L.CELL_GUT_X;
+    if (cols > 1) {
+      const surplus = (field.w - 2 * CLEAR) - (cols * colW + (cols - 1) * gutX);
+      if (surplus > 0) gutX += Math.min(surplus / (cols - 1), L.CELL_GUT_MAX_X);
+    }
+    const gridW = cols * colW + (cols - 1) * gutX;
+    const gridX = field.x + (field.w - gridW) / 2;
+    const colX = [];
+    for (let c = 0; c < cols; c++) colX.push(gridX + c * (colW + gutX));
+
+    // Measure: caption height per tile, then the tallest cell in each row.
+    const cells = tiles.map((t, i) => {
+      const r = Math.floor(i / cols), c = i % cols;
+      const w = t.mesh ? t.mesh.meshW : 0, h = t.mesh ? t.mesh.meshH : 0;
+      const capW = Math.min(colW, Math.max(w, colW * L.CAP_MIN_FRAC));
+      const cap = this._caption(t, 0, 0, capW, n);     // {svg,h}; h === 0 at n=1, captions off
+      return { i, r, c, tile: t, w, h, capW, cap };
+    });
+    const rowH = [];
+    for (let r = 0; r < rows; r++) {
+      let m = 0;
+      for (const cl of cells) if (cl.r === r) m = Math.max(m, cl.h + (cl.cap.h ? L.CAP_GAP + cl.cap.h : 0));
+      rowH.push(m);
+    }
+    const contentH = rowH.reduce((a, b) => a + b, 0);
+    // Same idea vertically: let surplus paper open the rows up rather than pool below the last.
+    let gutY = L.CELL_GUT_Y;
+    if (rows > 1) {
+      const usable = field.h - L.MIN_HEADROOM - CLEAR;
+      const surplus = usable - (contentH + (rows - 1) * gutY);
+      if (surplus > 0) gutY += Math.min(surplus / (rows - 1), L.CELL_GUT_MAX_Y);
+    }
+    const totalH = contentH + (rows - 1) * gutY;
+
+    // Optically centred = slightly high. A tall block would collide with the top neatline; give
+    // the rise back rather than overlap.
+    let blockTop = field.y + (field.h - totalH) / 2 - L.OPTICAL_RISE * field.h;
+    if (blockTop - field.y < L.MIN_HEADROOM) blockTop = field.y + L.MIN_HEADROOM;
+
+    const aps = [];
+    const rowY = []; { let y = blockTop; for (let r = 0; r < rows; r++) { rowY.push(y); y += rowH[r] + gutY; } }
+    for (const cl of cells) {
+      const x = colX[cl.c] + (colW - cl.w) / 2;          // centred in its column
+      const y = rowY[cl.r];                              // TOP-aligned within its row
+      const capX = Math.max(colX[cl.c], Math.min(colX[cl.c] + colW - cl.capW, x));
+      aps.push({ i: cl.i, tile: cl.tile, slot: cl.tile.slot, mesh: cl.tile.mesh, src: cl.tile.src,
+                 x, y, w: cl.w, h: cl.h, cx: x + cl.w / 2, cy: y + cl.h / 2,
+                 row: cl.r, col: cl.c,
+                 cap: { x: capX, y: y + cl.h + L.CAP_GAP, w: cl.capW, h: cl.cap.h } });
+    }
+
+    const fit = {
+      ok: n > 0 && gridW <= field.w - 2 * CLEAR && (totalH + CLEAR + L.MIN_HEADROOM) <= field.h,
+      needW: gridW + 2 * CLEAR,
+      needH: totalH + CLEAR + L.MIN_HEADROOM,
+      minPaper: null, maxScale: null,
+    };
+    if (!fit.ok && !probe && n > 0) {
+      fit.minPaper = this._smallestFitting(tiles);
+      if (!fit.minPaper) fit.maxScale = this._maxUniformScale(tiles, sheet);
+    }
+    return { live, band, field, aps, ap: aps[0], fit, M, plan, grid, colW, rowH, totalH };
   },
 
-  // First paper (ascending area, both orientations) whose field would hold this tile — so the
+  // First paper (ascending area, both orientations) whose field would hold these tiles — so the
   // failure toast can name a real fix instead of just complaining. Runs the REAL layout per
   // candidate (probe mode, to avoid recursing back into here) so its verdict can't drift from
-  // the content-driven band height.
-  _smallestFitting(mesh) {
+  // the content-driven band height or the grid choice, both of which change with the paper.
+  _smallestFitting(input) {
+    const tiles = this._asTiles(input);
     const keys = Object.keys(this.PAPERS).sort((a, b) =>
       this.PAPERS[a].w * this.PAPERS[a].h - this.PAPERS[b].w * this.PAPERS[b].h);
     for (const k of keys) {
@@ -6573,12 +7033,37 @@ const Poster = {
         const p = this.PAPERS[k];
         const wIn = land ? p.h : p.w, hIn = land ? p.w : p.h;
         const s = { wMM: wIn * this.MM_IN, hMM: hIn * this.MM_IN };
-        if (this._layout(mesh, s, true).fit.ok) {
+        if (this._layout(tiles, s, true).fit.ok) {
           return { key: k, label: this.PAPERS[k].label, landscape: land };
         }
       }
     }
     return null;
+  },
+
+  // A tile's caption — the block printed directly under its aperture on a multi-tile sheet.
+  // At one tile there is no caption: the marginalia band carries everything, exactly as before,
+  // and this returns a zero height so the layout maths collapses to the single-aperture form.
+  _caption(tile, x, y, w, n) {
+    if (n <= 1 || !tile || !tile.mesh) return { svg: '', h: 0 };
+    return this._captionBlock(tile, x, y, w);
+  },
+
+  // Largest uniform multiplier on the tiles' own sizes at which they all fit this sheet. Scaling
+  // rather than clamping preserves the relative sizing the user chose. Returns null if they
+  // already fit. 12 bisections of a probe layout is a fraction of a millisecond.
+  _maxUniformScale(input, sheet) {
+    const tiles = this._asTiles(input);
+    if (this._layout(tiles, sheet, true).fit.ok) return null;
+    const scaled = f => tiles.map(t => ({ ...t,
+      mesh: { ...t.mesh, meshW: t.mesh.meshW * f, meshH: t.mesh.meshH * f } }));
+    let lo = 0.2, hi = 1.0;
+    if (!this._layout(scaled(lo), sheet, true).fit.ok) return null;   // hopeless even at 20%
+    for (let i = 0; i < 12; i++) {
+      const mid = (lo + hi) / 2;
+      if (this._layout(scaled(mid), sheet, true).fit.ok) lo = mid; else hi = mid;
+    }
+    return lo;
   },
 
   // ─── SVG primitives ─────────────────────────────────────────────────────
@@ -6625,10 +7110,16 @@ const Poster = {
 
   // The single source of truth: preview, SVG download, print, and the cut template all call this.
   // Returns a live SVG element (already auto-fitted) — callers serialize or mount it.
-  build(mesh) {
+  // Accepts a bare meshData (live mode, as always) or a tile array from _tiles().
+  build(input) {
     const sheet = this._sheet();
     const t = this._theme();
-    const lay = this._layout(mesh, sheet);
+    const tiles = this._asTiles(input);
+    const lay = this._layout(tiles, sheet);
+    // Sheet-level metrics describe the FIRST tile. At one tile that is the tile; above one they
+    // are only used by blocks that a multi-tile band doesn't render (the graticule bails, and the
+    // scale/elevation blocks move into the captions, each with their own metrics).
+    const mesh = tiles.length ? tiles[0].mesh : null;
     const m = this._metrics(mesh);
 
     const parts = [
@@ -6637,9 +7128,10 @@ const Poster = {
       this._graticule(lay, t, mesh, m),
       this._neatline(lay, t),
       this._cornerTicks(lay, t),
-      this._aperture(lay, t, mesh),
-      this._apCoords(lay, t, mesh),
-      this._cropMarks(lay, t, mesh),
+      this._aperture(lay, t),
+      this._apCoords(lay, t),
+      this._cropMarks(lay, t),
+      this._captions(lay),
       this._northArrow(lay, t),
       this._marginalia(lay, t, mesh, m),
     ];
@@ -6696,20 +7188,24 @@ const Poster = {
 
   // The aperture outline as an SVG path `d`, in sheet mm. Rect / circle / boundary outline —
   // whatever shape MeshGen actually produced, so the printed hole matches the printed tile.
-  _apPath(mesh, ap) {
-    const shape = mesh.selectionShape || 'rect';
+  // `src` is {selectionShape, bounds, boundaryPoly} — a slot's own, or the live mesh's. Passing a
+  // bare meshData still works (it falls back to State.boundaryPoly), which is what keeps the
+  // single-tile path identical.
+  _apPath(src, ap) {
+    const shape = src.selectionShape || 'rect';
+    const poly = src.boundaryPoly !== undefined ? src.boundaryPoly : State.boundaryPoly;
     if (shape === 'circle') {
       const r = Math.min(ap.w, ap.h) / 2;
       const cx = ap.x + ap.w / 2, cy = ap.y + ap.h / 2;
       return `M ${this._n(cx - r)} ${this._n(cy)} a ${this._n(r)} ${this._n(r)} 0 1 0 ${this._n(2 * r)} 0 `
            + `a ${this._n(r)} ${this._n(r)} 0 1 0 ${this._n(-2 * r)} 0 Z`;
     }
-    if (shape === 'boundary' && State.boundaryPoly) {
-      const b = mesh.bounds;
+    if (shape === 'boundary' && poly) {
+      const b = src.bounds;
       // Same lat/lon → tile mapping MeshGen and Gpx._ribbon use, so the hole registers with the print.
       const px = lon => ap.x + (lon - b.west) / (b.east - b.west) * ap.w;
       const py = lat => ap.y + ap.h - (lat - b.south) / (b.north - b.south) * ap.h;
-      const rings = [...(State.boundaryPoly.outers || []), ...(State.boundaryPoly.inners || [])];
+      const rings = [...(poly.outers || []), ...(poly.inners || [])];
       let d = '';
       for (const ring of rings) {
         if (!ring || ring.length < 3) continue;
@@ -6731,42 +7227,58 @@ const Poster = {
          + `V ${this._n(ap.y + ap.h)} H ${this._n(ap.x)} Z`;
   },
 
-  _aperture(lay, t, mesh) {
-    // An irregular outline cannot be registered from corner marks alone, so a boundary aperture
-    // always draws its keyline regardless of the toggle.
-    const forced = (mesh.selectionShape === 'boundary' && State.boundaryPoly);
-    if (!this._on('poster-outline') && !forced) return '';
-    return `<path d="${this._apPath(mesh, lay.ap)}" fill="none" fill-rule="evenodd" `
+  _aperture(lay, t) {
+    let s = '';
+    for (const a of lay.aps) {
+      // An irregular outline cannot be registered from corner marks alone, so a boundary aperture
+      // always draws its keyline regardless of the toggle.
+      const poly = a.src.boundaryPoly !== undefined ? a.src.boundaryPoly : State.boundaryPoly;
+      const forced = (a.src.selectionShape === 'boundary' && poly);
+      if (!this._on('poster-outline') && !forced) continue;
+      s += `<path d="${this._apPath(a.src, a)}" fill="none" fill-rule="evenodd" `
          + `stroke="${t.inkSoft}" stroke-width="${this._n(this.L.HAIRLINE_W)}"/>`;
+    }
+    return s;
   },
 
   // Crop marks sit OUTSIDE the aperture — with the tile mounted on top, they are the only
   // registration geometry still visible. (A full outline would be hidden underneath and useless.)
-  _cropMarks(lay, t, mesh) {
+  _cropMarks(lay, t) {
     if (!this._on('poster-crops')) return '';
-    const { ap } = lay, g = this.L.CROP_GAP, a = this.L.CROP_ARM, sw = this.L.HAIRLINE_W;
+    const g = this.L.CROP_GAP, a = this.L.CROP_ARM, sw = this.L.HAIRLINE_W;
+    const multi = lay.aps.length > 1;
     let s = `<g id="crop-marks">`;
-    if (mesh.selectionShape === 'circle') {
-      // Square corner marks around a circle read as a mistake — use radial ticks instead.
-      const r = Math.min(ap.w, ap.h) / 2 + g, cx = ap.x + ap.w / 2, cy = ap.y + ap.h / 2;
-      for (const deg of [45, 135, 225, 315]) {
-        const rad = deg * Math.PI / 180, ux = Math.cos(rad), uy = Math.sin(rad);
-        s += this._line(cx + ux * r, cy + uy * r, cx + ux * (r + a * 0.7), cy + uy * (r + a * 0.7), t.inkSoft, sw);
+    for (const ap of lay.aps) {
+      const mesh = ap.mesh;
+      if (ap.src.selectionShape === 'circle') {
+        // Square corner marks around a circle read as a mistake — use radial ticks instead.
+        const r = Math.min(ap.w, ap.h) / 2 + g, cx = ap.x + ap.w / 2, cy = ap.y + ap.h / 2;
+        for (const deg of [45, 135, 225, 315]) {
+          const rad = deg * Math.PI / 180, ux = Math.cos(rad), uy = Math.sin(rad);
+          s += this._line(cx + ux * r, cy + uy * r, cx + ux * (r + a * 0.7), cy + uy * (r + a * 0.7), t.inkSoft, sw);
+        }
+      } else {
+        // Boundary shapes have no meaningful corners — fall back to the aperture's bounding box.
+        const x0 = ap.x - g, y0 = ap.y - g, x1 = ap.x + ap.w + g, y1 = ap.y + ap.h + g;
+        const L_ = [[x0, y0, 1, 1], [x1, y0, -1, 1], [x0, y1, 1, -1], [x1, y1, -1, -1]];
+        for (const [x, y, dx, dy] of L_) {
+          s += this._line(x, y, x + dx * a, y, t.inkSoft, sw);
+          s += this._line(x, y, x, y + dy * a, t.inkSoft, sw);
+        }
       }
-    } else {
-      // Boundary shapes have no meaningful corners — fall back to the aperture's bounding box.
-      const x0 = ap.x - g, y0 = ap.y - g, x1 = ap.x + ap.w + g, y1 = ap.y + ap.h + g;
-      const L_ = [[x0, y0, 1, 1], [x1, y0, -1, 1], [x0, y1, 1, -1], [x1, y1, -1, -1]];
-      for (const [x, y, dx, dy] of L_) {
-        s += this._line(x, y, x + dx * a, y, t.inkSoft, sw);
-        s += this._line(x, y, x, y + dy * a, t.inkSoft, sw);
+      // The number you'll want six months from now when you re-cut the acrylic. Sits one line BELOW
+      // the SW corner coordinate (drawn at +CROP_GAP+3.5) so the two stack instead of colliding.
+      // On a multi-tile sheet the caption occupies that space, so it moves above the aperture.
+      if (mesh && isFinite(mesh.meshW) && isFinite(mesh.meshH) && !mesh.placeholder) {
+        s += multi
+          ? this._txt(ap.x - g, ap.y - g - 1.2,
+              `${mesh.meshW.toFixed(0)} × ${mesh.meshH.toFixed(0)} MM`,
+              { cls: 'p-label', size: 2.1, fill: t.inkSoft })
+          : this._txt(ap.x - g, ap.y + ap.h + g + 8.2,
+              `APERTURE ${mesh.meshW.toFixed(1)} × ${mesh.meshH.toFixed(1)} MM`,
+              { cls: 'p-label', size: 2.4, fill: t.inkSoft });
       }
     }
-    // The number you'll want six months from now when you re-cut the acrylic. Sits one line BELOW
-    // the SW corner coordinate (drawn at +CROP_GAP+3.5) so the two stack instead of colliding.
-    s += this._txt(ap.x - g, ap.y + ap.h + g + 8.2,
-      `APERTURE ${mesh.meshW.toFixed(1)} × ${mesh.meshH.toFixed(1)} MM`,
-      { cls: 'p-label', size: 2.4, fill: t.inkSoft });
     return s + `</g>`;
   },
 
@@ -6791,6 +7303,12 @@ const Poster = {
   // the grid is square on paper.
   _graticule(lay, t, mesh, m) {
     if ((document.getElementById('poster-field')?.value || 'grid') !== 'grid') return '';
+    // The grid is anchored to ONE tile's SW corner at THAT tile's ground interval, with its tick
+    // labels in the shared outer margins. Six tiles at six independent scales have no common datum
+    // and nowhere to put six sets of labels — so a multi-tile sheet carries no field grid. The
+    // ground scale it conveyed lives in each caption's scale bar instead, which is where a plate
+    // sheet puts it anyway.
+    if (lay.aps.length > 1) return '';
     const { field, ap } = lay;
     const imperial = this._units() === 'imperial';
     const targetM = this.L.GRAT_TARGET / m.mmPerM;
@@ -6861,8 +7379,12 @@ const Poster = {
   // Full lat/lon at the four aperture corners — the actual quad convention, and the detail that
   // makes the sheet read as a real map. Drawn independently of the graticule: these are the
   // tile's registration data, so a blank field must not take them away.
-  _apCoords(lay, t, mesh) {
-    const { ap } = lay, b = mesh.bounds;
+  // On a multi-tile sheet there is no room for four corner readings per tile, and the caption
+  // already states the centre — so corner coordinates are a single-tile flourish.
+  _apCoords(lay, t) {
+    if (lay.aps.length !== 1) return '';
+    const ap = lay.aps[0], b = ap.src.bounds;
+    if (!b) return '';
     const fmt = (v, pos, neg) => `${Math.abs(v).toFixed(3)}°${v >= 0 ? pos : neg}`;
     const gap = this.L.CROP_GAP + 1.5, sz = 2.4;
     const NW = `${fmt(b.north, 'N', 'S')} ${fmt(b.west, 'E', 'W')}`;
@@ -6875,6 +7397,68 @@ const Poster = {
       + this._txt(ap.x - gap, ap.y + ap.h + gap + 3.5, SW, { cls: 'p-data', size: sz, fill: t.inkSoft })
       + this._txt(ap.x + ap.w + gap, ap.y + ap.h + gap + 3.5, SE, { cls: 'p-data', size: sz, fill: t.inkSoft, anchor: 'end' })
       + `</g>`;
+  },
+
+  // ─── captions ───────────────────────────────────────────────────────────
+
+  // A slot's printed name. Its own title wins; otherwise the captured place name, then the
+  // boundary/cutout name, then its coordinates — the same escalation the sheet title uses, but
+  // resolved PER SLOT so six tiles never share one name.
+  _slotTitle(tile) {
+    const s = tile.slot;
+    if (s) {
+      if (s.title) return s.title;
+      if (s.place) return s.place.split(',')[0].trim();
+      if (s.boundaryPoly && s.boundaryPoly.name) return s.boundaryPoly.name;
+    }
+    const b = tile.src && tile.src.bounds;
+    if (b) return ThreeMFExport._coordString({ bounds: b });
+    return 'Untitled';
+  },
+
+  // The block printed under one aperture. Built from the same (x, yTop, w) → {svg, h} contract and
+  // the same _stack helper as the marginalia band, so it wraps, measures and auto-fits identically.
+  _captionBlock(tile, x, y, w) {
+    const t = this._theme(), mesh = tile.mesh;
+    // Caption type scales with its column, so a 60mm tile and a 150mm tile both read proportionately.
+    const S = Math.max(0.62, Math.min(1.25, w / 90));
+    const rows = [{ cls: 'p-display', size: 4.4 * S, fill: t.ink, text: this._slotTitle(tile) }];
+    const sub = tile.slot && tile.slot.subtitle;
+    if (sub && this._on('poster-subtitle-on'))
+      rows.push({ cls: 'p-display', size: 2.6 * S, fill: t.inkSoft, style: 'italic', text: sub });
+    if (mesh.placeholder) {
+      rows.push({ cls: 'p-label', size: 2.2 * S, fill: t.inkSoft, text: 'NOT CAPTURED' });
+      return this._wrapCap(this._stack(x, y, w, rows));
+    }
+    if (this._on('poster-coords-on') && mesh.bounds)
+      rows.push({ cls: 'p-data', size: 2.4 * S, fill: t.inkSoft, text: ThreeMFExport._coordString(mesh) });
+    if (this._on('poster-stats-on') && isFinite(mesh.minElev)) {
+      const u = this._units(), lo = Math.round(mesh.minElev), hi = Math.round(mesh.maxElev);
+      rows.push({ cls: 'p-data', size: 2.4 * S, fill: t.ink, text:
+        u === 'imperial' ? `${Math.round(lo * 3.28084)}–${Math.round(hi * 3.28084)} ft`
+      : u === 'metric'   ? `${lo}–${hi} m`
+      : `${lo}–${hi} m · ${Math.round(lo * 3.28084)}–${Math.round(hi * 3.28084)} ft` });
+    }
+    const head = this._stack(x, y, w, rows);
+    let out = head.svg, cy = y + head.h;
+    if (this._on('poster-scale-on') && mesh.bounds && isFinite(mesh.meshW)) {
+      const bar = this._blkScale(x, cy + 1.2 * S, w, t, this._metrics(mesh), S * 0.9);
+      out += bar.svg; cy += 1.2 * S + bar.h;
+    }
+    return this._wrapCap({ svg: out, h: cy - y });
+  },
+
+  _wrapCap(r) { return { svg: `<g class="caption">${r.svg}</g>`, h: r.h }; },
+
+  // Every caption, drawn at its measured position.
+  _captions(lay) {
+    if (lay.aps.length <= 1) return '';
+    let s = `<g id="captions">`;
+    for (const ap of lay.aps) {
+      if (!ap.cap.h) continue;
+      s += this._captionBlock(ap.tile, ap.cap.x, ap.cap.y, ap.cap.w).svg;
+    }
+    return s + `</g>`;
   },
 
   // ─── marginalia ─────────────────────────────────────────────────────────
@@ -6961,7 +7545,7 @@ const Poster = {
 
   // Decide what goes in the band, how it columnises, and how tall the band must therefore be.
   // Shrinks the type scale only if the content genuinely cannot fit in a sensible band depth.
-  _bandPlan(live, mesh) {
+  _bandPlan(live, mesh, tiles) {
     const P = this.L.BAND_PAD, G = this.L.BLOCK_GAP, gut = 6;
     const availW = live.w - 2 * P;
     const hasFooter = this._on('poster-credit-on');
@@ -6976,16 +7560,29 @@ const Poster = {
 
       // Which data blocks are switched on. Order here is the reading order they fill columns in.
       const makers = [];
-      if (this._on('poster-scale-on'))
-        makers.push({ id: 'scale', mk: (x, y, w) => this._blkScale(x, y, w, t, m, S) });
-      if (this._on('poster-stats-on')) {
-        makers.push({ id: 'elevation', mk: (x, y, w) => this._blkElevation(x, y, w, t, mesh, S) });
-        makers.push({ id: 'model', mk: (x, y, w) => this._blkModel(x, y, w, t, mesh, S) });
+      const multi = !!(tiles && tiles.length > 1);
+      if (!multi) {
+        // ONE tile: the band carries everything. This arm is the n=1 regression surface — it is
+        // exactly what shipped, and the golden diff holds it byte-identical.
+        if (this._on('poster-scale-on'))
+          makers.push({ id: 'scale', mk: (x, y, w) => this._blkScale(x, y, w, t, m, S) });
+        if (this._on('poster-stats-on')) {
+          makers.push({ id: 'elevation', mk: (x, y, w) => this._blkElevation(x, y, w, t, mesh, S) });
+          makers.push({ id: 'model', mk: (x, y, w) => this._blkModel(x, y, w, t, mesh, S) });
+        }
+        if (this._on('poster-legend-on'))
+          makers.push({ id: 'legend', mk: (x, y, w) => this._blkLegend(x, y, w, t, mesh, S) });
+        if (this._on('poster-route-on') && State.gpxTrack)
+          makers.push({ id: 'route', mk: (x, y, w) => this._blkRoute(x, y, w, t, mesh, S, false) });
+      } else {
+        // MANY tiles: elevation, scale and model are per-tile facts and now live in the captions.
+        // Repeating them here would describe one arbitrary tile. The band keeps only what is true
+        // of the whole sheet.
+        if (this._on('poster-legend-on'))
+          makers.push({ id: 'legend', mk: (x, y, w) => this._blkLegend(x, y, w, t, this._unionMesh(tiles), S) });
+        if (this._on('poster-route-on') && State.gpxTrack)
+          makers.push({ id: 'route', mk: (x, y, w) => this._blkRoute(x, y, w, t, mesh, S, true) });
       }
-      if (this._on('poster-legend-on'))
-        makers.push({ id: 'legend', mk: (x, y, w) => this._blkLegend(x, y, w, t, mesh, S) });
-      if (this._on('poster-route-on') && State.gpxTrack)
-        makers.push({ id: 'route', mk: (x, y, w) => this._blkRoute(x, y, w, t, mesh, S) });
 
       // Column count follows the content: two data blocks per column, never more than two data
       // columns. With nothing switched on the title takes the whole width and can breathe.
@@ -7033,12 +7630,29 @@ const Poster = {
     return plan;
   },
 
-  _blkTitle(x, y, w, t, mesh, S, titleSize) {
+  // A pseudo-mesh standing for the whole sheet: the union of every tile's bands under a shared
+  // palette, so the sheet legend advertises exactly the filaments the SET uses — not one tile's.
+  _unionMesh(tiles) {
+    let palette = null; const seen = new Set();
+    for (const t of tiles) {
+      const d = t.mesh;
+      if (!d) continue;
+      if (!palette && d.palette) palette = d.palette;
+      if (d.bands) for (const b of d.bands) seen.add(b);
+    }
+    if (!palette) palette = getBandConfig().colors;
+    const bands = seen.size ? [...seen].sort((a, b) => a - b)
+                            : palette.map((_, i) => i);
+    return { palette, bands };
+  },
+
+  _blkTitle(x, y, w, t, mesh, S, titleSize, multi) {
     const sub = this._subtitle();
     const rows = [{ cls: 'p-display', size: titleSize, fill: t.ink, text: this._title() }];
     if (this._on('poster-subtitle-on') && sub)
       rows.push({ cls: 'p-display', size: titleSize * 0.4, fill: t.inkSoft, style: 'italic', text: sub });
-    if (this._on('poster-coords-on'))
+    // A multi-tile sheet has no single centre worth printing — each caption carries its own.
+    if (this._on('poster-coords-on') && !multi && mesh)
       rows.push({ cls: 'p-data', size: 3.2 * S, fill: t.ink, text: ThreeMFExport._coordString(mesh) });
     const r = this._stack(x, y, w, rows);
     return { svg: `<g id="title">${r.svg}</g>`, h: r.h };
@@ -7115,8 +7729,11 @@ const Poster = {
   // Band legend. Swatches keep their REAL filament hexes in every theme — they are data, not
   // decoration (the same rule the app applies to the topo palette on screen).
   _blkLegend(x, y, w, t, mesh, S) {
-    const palette = getBandConfig().colors;
-    const present = this._presentBands(mesh, palette.length);
+    // A captured slot carries the palette that was live when IT was generated, so a later slot's
+    // k-means can never retroactively recolour an earlier one's legend. Live mode reads the
+    // pickers exactly as before.
+    const palette = (mesh && mesh.palette) || getBandConfig().colors;
+    const present = (mesh && mesh.bands) || this._presentBands(mesh, palette.length);
     const sw = 3.6 * S, gap = 1.8 * S, lh = 2.6 * S, rowH = 5.2 * S;
     const head = this._stack(x, y, w, [{ cls: 'p-label', size: 2.4 * S, fill: t.inkSoft, text: 'PRINT BANDS' }]);
     let cy = y + head.h, out = head.svg;
@@ -7130,9 +7747,10 @@ const Poster = {
     return { svg: `<g id="legend">${out}</g>`, h: cy - y };
   },
 
-  _blkRoute(x, y, w, t, mesh, S) {
+  _blkRoute(x, y, w, t, mesh, S, multi = false) {
     const gt = State.gpxTrack;
-    const clip = this._on('poster-gpx-clip') ? mesh.bounds : null;
+    // "in frame" means nothing when there are six frames — measure the whole track.
+    const clip = (!multi && this._on('poster-gpx-clip') && mesh && mesh.bounds) ? mesh.bounds : null;
     const st = this._trackStats(gt.points, clip);
     if (!st || !st.n) return { svg: '', h: 0 };
     const u = this._units();
@@ -7280,29 +7898,36 @@ const Poster = {
   // ─── overlay ────────────────────────────────────────────────────────────
 
   open() {
-    if (!State.selectedBounds) { toast('Draw a rectangle or circle on the map first.'); return; }
-    if (!State.meshData) {
-      // The aperture is DEFINED by meshW/meshH, which only exist after a generate — never guess
-      // it from printSize × aspect or the printed hole won't match the printed tile.
+    const tiles = this._tiles();
+    // With captured slots the poster stands on its own. With none it is in live mode and still
+    // needs a generated model, since the aperture is DEFINED by meshW/meshH — guessing it from
+    // printSize × aspect would print a hole that doesn't match the tile.
+    if (!tiles.length) {
+      if (!State.selectedBounds) { toast('Draw a rectangle or circle on the map first.'); return; }
       toast('Generate the 3D model first — the poster needs the tile\'s exact printed size.',
         { duration: 7000, action: 'Generate', onAction: () => UI.generateModel() });
       return;
     }
-    const mesh = State.meshData;
-    const lay = this._layout(mesh, this._sheet());
+    const n = tiles.length;
+    const lay = this._layout(tiles, this._sheet());
     if (!lay.fit.ok) {
-      const mp = lay.fit.minPaper;
-      const msg = `Tile is ${mesh.meshW.toFixed(0)} × ${mesh.meshH.toFixed(0)} mm — too big for `
-                + `${this._sheet().label}.` + (mp ? ` Try ${mp.label}, or lower Print Size.` : ' Lower Print Size.');
+      const mp = lay.fit.minPaper, ms = lay.fit.maxScale;
+      const what = n === 1
+        ? `Tile is ${lay.ap.w.toFixed(0)} × ${lay.ap.h.toFixed(0)} mm`
+        : `${n} tiles need ${lay.fit.needH.toFixed(0)} mm of field`;
+      const msg = `${what} — too big for ${this._sheet().label}.`;
       toast(msg, mp
         ? { duration: 9000, action: `Use ${mp.label}`, onAction: () => {
             if (mp.landscape) { const o = document.getElementById('poster-orient'); if (o) o.value = 'landscape'; }
             this.selectPaper(mp.key); this.open();
           } }
+        : ms
+        ? { duration: 9000, action: `Shrink tiles to ${Math.round(ms * 100)}%`,
+            onAction: () => { PosterDoc.scaleAll(ms); this._syncSlots(); this.open(); } }
         : 9000);
       return;
     }
-    if (!this._warnedBig && lay.ap.w > lay.field.w * 0.75) {
+    if (!this._warnedBig && n === 1 && lay.ap.w > lay.field.w * 0.75) {
       this._warnedBig = true;
       toast('Tile fills most of the sheet — consider a larger paper size.', 5000);
     }
@@ -7330,15 +7955,16 @@ const Poster = {
   },
 
   _render() {
-    const mesh = State.meshData; if (!mesh) return;
+    const tiles = this._tiles(); if (!tiles.length) return;
     const stage = document.getElementById('poster-stage'); if (!stage) return;
-    const lay = this._layout(mesh, this._sheet());
+    const lay = this._layout(tiles, this._sheet());
     if (!lay.fit.ok) {
       stage.innerHTML = `<p style="color:#f0e6d8;font-size:13px;max-width:32ch;text-align:center;">`
-        + `The tile doesn't fit this sheet. Pick a larger paper size or lower Print Size.</p>`;
+        + `${tiles.length > 1 ? 'These tiles don\'t' : 'The tile doesn\'t'} fit this sheet. `
+        + `Pick a larger paper size or smaller tiles.</p>`;
       return;
     }
-    const el = this.build(mesh);
+    const el = this.build(tiles);
     stage.innerHTML = '';
     stage.appendChild(el);
     this._autoFit(el);                       // must run mounted — getComputedTextLength needs layout
@@ -7348,8 +7974,10 @@ const Poster = {
     const sheet = this._sheet();
     const info = document.getElementById('poster-info');
     if (info) {
-      const m = this._metrics(mesh);
-      info.textContent = `${sheet.label} · ${sheet.wMM.toFixed(0)} × ${sheet.hMM.toFixed(0)} mm · 1:${m.ratioStr}`;
+      const n = tiles.length;
+      const scale = n === 1 ? ` · 1:${this._metrics(tiles[0].mesh).ratioStr}`
+                            : ` · ${n} tiles ${lay.grid.cols}×${lay.grid.rows}`;
+      info.textContent = `${sheet.label} · ${sheet.wMM.toFixed(0)} × ${sheet.hMM.toFixed(0)} mm${scale}`;
     }
   },
 
@@ -7357,17 +7985,160 @@ const Poster = {
   // Print Size goes to 300mm and that doesn't fit 8×10 or 11×14.
   _syncFit() {
     const el = document.getElementById('poster-fit'); if (!el) return;
-    const mesh = State.meshData;
-    if (!mesh) { el.textContent = 'Generate the model to size the aperture.'; el.style.color = 'var(--text-muted)'; return; }
+    const tiles = this._tiles();
+    if (!tiles.length) {
+      el.textContent = 'Generate a model, then add it to the poster.';
+      el.style.color = 'var(--text-muted)'; return;
+    }
     const sheet = this._sheet();
-    const lay = this._layout(mesh, sheet);
-    const m = this._metrics(mesh);
+    const lay = this._layout(tiles, sheet);
     const km = v => v >= 10000 ? (v / 1000).toFixed(0) : (v / 1000).toFixed(1);
-    // Ground extent belongs here too: it is the fastest way to notice a selection that reaches
-    // far beyond the intended subject (and so reports some distant peak's elevation).
-    el.textContent = `Tile ${mesh.meshW.toFixed(0)} × ${mesh.meshH.toFixed(0)} mm · covers `
-      + `${km(m.realWm)} × ${km(m.realHm)} km · 1:${m.ratioStr}`;
+    if (tiles.length === 1) {
+      const mesh = tiles[0].mesh, m = this._metrics(mesh);
+      // Ground extent belongs here too: it is the fastest way to notice a selection that reaches
+      // far beyond the intended subject (and so reports some distant peak's elevation).
+      el.textContent = `Tile ${mesh.meshW.toFixed(0)} × ${mesh.meshH.toFixed(0)} mm · covers `
+        + `${km(m.realWm)} × ${km(m.realHm)} km · 1:${m.ratioStr}`;
+    } else {
+      el.textContent = `${tiles.length} tiles · ${lay.grid.cols}×${lay.grid.rows} grid · `
+        + `needs ${lay.fit.needW.toFixed(0)} × ${lay.fit.needH.toFixed(0)} mm of `
+        + `${lay.field.w.toFixed(0)} × ${lay.field.h.toFixed(0)}`;
+    }
     el.style.color = lay.fit.ok ? 'var(--text-secondary)' : 'var(--danger)';
+  },
+
+  // ─── slots ──────────────────────────────────────────────────────────────
+
+  // Compress a live meshData down to the ~300 bytes the poster reads. Called at the moment of
+  // capture, which is the whole point: getBandConfig() reads the adv-color-* pickers that
+  // MeshGen has just written its derived palette into, so capturing HERE freezes this model's
+  // own colours. Read them later and you would get whichever model was generated last.
+  _digest(mesh) {
+    const cfg = getBandConfig();
+    return {
+      meshW: mesh.meshW, meshH: mesh.meshH,
+      minElev: mesh.minElev, maxElev: mesh.maxElev,
+      elevScale: mesh.elevScale, baseHeight: mesh.baseHeight,
+      bounds: { ...mesh.bounds },
+      selectionShape: mesh.selectionShape || 'rect',
+      bands: this._presentBands(mesh, cfg.colors.length),   // drops pixelBands (~1 MB)
+      palette: cfg.colors.map(c => ({ name: c.name, hex: c.hex })),
+      advNames: State.advNames ? State.advNames.slice() : null,
+      res: mesh.gridW || null,
+      at: Date.now(),
+    };
+  },
+
+  // Snapshot the current model into a new slot. This is the only way tiles get onto a sheet —
+  // the poster never runs the mesh pipeline itself, so whatever you captured (including any
+  // water/colour painting) is exactly what the sheet describes.
+  captureSlot() {
+    const mesh = State.meshData;
+    if (!mesh) {
+      toast('Generate a model first, then add it to the poster.',
+        { duration: 6000, action: 'Generate', onAction: () => UI.generateModel() });
+      return;
+    }
+    if (PosterDoc.count() >= PosterDoc.MAX_SLOTS) {
+      toast(`A sheet holds at most ${PosterDoc.MAX_SLOTS} tiles.`, 4000); return;
+    }
+    const b = mesh.bounds;
+    const slot = PosterDoc.add({
+      bounds: { north: b.north, south: b.south, east: b.east, west: b.west },
+      shape: mesh.selectionShape || 'rect',
+      boundaryPoly: mesh.selectionShape === 'boundary' && State.boundaryPoly
+        ? PosterDoc._decimatePoly(State.boundaryPoly) : null,
+      place: (typeof Geocode !== 'undefined' && Geocode.lastPlace) || '',
+      title: this._v('poster-title') || this._v('frame-title') || '',
+      printSize: parseFloat(document.getElementById('print-size')?.value) || 150,
+      digest: this._digest(mesh),
+    });
+    if (!slot) return;
+    const r = PosterDoc.saveNow();
+    if (r.dropped) toast(`Added — boundary outline dropped to fit storage (${r.dropped}).`, 5000);
+    else toast(`Added “${this._slotTitle({ slot, mesh: slot.digest, src: {} })}” — ${PosterDoc.count()} of ${PosterDoc.MAX_SLOTS}.`, 3500);
+    this._syncSlots(); this.refresh();
+  },
+
+  removeSlot(i) { PosterDoc.remove(i); this._syncSlots(); this.refresh(); },
+  moveSlot(i, d) { PosterDoc.move(i, d); this._syncSlots(); this.refresh(); },
+
+  // Re-capture the live model into an existing slot, so you can revise a peak in place.
+  updateSlot(i) {
+    const mesh = State.meshData;
+    if (!mesh) { toast('Generate a model first.'); return; }
+    const b = mesh.bounds;
+    PosterDoc.update(i, {
+      bounds: { north: b.north, south: b.south, east: b.east, west: b.west },
+      shape: mesh.selectionShape || 'rect',
+      boundaryPoly: mesh.selectionShape === 'boundary' && State.boundaryPoly
+        ? PosterDoc._decimatePoly(State.boundaryPoly) : null,
+      printSize: parseFloat(document.getElementById('print-size')?.value) || 150,
+      digest: this._digest(mesh), resized: false,
+    });
+    PosterDoc.saveNow();
+    this._syncSlots(); this.refresh();
+    toast(`Slot ${i + 1} updated from the current model.`, 3000);
+  },
+
+  clearSlots() {
+    if (!PosterDoc.count()) return;
+    PosterDoc.clear(); PosterDoc.saveNow();
+    this._syncSlots(); this.refresh();
+    toast('Poster cleared — back to the live model.', 3000);
+  },
+
+  // Panel field edits, addressed by slot index.
+  editSlot(i, key, value) {
+    const patch = {};
+    patch[key] = key === 'printSize' ? Math.max(10, Math.min(300, parseFloat(value) || 150)) : value;
+    PosterDoc.update(i, patch);
+    this._syncSlots(); this.refresh();
+  },
+
+  // Redraw the slot list. Rows are STATIC markup (six of them, hidden until used) because
+  // Settings.restore iterates the live DOM at init and could never rehydrate rows created later —
+  // slot values live in PosterDoc, not in Settings.
+  _syncSlots() {
+    const slots = PosterDoc.slots();
+    const list = document.getElementById('poster-slot-list');
+    if (list) list.style.display = slots.length ? 'block' : 'none';
+    for (let i = 0; i < PosterDoc.MAX_SLOTS; i++) {
+      const row = document.getElementById('pslot-' + i);
+      if (!row) continue;
+      const s = slots[i];
+      row.style.display = s ? 'flex' : 'none';
+      if (!s) continue;
+      const num = document.getElementById('pslot-num-' + i);
+      const ttl = document.getElementById('pslot-title-' + i);
+      const sz  = document.getElementById('pslot-size-' + i);
+      if (num) num.textContent = (i + 1) + '.';
+      if (ttl && document.activeElement !== ttl) {
+        ttl.value = s.title || '';
+        ttl.placeholder = this._slotTitle({ slot: s, mesh: s.digest, src: { bounds: s.bounds } });
+      }
+      if (sz && document.activeElement !== sz) sz.value = s.printSize;
+      const warn = document.getElementById('pslot-warn-' + i);
+      if (warn) {
+        const msg = !s.digest ? 'not captured' : s.resized ? 'resized — regenerate at this size' : '';
+        warn.textContent = msg; warn.style.display = msg ? 'inline' : 'none';
+      }
+    }
+    const empty = document.getElementById('poster-slot-empty');
+    if (empty) empty.style.display = slots.length ? 'none' : 'block';
+    const addBtn = document.getElementById('poster-add-slot');
+    if (addBtn) {
+      const full = slots.length >= PosterDoc.MAX_SLOTS;
+      addBtn.disabled = full || !State.meshData;
+      addBtn.textContent = full ? `Sheet full (${PosterDoc.MAX_SLOTS})` : '+ Add current model';
+    }
+    const clr = document.getElementById('poster-clear-slots');
+    if (clr) clr.style.display = slots.length ? 'inline-block' : 'none';
+    // The graticule anchors to a single tile's scale; above one tile it is switched off.
+    const fieldSel = document.getElementById('poster-field');
+    const fieldHint = document.getElementById('poster-field-hint');
+    if (fieldSel) fieldSel.disabled = slots.length > 1;
+    if (fieldHint) fieldHint.style.display = slots.length > 1 ? 'block' : 'none';
   },
 
   // ─── export ─────────────────────────────────────────────────────────────
@@ -7384,8 +8155,8 @@ const Poster = {
   },
 
   downloadSVG() {
-    const mesh = State.meshData; if (!mesh) { toast('Generate the 3D model first.'); return; }
-    const xml = this._serialize(this.build(mesh));
+    const tiles = this._tiles(); if (!tiles.length) { toast('Generate a model, or add tiles to the poster.'); return; }
+    const xml = this._serialize(this.build(tiles));
     downloadBlob(new Blob([xml], { type: 'image/svg+xml;charset=utf-8' }), exportName('svg', '_poster'));
     toast('Poster SVG downloaded.', 3000);
   },
@@ -7394,10 +8165,13 @@ const Poster = {
   // corners, in the universal red-hairline laser/CNC convention. Falls out of the layout engine
   // for free and is what actually solves the mounting.
   downloadCutTemplate() {
-    const mesh = State.meshData; if (!mesh) { toast('Generate the 3D model first.'); return; }
-    const sheet = this._sheet(), lay = this._layout(mesh, sheet);
+    const tiles = this._tiles(); if (!tiles.length) { toast('Generate a model, or add tiles to the poster.'); return; }
+    const sheet = this._sheet(), lay = this._layout(tiles, sheet);
     const CUT = '#FF0000', sw = 0.1, k = 4;
-    let s = `<path d="${this._apPath(mesh, lay.ap)}" fill="none" fill-rule="evenodd" stroke="${CUT}" stroke-width="${sw}"/>`;
+    // One cut path per aperture — a six-up sheet cuts six holes in one pass.
+    let s = '';
+    for (const ap of lay.aps)
+      s += `<path d="${this._apPath(ap.src, ap)}" fill="none" fill-rule="evenodd" stroke="${CUT}" stroke-width="${sw}"/>`;
     for (const [x, y] of [[lay.live.x, lay.live.y], [lay.live.x + lay.live.w, lay.live.y],
                           [lay.live.x, lay.live.y + lay.live.h], [lay.live.x + lay.live.w, lay.live.y + lay.live.h]]) {
       s += this._line(x - k, y, x + k, y, CUT, sw) + this._line(x, y - k, x, y + k, CUT, sw);
@@ -7414,12 +8188,12 @@ const Poster = {
   // Print at true physical size. @page size is honoured exactly by Chrome's Save-as-PDF; a
   // physical printer additionally needs that paper loaded and "fit to page" OFF.
   print() {
-    const mesh = State.meshData; if (!mesh) { toast('Generate the 3D model first.'); return; }
+    const tiles = this._tiles(); if (!tiles.length) { toast('Generate a model, or add tiles to the poster.'); return; }
     const sheet = this._sheet();
     const ps = document.getElementById('poster-page-style');
     if (ps) ps.textContent = `@page { size: ${sheet.wIn}in ${sheet.hIn}in; margin: 0; }`;
     const host = document.getElementById('poster-print-host');
-    const el = this.build(mesh);
+    const el = this.build(tiles);
     host.innerHTML = ''; host.appendChild(el);
     this._autoFit(el);
     const cleanup = () => {
@@ -7981,8 +8755,9 @@ const UI = {
       State.meshData = meshData;
       // Print estimate (filament / time / cost / AMS changes) — computed once, cached, shown in the card.
       try { meshData.printEstimate = PrintEstimate.compute(meshData); } catch (e) { console.warn('Print estimate failed:', e); }
-      // The poster's aperture is sized from meshW/meshH, so a fresh mesh re-sizes it.
-      Poster.refresh();
+      // The poster's aperture is sized from meshW/meshH, so a fresh mesh re-sizes it, and the
+      // "Add current model" button becomes available.
+      Poster._syncSlots(); Poster.refresh();
 
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
       showLoading('Building preview…');
@@ -8805,7 +9580,8 @@ function initApp() {
     set('sum-composition', [frame ? 'frame' : 'no frame', grid].filter(Boolean).join(' · '));
     const paper = Poster.PAPERS[v('poster-paper', '18x24')]?.label || '18 × 24 in';
     const theme = Poster.THEMES[v('poster-theme', 'quad')]?.label || 'Quadrangle';
-    set('sum-poster', `${paper} · ${theme}`);
+    const nSlots = (typeof PosterDoc !== 'undefined') ? PosterDoc.count() : 0;
+    set('sum-poster', `${nSlots > 1 ? nSlots + ' tiles · ' : ''}${paper} · ${theme}`);
   };
   const panelEl = document.getElementById('side-panel');
   panelEl?.addEventListener('change', () => { syncContextTag(); syncStepSummaries(); });
@@ -8814,7 +9590,9 @@ function initApp() {
   syncStepSummaries();
 
   _syncFrameChip();         // reflect the default 'custom' selection on the chip grid
+  PosterDoc.load();         // the poster document lives under its own key, not in Settings
   Poster._syncChips();      // same for the poster paper/theme grids
+  Poster._syncSlots();      // render any captured tiles
   Poster._syncFit();        // fit readout starts as "generate the model to size the aperture"
   Poster._syncTitle();      // show what the title will actually print as
   UI._syncDrawCallout();  // show the [Draw here →] hint while no selection exists
