@@ -892,8 +892,27 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
     color: var(--text-secondary);
     text-align: center;
   }
+  /* The poster overlay docks beside the panel; on narrow screens the panel is off-canvas. */
+  #poster-overlay { left: 0; }
+}
+
+/* ─── Poster printing ───
+   Everything but the poster host is hidden, and print-color-adjust is forced — without it
+   Chrome drops flood grounds and light tints, which is exactly what the poster themes are.
+   The @page size itself is injected per-sheet into #poster-page-style by Poster.print(). */
+@media print {
+  body > *:not(#poster-print-host) { display: none !important; }
+  html, body { background: #fff !important; margin: 0 !important; }
+  #poster-print-host { display: block !important; }
+  #poster-print-host svg {
+    display: block;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
 </style>
+<!-- Filled in by Poster.print() with the selected sheet's @page size, cleared on afterprint. -->
+<style id="poster-page-style"></style>
 </head>
 <body>
 
@@ -1531,6 +1550,140 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
       </div>
     </div>
 
+    <div class="panel-section collapsible collapsed" id="sec-poster">
+      <h3 onclick="UI.toggleSection(this)"><span class="step-titles"><span>Poster</span><span class="step-summary" id="sum-poster"></span></span></h3>
+      <div class="section-body">
+        <p style="font-size:11px;color:var(--text-muted);margin:0 0 10px;">A printed sheet the tile mounts onto — the tile's footprint is left as an open aperture.</p>
+
+        <div class="sub-head">Sheet</div>
+        <!-- Hidden input carries the value so Settings.save/restore keep working unchanged;
+             the chip grid is the visual/interaction surface (same pattern as Frame style). -->
+        <input type="hidden" id="poster-paper" value="18x24">
+        <div class="frame-grid" role="radiogroup" aria-label="Paper size" style="grid-template-columns:repeat(5,1fr);">
+          <button type="button" class="frame-chip" role="radio" data-paper="8x10" onclick="Poster.selectPaper('8x10')" title="8 × 10 in — 203 × 254 mm">
+            <svg viewBox="0 0 60 40" aria-hidden="true"><rect class="chip-svg-frame" x="21" y="8" width="18" height="23"/></svg>
+            <span class="chip-label">8×10</span>
+          </button>
+          <button type="button" class="frame-chip" role="radio" data-paper="11x14" onclick="Poster.selectPaper('11x14')" title="11 × 14 in — 279 × 356 mm">
+            <svg viewBox="0 0 60 40" aria-hidden="true"><rect class="chip-svg-frame" x="20" y="7" width="20" height="26"/></svg>
+            <span class="chip-label">11×14</span>
+          </button>
+          <button type="button" class="frame-chip" role="radio" data-paper="16x20" onclick="Poster.selectPaper('16x20')" title="16 × 20 in — 406 × 508 mm">
+            <svg viewBox="0 0 60 40" aria-hidden="true"><rect class="chip-svg-frame" x="19" y="6" width="22" height="28"/></svg>
+            <span class="chip-label">16×20</span>
+          </button>
+          <button type="button" class="frame-chip" role="radio" data-paper="18x24" onclick="Poster.selectPaper('18x24')" title="18 × 24 in — 457 × 610 mm">
+            <svg viewBox="0 0 60 40" aria-hidden="true"><rect class="chip-svg-frame" x="20" y="5" width="20" height="30"/></svg>
+            <span class="chip-label">18×24</span>
+          </button>
+          <button type="button" class="frame-chip" role="radio" data-paper="24x36" onclick="Poster.selectPaper('24x36')" title="24 × 36 in — 610 × 914 mm">
+            <svg viewBox="0 0 60 40" aria-hidden="true"><rect class="chip-svg-frame" x="21" y="4" width="18" height="32"/></svg>
+            <span class="chip-label">24×36</span>
+          </button>
+        </div>
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;">
+          <label style="margin:0;">Orientation</label>
+          <select id="poster-orient" onchange="Poster.refresh()" style="flex:1 1 auto;">
+            <option value="portrait" selected>Portrait</option>
+            <option value="landscape">Landscape</option>
+          </select>
+        </div>
+        <p id="poster-fit" style="font-size:11px;font-family:var(--mono);color:var(--text-secondary);margin:4px 0 0;"></p>
+
+        <div class="sub-head">Look</div>
+        <input type="hidden" id="poster-theme" value="quad">
+        <div class="frame-grid" role="radiogroup" aria-label="Poster theme">
+          <button type="button" class="frame-chip" role="radio" data-theme="quad" onclick="Poster.selectTheme('quad')" title="Quadrangle — black ink on paper white, blue grid">
+            <svg viewBox="0 0 60 40" aria-hidden="true"><rect x="6" y="5" width="48" height="30" fill="#ffffff" stroke="#1e1c1a" stroke-width="1.2"/><path d="M18 5v30M30 5v30M42 5v30M6 15h48M6 25h48" stroke="#8fa6c4" stroke-width="0.5"/></svg>
+            <span class="chip-label">Quad</span>
+          </button>
+          <button type="button" class="frame-chip" role="radio" data-theme="sepia" onclick="Poster.selectTheme('sepia')" title="Field Guide — warm tinted ground, sepia rules">
+            <svg viewBox="0 0 60 40" aria-hidden="true"><rect x="6" y="5" width="48" height="30" fill="#f1e7d5" stroke="#8c7a5f" stroke-width="1.2"/><path d="M18 5v30M30 5v30M42 5v30M6 15h48M6 25h48" stroke="#b9a886" stroke-width="0.5"/></svg>
+            <span class="chip-label">Field</span>
+          </button>
+          <button type="button" class="frame-chip" role="radio" data-theme="mono" onclick="Poster.selectTheme('mono')" title="Contour Black — pure black on white">
+            <svg viewBox="0 0 60 40" aria-hidden="true"><rect x="6" y="5" width="48" height="30" fill="#ffffff" stroke="#111111" stroke-width="1.2"/><path d="M18 5v30M30 5v30M42 5v30M6 15h48M6 25h48" stroke="#9a9a9a" stroke-width="0.5"/></svg>
+            <span class="chip-label">Mono</span>
+          </button>
+          <button type="button" class="frame-chip" role="radio" data-theme="blueprint" onclick="Poster.selectTheme('blueprint')" title="Blueprint — full-coverage ink ground">
+            <svg viewBox="0 0 60 40" aria-hidden="true"><rect x="6" y="5" width="48" height="30" fill="#0e3a63" stroke="#c6d6e6" stroke-width="1.2"/><path d="M18 5v30M30 5v30M42 5v30M6 15h48M6 25h48" stroke="#3e6c99" stroke-width="0.5"/></svg>
+            <span class="chip-label">Blue</span>
+          </button>
+        </div>
+        <p id="poster-theme-note" style="display:none;font-size:11px;color:var(--warning);margin:0 0 8px;"></p>
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;">
+          <label style="margin:0;">Field</label>
+          <select id="poster-field" onchange="Poster.refresh()" style="flex:1 1 auto;">
+            <option value="grid" selected>Graticule (hairline grid)</option>
+            <option value="blank">Blank paper</option>
+          </select>
+        </div>
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+          <label style="margin:0;">Units</label>
+          <select id="poster-units" onchange="Poster.refresh()" style="flex:1 1 auto;">
+            <option value="both" selected>Metric + imperial</option>
+            <option value="metric">Metric</option>
+            <option value="imperial">Imperial</option>
+          </select>
+        </div>
+
+        <div class="sub-head">Marginalia</div>
+        <p class="hint" style="margin:-4px 0 8px;">Title and subtitle come from Composition → Frame &amp; Card.</p>
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" id="poster-subtitle-on" checked style="width:15px;height:15px;" onchange="Poster.refresh()">
+          <label for="poster-subtitle-on" style="margin:0;cursor:pointer;">Subtitle</label>
+        </div>
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:5px;">
+          <input type="checkbox" id="poster-coords-on" checked style="width:15px;height:15px;" onchange="Poster.refresh()">
+          <label for="poster-coords-on" style="margin:0;cursor:pointer;">Coordinates</label>
+        </div>
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:5px;">
+          <input type="checkbox" id="poster-scale-on" checked style="width:15px;height:15px;" onchange="Poster.refresh()">
+          <label for="poster-scale-on" style="margin:0;cursor:pointer;">Scale bar &amp; ratio</label>
+        </div>
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:5px;">
+          <input type="checkbox" id="poster-stats-on" checked style="width:15px;height:15px;" onchange="Poster.refresh()">
+          <label for="poster-stats-on" style="margin:0;cursor:pointer;">Elevation &amp; model stats</label>
+        </div>
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:5px;">
+          <input type="checkbox" id="poster-legend-on" checked style="width:15px;height:15px;" onchange="Poster.refresh()">
+          <label for="poster-legend-on" style="margin:0;cursor:pointer;">Band legend</label>
+        </div>
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:5px;">
+          <input type="checkbox" id="poster-route-on" checked style="width:15px;height:15px;" onchange="Poster.refresh()">
+          <label for="poster-route-on" style="margin:0;cursor:pointer;">Route stats <span class="hint" id="poster-route-hint"></span></label>
+        </div>
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:5px;">
+          <input type="checkbox" id="poster-north-on" checked style="width:15px;height:15px;" onchange="Poster.refresh()">
+          <label for="poster-north-on" style="margin:0;cursor:pointer;">North arrow</label>
+        </div>
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:5px;">
+          <input type="checkbox" id="poster-credit-on" checked style="width:15px;height:15px;" onchange="Poster.refresh()">
+          <label for="poster-credit-on" style="margin:0;cursor:pointer;">Data sources &amp; date</label>
+        </div>
+        <div class="input-group" style="margin-top:6px;">
+          <label>Credit line <span class="hint">(added under the data sources)</span></label>
+          <input type="text" id="poster-credit" placeholder="e.g. Printed for the Radant family">
+        </div>
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+          <input type="checkbox" id="poster-gpx-clip" style="width:15px;height:15px;" onchange="Poster.refresh()">
+          <label for="poster-gpx-clip" style="margin:0;cursor:pointer;">Route length: in-frame only</label>
+        </div>
+
+        <div class="sub-head">Registration</div>
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" id="poster-crops" checked style="width:15px;height:15px;" onchange="Poster.refresh()">
+          <label for="poster-crops" style="margin:0;cursor:pointer;">Corner crop marks <span class="hint">(where the tile lands)</span></label>
+        </div>
+        <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:5px;">
+          <input type="checkbox" id="poster-outline" style="width:15px;height:15px;" onchange="Poster.refresh()">
+          <label for="poster-outline" style="margin:0;cursor:pointer;">Aperture keyline</label>
+        </div>
+
+        <button class="btn btn-primary btn-block" style="margin-top:12px;" onclick="Poster.open()">Preview Poster</button>
+      </div>
+    </div>
+
     <div class="panel-section panel-footer">
       <h3>Selected Area</h3>
       <div class="section-body" id="selection-info">
@@ -1639,6 +1792,26 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
   </div>
 </div>
 
+<!-- ─── Poster preview ───
+     Docked beside the panel rather than fullscreen, so the panel stays interactive and the sheet
+     redraws live as the user tunes theme/toggles. It also means this overlay holds only buttons
+     and an SVG, so none of the modal-scoped control CSS above needs to know about it. -->
+<div id="poster-overlay" style="display:none;position:fixed;left:360px;top:0;right:0;bottom:0;z-index:1500;background:var(--face-deep);flex-direction:column;">
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--hairline);background:var(--face);flex-wrap:wrap;">
+    <strong style="font-size:14px;">Poster</strong>
+    <span id="poster-info" style="font-size:11px;font-family:var(--mono);color:var(--text-secondary);"></span>
+    <div style="flex:1;"></div>
+    <button class="btn btn-sm" onclick="Poster.downloadCutTemplate()" title="Cut line for the acrylic sheet">◻ Acrylic template</button>
+    <button class="btn btn-sm" onclick="Poster.print()" title="Save as PDF at true size — set Scale to 100%">⎙ Print / PDF</button>
+    <button class="btn btn-sm btn-primary" onclick="Poster.downloadSVG()">↓ SVG</button>
+    <button class="btn btn-sm" onclick="Poster.close()">✕ Close</button>
+  </div>
+  <div id="poster-stage" style="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:24px;background:#8a8378;"></div>
+</div>
+<!-- Print target and off-screen measure host for the auto-fit pass (getComputedTextLength needs layout). -->
+<div id="poster-print-host" style="display:none;"></div>
+<div id="poster-measure" aria-hidden="true" style="position:absolute;left:-99999px;top:0;width:1px;height:1px;overflow:hidden;"></div>
+
 <script>
 // ═══════════════════════════════════════════════
 //  CONSTANTS
@@ -1695,7 +1868,7 @@ const State = {
   waterOverride: null,     // { w, h, add:Uint8Array, remove:Uint8Array } manual paint edits
   colorOverride: null,     // { w, h, band:Int8Array } manual band recolour (-1 = auto)
   advNames: null,          // per-band names for the legend (land-cover mode)
-  gpxTrack: null,          // { name, points:[{lat,lon}…] } loaded GPX route
+  gpxTrack: null,          // { name, points:[{lat,lon,ele?}…] } loaded GPX route (ele may be NaN)
 };
 
 // ═══════════════════════════════════════════════
@@ -1706,7 +1879,7 @@ const Settings = {
   KEY: 'terraprint-settings-v1',
 
   // Sections/folds whose open-collapsed state is remembered across sessions.
-  SECTION_IDS: ['sec-model', 'sec-imagery', 'sec-features', 'sec-composition', 'adv-fold', 'photo-adjust-fold'],
+  SECTION_IDS: ['sec-model', 'sec-imagery', 'sec-features', 'sec-composition', 'sec-poster', 'adv-fold', 'photo-adjust-fold'],
 
   // Serialize every panel control with an id (checkbox → checked, else value),
   // plus the accordion collapse state.
@@ -1755,6 +1928,8 @@ const Settings = {
     // Frame style chip grid — reflect the restored hidden-input value visually. The preset
     // itself is NOT re-applied (would clobber the user's restored frame form controls).
     _syncFrameChip();
+    // Same for the poster's paper/theme chip grids (also hidden-input backed).
+    Poster._syncChips();
     // Accordion collapse state.
     if (Array.isArray(saved.__collapsed)) {
       for (const id of this.SECTION_IDS) {
@@ -3086,13 +3261,19 @@ const Gpx = {
         const doc = new DOMParser().parseFromString(reader.result, 'application/xml');
         let els = [...doc.getElementsByTagName('trkpt')];
         if (!els.length) els = [...doc.getElementsByTagName('rtept')];
-        const points = els.map(p => ({ lat: parseFloat(p.getAttribute('lat')), lon: parseFloat(p.getAttribute('lon')) }))
-                          .filter(p => isFinite(p.lat) && isFinite(p.lon));
+        // `ele` feeds the poster's elevation-gain figure; it may be absent (NaN) and every other
+        // consumer (Gpx._ribbon, the route mesh) reads only lat/lon, so the extra key is inert there.
+        const points = els.map(p => ({
+          lat: parseFloat(p.getAttribute('lat')),
+          lon: parseFloat(p.getAttribute('lon')),
+          ele: parseFloat(p.getElementsByTagName('ele')[0]?.textContent),
+        })).filter(p => isFinite(p.lat) && isFinite(p.lon));
         if (points.length < 2) { toast('No track points found in that GPX.'); return; }
         const name = doc.getElementsByTagName('name')[0]?.textContent?.trim() || f.name.replace(/\.gpx$/i, '');
         State.gpxTrack = { name, points };
         const st = document.getElementById('gpx-status');
         if (st) st.textContent = `${name} · ${points.length.toLocaleString()} pts`;
+        Poster._syncChips(); Poster.refresh();   // route block becomes available
         toast(`Route loaded (${points.length.toLocaleString()} points) — Generate to apply.`);
       } catch (e) {
         console.warn('GPX parse failed:', e);
@@ -3106,6 +3287,7 @@ const Gpx = {
     State.gpxTrack = null;
     const fi = document.getElementById('gpx-file'); if (fi) fi.value = '';
     const st = document.getElementById('gpx-status'); if (st) st.textContent = 'No route loaded';
+    Poster._syncChips(); Poster.refresh();
   },
 
   // Terrain-following ribbon: the track is clipped to the tile (split where it leaves),
@@ -6166,6 +6348,914 @@ const ThreeMFExport = {
 };
 
 // ═══════════════════════════════════════════════
+//  POSTER  (printed mount sheet — SVG at true mm)
+// ═══════════════════════════════════════════════
+
+// The poster is a MOUNT: it prints on paper, goes under an acrylic sheet, and the 3D-printed
+// tile sits on top of the acrylic. So the tile's footprint is deliberately empty — an "aperture"
+// whose size is meshData.meshW × meshH (real millimetres, from MeshGen) — and the sheet's job is
+// the marginalia a map deserves: title, coordinates, scale, legend, route.
+//
+// The reference is a USGS 7.5' quadrangle. Note that the app's own "Quad Bench" visual direction
+// is a retired ANTI-REFERENCE (PRODUCT.md) — we borrow quad-sheet GEOMETRY (neatline, corner
+// ticks, marginalia band) but ink it in the live Organic palette, never the dead charcoal system.
+//
+// Three hard rules make the SVG survive a print shop's RIP:
+//   1. LITERAL HEXES ONLY — never var(--…). The app has a dark theme; the sheet must stay paper.
+//   2. NO dominant-baseline — Illustrator and older RIPs ignore it and the text jumps. Position
+//      by explicit baseline `y` plus text-anchor.
+//   3. NO vector-effect="non-scaling-stroke" — these strokes ARE physical widths in mm.
+const Poster = {
+  MM_IN: 25.4,
+
+  // US frame sizes only — these are what off-the-shelf frames actually come in, which is the
+  // point, since the finished piece gets framed. Stored portrait-natural (w ≤ h).
+  PAPERS: {
+    '8x10':  { w: 8,  h: 10, label: '8 × 10 in'  },
+    '11x14': { w: 11, h: 14, label: '11 × 14 in' },
+    '16x20': { w: 16, h: 20, label: '16 × 20 in' },
+    '18x24': { w: 18, h: 24, label: '18 × 24 in' },
+    '24x36': { w: 24, h: 36, label: '24 × 36 in' },
+  },
+
+  // Print palettes. `flood` marks a full-coverage ground — expensive and blotchy on matte stock,
+  // so it earns a warning in the panel. The two default-ish themes print on the paper's own white
+  // (zero ground ink), which is cheapest and most forgiving on any stock.
+  THEMES: {
+    quad:      { label: 'Quadrangle',    ground: '#FFFFFF', ink: '#1E1C1A', inkSoft: '#645C50', rule: '#645C50', grat: '#8FA6C4', accent: '#C67139', swatch: '#00000030', flood: false },
+    sepia:     { label: 'Field Guide',   ground: '#F1E7D5', ink: '#3A342B', inkSoft: '#6E634F', rule: '#8C7A5F', grat: '#B9A886', accent: '#A85D2C', swatch: '#00000030', flood: false },
+    mono:      { label: 'Contour Black', ground: '#FFFFFF', ink: '#111111', inkSoft: '#4A4A4A', rule: '#111111', grat: '#9A9A9A', accent: '#111111', swatch: '#00000030', flood: false },
+    blueprint: { label: 'Blueprint',     ground: '#0E3A63', ink: '#E9EFF5', inkSoft: '#A9C0D6', rule: '#C6D6E6', grat: '#3E6C99', accent: '#E7A15C', swatch: '#FFFFFF40', flood: true  },
+  },
+
+  // Layout constants, all in millimetres (= SVG user units).
+  L: {
+    NEATLINE_W: 0.35,     // ≈1pt — the sheet's outer rule
+    HAIRLINE_W: 0.15,     // aperture keyline, marginalia rules
+    GRAT_W: 0.08,         // graticule field lines (near the reproduction floor; don't go lower)
+    TICK_LEN: 7,          // corner graticule cross arm
+    EDGE_TICK: 2.5,       // graticule tick stubs on the neatline
+    APERTURE_CLEAR: 8,    // minimum clear paper between aperture and any rule
+    CROP_GAP: 3,          // crop mark offset outward from the aperture edge
+    CROP_ARM: 9,          // crop mark arm length
+    OPTICAL_RISE: 0.045,  // aperture centre sits 4.5% of field height above true centre
+    MIN_HEADROOM: 12,     // clear paper required above the aperture before the rise is given back
+    GRAT_TARGET: 14,      // desired graticule spacing on paper → drives the interval choice
+    BAND_PAD: 8,          // marginalia inset from the neatline
+    BLOCK_GAP: 4.5,       // vertical gap between marginalia blocks
+  },
+
+  // Round "nice" distances — the same ladder ThreeMFExport uses for the 3D scale bar, shared here
+  // by both the scale bar and the graticule interval so the two always agree.
+  NICE: [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000],
+
+  _open: false,
+  _timer: null,
+  _warnedBig: false,
+
+  // ─── controls ───────────────────────────────────────────────────────────
+
+  _sheet() {
+    const key = document.getElementById('poster-paper')?.value || '18x24';
+    const p = this.PAPERS[key] || this.PAPERS['18x24'];
+    const land = (document.getElementById('poster-orient')?.value || 'portrait') === 'landscape';
+    const wIn = land ? p.h : p.w, hIn = land ? p.w : p.h;
+    return { key, wIn, hIn, wMM: wIn * this.MM_IN, hMM: hIn * this.MM_IN, label: p.label };
+  },
+
+  _theme() {
+    return this.THEMES[document.getElementById('poster-theme')?.value || 'quad'] || this.THEMES.quad;
+  },
+
+  _on(id) { return !!document.getElementById(id)?.checked; },
+
+  _units() { return document.getElementById('poster-units')?.value || 'both'; },
+
+  // User-facing chip entry points — mirror selectFrameStyle(): set the hidden input (so
+  // Settings.save persists it), sync the chip state, fire change for the debounced saver, redraw.
+  selectPaper(k) {
+    const el = document.getElementById('poster-paper'); if (!el) return;
+    el.value = k; this._syncChips();
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    this._syncFit(); this.refresh();
+  },
+
+  selectTheme(k) {
+    const el = document.getElementById('poster-theme'); if (!el) return;
+    el.value = k; this._syncChips();
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    this.refresh();
+  },
+
+  // Reflect the hidden inputs on both chip grids. Called on init/restore and after every
+  // selection so the visual state can never drift from the persisted value.
+  _syncChips() {
+    const pv = document.getElementById('poster-paper')?.value || '18x24';
+    document.querySelectorAll('.frame-chip[data-paper]').forEach(el => {
+      const on = el.getAttribute('data-paper') === pv;
+      el.classList.toggle('selected', on);
+      el.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+    const tv = document.getElementById('poster-theme')?.value || 'quad';
+    document.querySelectorAll('.frame-chip[data-theme]').forEach(el => {
+      const on = el.getAttribute('data-theme') === tv;
+      el.classList.toggle('selected', on);
+      el.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+    const note = document.getElementById('poster-theme-note');
+    if (note) {
+      const flood = this.THEMES[tv]?.flood;
+      note.style.display = flood ? 'block' : 'none';
+      if (flood) note.textContent = 'Full-coverage ink — ask for coated or heavyweight stock; can look blotchy on matte.';
+    }
+    const rh = document.getElementById('poster-route-hint');
+    if (rh) rh.textContent = State.gpxTrack ? '' : '(load a GPX in Terrain Features)';
+  },
+
+  // ─── model ──────────────────────────────────────────────────────────────
+
+  // Ground-distance metrics for the tile. Same equirectangular convention MeshGen and the 3D
+  // cartouche use (111320 m per degree of longitude at the equator, cos-corrected) so the poster's
+  // scale bar and the printed model's scale bar can never disagree.
+  _metrics(mesh) {
+    const b = mesh.bounds;
+    const midLatR = (b.north + b.south) / 2 * Math.PI / 180;
+    const realWm = Math.abs(b.east - b.west) * Math.cos(midLatR) * 111320;
+    const mmPerM = mesh.meshW / realWm;
+    // Representative fraction: 1 mm on paper : `ratio` mm on the ground.
+    let ratio = realWm * 1000 / mesh.meshW;
+    ratio = ratio >= 1000 ? Math.round(ratio / 100) * 100 : Math.round(ratio / 10) * 10;
+    // Scale bar: largest round distance that fits in 40% of the tile width (lifted from the 3D one).
+    const maxM = 0.4 * realWm;
+    let distM = this.NICE[0];
+    for (const n of this.NICE) if (n <= maxM) distM = n;
+    const bar = { distM, barMM: distM * mmPerM, label: distM >= 1000 ? `${distM / 1000} km` : `${distM} m` };
+    // Imperial equivalent, chosen from its own round ladder so the label stays clean.
+    const NICE_FT = [50, 100, 200, 500, 1000, 2000, 5280, 10560, 26400, 52800, 264000];
+    const maxFt = maxM * 3.28084;
+    let distFt = NICE_FT[0];
+    for (const n of NICE_FT) if (n <= maxFt) distFt = n;
+    const barI = { distFt, barMM: (distFt / 3.28084) * mmPerM,
+                   label: distFt >= 5280 ? `${+(distFt / 5280).toFixed(2)} mi` : `${distFt} ft` };
+    return { realWm, mmPerM, ratio, ratioStr: this._group(ratio), bar, barI };
+  },
+
+  // 24000 → "24 000" (thin space). Reads as a scale, not a phone number.
+  _group(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); },
+
+  // Pure sheet geometry — no DOM reads beyond the two controls, no DOM writes.
+  _layout(mesh, sheet) {
+    const L = this.L;
+    const M = Math.max(9, Math.min(20, 0.05 * Math.min(sheet.wMM, sheet.hMM)));
+    const live = { x: M, y: M, w: sheet.wMM - 2 * M, h: sheet.hMM - 2 * M };
+    const bandH = Math.max(26, Math.min(78, 0.135 * live.h));
+    const band = { x: live.x, y: live.y + live.h - bandH, w: live.w, h: bandH };
+    const field = { x: live.x, y: live.y, w: live.w, h: live.h - bandH };
+
+    const ap = { w: mesh.meshW, h: mesh.meshH };
+    ap.cx = field.x + field.w / 2;
+    ap.cy = field.y + field.h / 2 - L.OPTICAL_RISE * field.h;   // optically centred = slightly high
+    // A tall tile would collide with the top neatline; give the rise back rather than overlap.
+    if (ap.cy - ap.h / 2 - field.y < L.MIN_HEADROOM) ap.cy = field.y + L.MIN_HEADROOM + ap.h / 2;
+    ap.x = ap.cx - ap.w / 2; ap.y = ap.cy - ap.h / 2;
+
+    const needW = ap.w + 2 * L.APERTURE_CLEAR;
+    const needH = ap.h + L.APERTURE_CLEAR + L.MIN_HEADROOM;
+    const fit = { ok: needW <= field.w && needH <= field.h, needW, needH, minPaper: null };
+    if (!fit.ok) fit.minPaper = this._smallestFitting(mesh);
+    return { live, band, field, ap, fit, M };
+  },
+
+  // First paper (ascending area, both orientations) whose field would hold this tile — so the
+  // failure toast can name a real fix instead of just complaining.
+  _smallestFitting(mesh) {
+    const keys = Object.keys(this.PAPERS).sort((a, b) =>
+      this.PAPERS[a].w * this.PAPERS[a].h - this.PAPERS[b].w * this.PAPERS[b].h);
+    for (const k of keys) {
+      for (const land of [false, true]) {
+        const p = this.PAPERS[k];
+        const wIn = land ? p.h : p.w, hIn = land ? p.w : p.h;
+        const s = { wMM: wIn * this.MM_IN, hMM: hIn * this.MM_IN };
+        const M = Math.max(9, Math.min(20, 0.05 * Math.min(s.wMM, s.hMM)));
+        const liveW = s.wMM - 2 * M, liveH = s.hMM - 2 * M;
+        const fieldH = liveH - Math.max(26, Math.min(78, 0.135 * liveH));
+        if (mesh.meshW + 2 * this.L.APERTURE_CLEAR <= liveW &&
+            mesh.meshH + this.L.APERTURE_CLEAR + this.L.MIN_HEADROOM <= fieldH) {
+          return { key: k, label: this.PAPERS[k].label, landscape: land };
+        }
+      }
+    }
+    return null;
+  },
+
+  // ─── SVG primitives ─────────────────────────────────────────────────────
+
+  _esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+  },
+
+  // 3dp is plenty at millimetre scale and keeps Illustrator (and the file size) happy.
+  _n(v) { return (Math.round(v * 1000) / 1000).toString(); },
+
+  // One text builder. `y` is the BASELINE — we never use dominant-baseline (see the module note).
+  // `fitw` registers a width budget for the post-mount auto-fit pass.
+  _txt(x, y, s, o = {}) {
+    if (s === null || s === undefined || s === '') return '';
+    const a = [
+      `x="${this._n(x)}"`, `y="${this._n(y)}"`,
+      `class="${o.cls || 'p-data'}"`,
+      `font-size="${this._n(o.size || 3)}"`,
+      `fill="${o.fill || '#000000'}"`,
+    ];
+    if (o.anchor && o.anchor !== 'start') a.push(`text-anchor="${o.anchor}"`);
+    if (o.weight) a.push(`font-weight="${o.weight}"`);
+    if (o.style) a.push(`font-style="${o.style}"`);
+    if (o.fitw) a.push(`data-fitw="${this._n(o.fitw)}"`);
+    if (o.opacity !== undefined) a.push(`opacity="${o.opacity}"`);
+    return `<text ${a.join(' ')}>${this._esc(s)}</text>`;
+  },
+
+  _rect(x, y, w, h, o = {}) {
+    const a = [`x="${this._n(x)}"`, `y="${this._n(y)}"`, `width="${this._n(w)}"`, `height="${this._n(h)}"`,
+               `fill="${o.fill || 'none'}"`];
+    if (o.stroke) { a.push(`stroke="${o.stroke}"`, `stroke-width="${this._n(o.sw || this.L.HAIRLINE_W)}"`); }
+    return `<rect ${a.join(' ')}/>`;
+  },
+
+  _line(x1, y1, x2, y2, stroke, sw) {
+    return `<line x1="${this._n(x1)}" y1="${this._n(y1)}" x2="${this._n(x2)}" y2="${this._n(y2)}" `
+         + `stroke="${stroke}" stroke-width="${this._n(sw)}"/>`;
+  },
+
+  // ─── build ──────────────────────────────────────────────────────────────
+
+  // The single source of truth: preview, SVG download, print, and the cut template all call this.
+  // Returns a live SVG element (already auto-fitted) — callers serialize or mount it.
+  build(mesh) {
+    const sheet = this._sheet();
+    const t = this._theme();
+    const lay = this._layout(mesh, sheet);
+    const m = this._metrics(mesh);
+
+    const parts = [
+      this._defs(t),
+      this._ground(sheet, t),
+      this._graticule(lay, t, mesh, m),
+      this._neatline(lay, t),
+      this._cornerTicks(lay, t),
+      this._aperture(lay, t, mesh),
+      this._apCoords(lay, t, mesh),
+      this._cropMarks(lay, t, mesh),
+      this._northArrow(lay, t),
+      this._marginalia(lay, t, mesh, m),
+    ];
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" version="1.1" `
+      + `width="${this._n(sheet.wMM)}mm" height="${this._n(sheet.hMM)}mm" `
+      + `viewBox="0 0 ${this._n(sheet.wMM)} ${this._n(sheet.hMM)}">`
+      + `<g id="poster">${parts.join('')}</g></svg>`;
+
+    const el = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement;
+    return el;
+  },
+
+  _defs(t) {
+    // Generic, universally-substitutable stacks. Caprasimo is deliberately NOT used: a downloaded
+    // SVG has no webfonts at a print shop, and substituting a chunky display serif to Georgia
+    // changes the poster's whole character (a loud failure). Georgia/Times/Liberation are all
+    // transitional serifs at similar metrics, so that substitution is invisible — the right trade
+    // for a file handed to a stranger's RIP. It's also more honest: real quads are set this way.
+    return `<defs><style type="text/css"><![CDATA[
+.p-display{font-family:Georgia,"Times New Roman","Liberation Serif",serif}
+.p-label{font-family:"Helvetica Neue",Helvetica,Arial,"Liberation Sans",sans-serif;letter-spacing:0.09em}
+.p-data{font-family:"SF Mono",Menlo,Consolas,"DejaVu Sans Mono",monospace;font-variant-numeric:tabular-nums}
+]]></style></defs>`;
+  },
+
+  _ground(sheet, t) {
+    return this._rect(0, 0, sheet.wMM, sheet.hMM, { fill: t.ground });
+  },
+
+  _neatline(lay, t) {
+    const { live, band } = lay;
+    return `<g id="neatline">`
+      + this._rect(live.x, live.y, live.w, live.h, { stroke: t.rule, sw: this.L.NEATLINE_W })
+      // Separator between the field and the marginalia band.
+      + this._line(live.x, band.y, live.x + live.w, band.y, t.rule, this.L.NEATLINE_W)
+      + `</g>`;
+  },
+
+  // Graticule crosses at the four neatline corners — the quad sheet's tell.
+  _cornerTicks(lay, t) {
+    const { live } = lay, k = this.L.TICK_LEN, sw = this.L.HAIRLINE_W;
+    const c = [[live.x, live.y, 1, 1], [live.x + live.w, live.y, -1, 1],
+               [live.x, live.y + live.h, 1, -1], [live.x + live.w, live.y + live.h, -1, -1]];
+    let s = `<g id="corner-ticks">`;
+    for (const [x, y, dx, dy] of c) {
+      s += this._line(x, y + dy * k * 0.55, x, y + dy * k, t.rule, sw);
+      s += this._line(x + dx * k * 0.55, y, x + dx * k, y, t.rule, sw);
+    }
+    return s + `</g>`;
+  },
+
+  // ─── aperture ───────────────────────────────────────────────────────────
+
+  // The aperture outline as an SVG path `d`, in sheet mm. Rect / circle / boundary outline —
+  // whatever shape MeshGen actually produced, so the printed hole matches the printed tile.
+  _apPath(mesh, ap) {
+    const shape = mesh.selectionShape || 'rect';
+    if (shape === 'circle') {
+      const r = Math.min(ap.w, ap.h) / 2;
+      const cx = ap.x + ap.w / 2, cy = ap.y + ap.h / 2;
+      return `M ${this._n(cx - r)} ${this._n(cy)} a ${this._n(r)} ${this._n(r)} 0 1 0 ${this._n(2 * r)} 0 `
+           + `a ${this._n(r)} ${this._n(r)} 0 1 0 ${this._n(-2 * r)} 0 Z`;
+    }
+    if (shape === 'boundary' && State.boundaryPoly) {
+      const b = mesh.bounds;
+      // Same lat/lon → tile mapping MeshGen and Gpx._ribbon use, so the hole registers with the print.
+      const px = lon => ap.x + (lon - b.west) / (b.east - b.west) * ap.w;
+      const py = lat => ap.y + ap.h - (lat - b.south) / (b.north - b.south) * ap.h;
+      const rings = [...(State.boundaryPoly.outers || []), ...(State.boundaryPoly.inners || [])];
+      let d = '';
+      for (const ring of rings) {
+        if (!ring || ring.length < 3) continue;
+        // Park outlines carry thousands of vertices; drop anything under 0.15mm apart in sheet
+        // space or the SVG bloats past a megabyte for no visible gain.
+        let lx = null, ly = null, seg = '';
+        for (const p of ring) {
+          const X = px(p.lon), Y = py(p.lat);
+          if (lx === null || Math.abs(X - lx) + Math.abs(Y - ly) >= 0.15) {
+            seg += `${seg ? 'L' : 'M'} ${this._n(X)} ${this._n(Y)} `;
+            lx = X; ly = Y;
+          }
+        }
+        if (seg) d += seg + 'Z ';
+      }
+      if (d) return d.trim();
+    }
+    return `M ${this._n(ap.x)} ${this._n(ap.y)} H ${this._n(ap.x + ap.w)} `
+         + `V ${this._n(ap.y + ap.h)} H ${this._n(ap.x)} Z`;
+  },
+
+  _aperture(lay, t, mesh) {
+    // An irregular outline cannot be registered from corner marks alone, so a boundary aperture
+    // always draws its keyline regardless of the toggle.
+    const forced = (mesh.selectionShape === 'boundary' && State.boundaryPoly);
+    if (!this._on('poster-outline') && !forced) return '';
+    return `<path d="${this._apPath(mesh, lay.ap)}" fill="none" fill-rule="evenodd" `
+         + `stroke="${t.inkSoft}" stroke-width="${this._n(this.L.HAIRLINE_W)}"/>`;
+  },
+
+  // Crop marks sit OUTSIDE the aperture — with the tile mounted on top, they are the only
+  // registration geometry still visible. (A full outline would be hidden underneath and useless.)
+  _cropMarks(lay, t, mesh) {
+    if (!this._on('poster-crops')) return '';
+    const { ap } = lay, g = this.L.CROP_GAP, a = this.L.CROP_ARM, sw = this.L.HAIRLINE_W;
+    let s = `<g id="crop-marks">`;
+    if (mesh.selectionShape === 'circle') {
+      // Square corner marks around a circle read as a mistake — use radial ticks instead.
+      const r = Math.min(ap.w, ap.h) / 2 + g, cx = ap.x + ap.w / 2, cy = ap.y + ap.h / 2;
+      for (const deg of [45, 135, 225, 315]) {
+        const rad = deg * Math.PI / 180, ux = Math.cos(rad), uy = Math.sin(rad);
+        s += this._line(cx + ux * r, cy + uy * r, cx + ux * (r + a * 0.7), cy + uy * (r + a * 0.7), t.inkSoft, sw);
+      }
+    } else {
+      // Boundary shapes have no meaningful corners — fall back to the aperture's bounding box.
+      const x0 = ap.x - g, y0 = ap.y - g, x1 = ap.x + ap.w + g, y1 = ap.y + ap.h + g;
+      const L_ = [[x0, y0, 1, 1], [x1, y0, -1, 1], [x0, y1, 1, -1], [x1, y1, -1, -1]];
+      for (const [x, y, dx, dy] of L_) {
+        s += this._line(x, y, x + dx * a, y, t.inkSoft, sw);
+        s += this._line(x, y, x, y + dy * a, t.inkSoft, sw);
+      }
+    }
+    // The number you'll want six months from now when you re-cut the acrylic. Sits one line BELOW
+    // the SW corner coordinate (drawn at +CROP_GAP+3.5) so the two stack instead of colliding.
+    s += this._txt(ap.x - g, ap.y + ap.h + g + 8.2,
+      `APERTURE ${mesh.meshW.toFixed(1)} × ${mesh.meshH.toFixed(1)} MM`,
+      { cls: 'p-label', size: 2.4, fill: t.inkSoft });
+    return s + `</g>`;
+  },
+
+  _northArrow(lay, t) {
+    if (!this._on('poster-north-on')) return '';
+    const { field } = lay;
+    const x = field.x + field.w - 14, y = field.y + 14, h = 11, w = 3.6;
+    // A slim filled needle with an open tail — pure path, so it never depends on a font.
+    const d = `M ${this._n(x)} ${this._n(y)} L ${this._n(x + w)} ${this._n(y + h)} `
+            + `L ${this._n(x)} ${this._n(y + h * 0.72)} L ${this._n(x - w)} ${this._n(y + h)} Z`;
+    return `<g id="north">`
+      + `<path d="${d}" fill="${t.ink}"/>`
+      + this._txt(x, y + h + 4.4, 'N', { cls: 'p-label', size: 3.2, fill: t.ink, anchor: 'middle' })
+      + `</g>`;
+  },
+
+  // ─── graticule ──────────────────────────────────────────────────────────
+
+  // A hairline grid at a ROUND GROUND INTERVAL, aligned to the tile's SW corner rather than to
+  // arbitrary sheet units — that's what makes the field read as a map instead of graph paper.
+  // One step serves both axes: MeshGen already baked the cos(midLat) correction into meshW, so
+  // the grid is square on paper.
+  _graticule(lay, t, mesh, m) {
+    if ((document.getElementById('poster-field')?.value || 'grid') !== 'grid') return '';
+    const { field, ap } = lay;
+    const imperial = this._units() === 'imperial';
+    const targetM = this.L.GRAT_TARGET / m.mmPerM;
+    let stepM = this.NICE[0];
+    for (const n of this.NICE) if (n <= targetM) stepM = n;
+    const stepMM = stepM * m.mmPerM;
+    if (!isFinite(stepMM) || stepMM < 4) return '';               // degenerate — bail to blank
+
+    const x0 = ap.x, yS = ap.y + ap.h;                            // datum = tile SW corner
+    const iMin = Math.ceil((field.x - x0) / stepMM), iMax = Math.floor((field.x + field.w - x0) / stepMM);
+    const jMin = Math.ceil((yS - (field.y + field.h)) / stepMM), jMax = Math.floor((yS - field.y) / stepMM);
+    if ((iMax - iMin) + (jMax - jMin) > 400) return '';           // pathological — bail to blank
+
+    // ONE unit for the whole grid, chosen from the grid's EXTENT rather than its step — picking by
+    // step alone leaves a 500m grid spanning 10km labelled "10500 M". Never choose per-label, or a
+    // single axis mixes metres and kilometres ("500, 1, 1.5").
+    const spanM = Math.max(Math.abs(iMin), Math.abs(iMax), Math.abs(jMin), Math.abs(jMax)) * stepM;
+    const km = !imperial && spanM >= 2000;
+    const mi = imperial && spanM * 3.28084 >= 5280;
+    const unit = imperial ? (mi ? 'MI' : 'FT') : (km ? 'KM' : 'M');
+    const lbl = i => {
+      const v = i * stepM;
+      if (imperial) { const ft = v * 3.28084; return mi ? `${+(ft / 5280).toFixed(1)}` : `${Math.round(ft)}`; }
+      return km ? `${+(v / 1000).toFixed(1)}` : `${Math.round(v)}`;
+    };
+    // Label every Nth line so the margin reads as a scale, not a ruler (~25mm between labels).
+    const stride = Math.max(1, Math.ceil(25 / stepMM));
+
+    // Clip the grid to the field MINUS the aperture: one compound path with evenodd (clipPath is
+    // far more portable across RIPs than a mask), so no ink is wasted under the tile.
+    const clip = `<clipPath id="field-clip" clipPathUnits="userSpaceOnUse"><path clip-rule="evenodd" d="`
+      + `M ${this._n(field.x)} ${this._n(field.y)} H ${this._n(field.x + field.w)} `
+      + `V ${this._n(field.y + field.h)} H ${this._n(field.x)} Z `
+      + this._apPath(mesh, ap) + `"/></clipPath>`;
+
+    let g = `<g id="graticule" fill="none" shape-rendering="geometricPrecision" clip-path="url(#field-clip)">`;
+    let ticks = `<g id="grat-ticks">`;
+    // Ticks and labels live in the TOP and LEFT margins, outside the neatline — quad convention,
+    // and it keeps them clear of the marginalia band, which butts directly against the field's
+    // bottom edge (labelling there would print straight through the title).
+    const ET = this.L.EDGE_TICK;
+    for (let i = iMin; i <= iMax; i++) {
+      const X = x0 + i * stepMM;
+      const heavy = i === 0;                                       // the tile's own edge line
+      g += this._line(X, field.y, X, field.y + field.h, t.grat, heavy ? this.L.GRAT_W * 3 : this.L.GRAT_W);
+      if (i % stride) continue;
+      ticks += this._line(X, field.y - ET, X, field.y, t.rule, this.L.HAIRLINE_W);
+      ticks += this._txt(X, field.y - ET - 1.4, lbl(i), { cls: 'p-data', size: 2.4, fill: t.inkSoft, anchor: 'middle' });
+    }
+    for (let j = jMin; j <= jMax; j++) {
+      const Y = yS - j * stepMM;
+      const heavy = j === 0;
+      g += this._line(field.x, Y, field.x + field.w, Y, t.grat, heavy ? this.L.GRAT_W * 3 : this.L.GRAT_W);
+      if (j % stride) continue;
+      ticks += this._line(field.x - ET, Y, field.x, Y, t.rule, this.L.HAIRLINE_W);
+      ticks += this._txt(field.x - ET - 1, Y + 0.85, lbl(j), { cls: 'p-data', size: 2.4, fill: t.inkSoft, anchor: 'end' });
+    }
+    g += `</g>`;
+    // Unit note sits INSIDE the field's bottom-left, clear of both label gutters — putting it in
+    // the top margin collides with whichever tick label lands nearest that corner.
+    ticks += this._txt(field.x + 2, field.y + field.h - 2.5, `GRID ${unit} FROM TILE SW CORNER`,
+      { cls: 'p-label', size: 2.3, fill: t.inkSoft });
+    ticks += `</g>`;
+
+    return clip + g + ticks;
+  },
+
+  // Full lat/lon at the four aperture corners — the actual quad convention, and the detail that
+  // makes the sheet read as a real map. Drawn independently of the graticule: these are the
+  // tile's registration data, so a blank field must not take them away.
+  _apCoords(lay, t, mesh) {
+    const { ap } = lay, b = mesh.bounds;
+    const fmt = (v, pos, neg) => `${Math.abs(v).toFixed(3)}°${v >= 0 ? pos : neg}`;
+    const gap = this.L.CROP_GAP + 1.5, sz = 2.4;
+    const NW = `${fmt(b.north, 'N', 'S')} ${fmt(b.west, 'E', 'W')}`;
+    const NE = `${fmt(b.north, 'N', 'S')} ${fmt(b.east, 'E', 'W')}`;
+    const SW = `${fmt(b.south, 'N', 'S')} ${fmt(b.west, 'E', 'W')}`;
+    const SE = `${fmt(b.south, 'N', 'S')} ${fmt(b.east, 'E', 'W')}`;
+    return `<g id="ap-coords">`
+      + this._txt(ap.x - gap, ap.y - gap, NW, { cls: 'p-data', size: sz, fill: t.inkSoft })
+      + this._txt(ap.x + ap.w + gap, ap.y - gap, NE, { cls: 'p-data', size: sz, fill: t.inkSoft, anchor: 'end' })
+      + this._txt(ap.x - gap, ap.y + ap.h + gap + 3.5, SW, { cls: 'p-data', size: sz, fill: t.inkSoft })
+      + this._txt(ap.x + ap.w + gap, ap.y + ap.h + gap + 3.5, SE, { cls: 'p-data', size: sz, fill: t.inkSoft, anchor: 'end' })
+      + `</g>`;
+  },
+
+  // ─── marginalia ─────────────────────────────────────────────────────────
+
+  _title() {
+    const v = id => (document.getElementById(id)?.value || '').trim();
+    return v('frame-title')
+        || (State.selectionShape === 'boundary' && State.boundaryPoly?.name)
+        || (typeof Geocode !== 'undefined' && Geocode.lastQuery)
+        || State.gpxTrack?.name
+        || 'Untitled Terrain';
+  },
+
+  _marginalia(lay, t, mesh, m) {
+    const { band, live } = lay, P = this.L.BAND_PAD, G = this.L.BLOCK_GAP;
+    const x0 = band.x + P, availW = band.w - 2 * P;
+    const gut = 6;
+    const cw = [0.46, 0.27, 0.27].map(f => f * (availW - 2 * gut));
+    const cx = [x0, x0 + cw[0] + gut, x0 + cw[0] + cw[1] + 2 * gut];
+    const top = band.y + P;
+    // Type scale: 1.0 at 18×24. Without it the same fixed millimetre sizes read cramped on a
+    // 24×36 and oversized on an 8×10.
+    const S = Math.max(0.78, Math.min(1.5, live.w / 417));
+
+    let s = `<g id="marginalia">`;
+
+    // ── Column L: title / subtitle / coordinates
+    const titleSize = Math.max(6, Math.min(14, 0.024 * live.w));
+    let y = top + titleSize * 0.82;
+    s += this._txt(cx[0], y, this._title(), { cls: 'p-display', size: titleSize, fill: t.ink, fitw: cw[0] });
+    y += G;
+    const sub = (document.getElementById('frame-subtitle')?.value || '').trim();
+    if (this._on('poster-subtitle-on') && sub) {
+      y += titleSize * 0.42;
+      s += this._txt(cx[0], y, sub, { cls: 'p-display', size: titleSize * 0.42, fill: t.inkSoft, style: 'italic', fitw: cw[0] });
+      y += G * 0.7;
+    }
+    if (this._on('poster-coords-on')) {
+      y += 3.4 * S;
+      s += this._txt(cx[0], y, ThreeMFExport._coordString(mesh), { cls: 'p-data', size: 3.2 * S, fill: t.ink, fitw: cw[0] });
+    }
+
+    // ── Column C: scale bar / ratio / elevation / model stats
+    let cy = top;
+    if (this._on('poster-scale-on')) {
+      cy += 2.4 * S;
+      s += this._scaleBar(cx[1], cy, cw[1], t, m, S);
+      cy += 9.5 * S;
+      s += this._txt(cx[1], cy, `1 : ${m.ratioStr}`, { cls: 'p-data', size: 3.4 * S, fill: t.ink });
+      cy += G + 1;
+    }
+    if (this._on('poster-stats-on')) {
+      const lo = Math.round(mesh.minElev), hi = Math.round(mesh.maxElev);
+      const relief = Math.round((mesh.maxElev - mesh.minElev));
+      const u = this._units();
+      const elev = u === 'imperial'
+        ? `${Math.round(lo * 3.28084)}–${Math.round(hi * 3.28084)} ft`
+        : u === 'metric' ? `${lo}–${hi} m`
+        : `${lo}–${hi} m  ·  ${Math.round(lo * 3.28084)}–${Math.round(hi * 3.28084)} ft`;
+      cy += 2.8 * S;
+      s += this._txt(cx[1], cy, 'ELEVATION', { cls: 'p-label', size: 2.4 * S, fill: t.inkSoft });
+      cy += 3.8 * S;
+      s += this._txt(cx[1], cy, elev, { cls: 'p-data', size: 2.9 * S, fill: t.ink, fitw: cw[1] });
+      cy += 3.9 * S;
+      s += this._txt(cx[1], cy, `${relief} m relief`, { cls: 'p-data', size: 2.6 * S, fill: t.inkSoft });
+      cy += G + 1;
+      const maxZ = (mesh.maxElev - mesh.minElev) * mesh.elevScale + mesh.baseHeight;
+      const vx = parseFloat(document.getElementById('vert-exag')?.value) || 1;
+      cy += 2.8 * S;
+      s += this._txt(cx[1], cy, 'MODEL', { cls: 'p-label', size: 2.4 * S, fill: t.inkSoft });
+      cy += 3.8 * S;
+      s += this._txt(cx[1], cy, `${mesh.meshW.toFixed(0)} × ${mesh.meshH.toFixed(0)} × ${maxZ.toFixed(1)} mm`,
+        { cls: 'p-data', size: 2.9 * S, fill: t.ink, fitw: cw[1] });
+      cy += 3.9 * S;
+      s += this._txt(cx[1], cy, `${vx}× vertical`, { cls: 'p-data', size: 2.6 * S, fill: t.inkSoft });
+    }
+
+    // ── Column R: legend / route
+    let ry = top;
+    if (this._on('poster-legend-on')) {
+      const r = this._legend(cx[2], ry, cw[2], t, mesh, S);
+      s += r.svg; ry = r.y + G;
+    }
+    if (this._on('poster-route-on') && State.gpxTrack) {
+      s += this._routeBlock(cx[2], ry, cw[2], t, mesh, S);
+    }
+
+    // ── Footer: data sources + credit + date
+    if (this._on('poster-credit-on')) {
+      const fy = band.y + band.h - P + 1;
+      s += this._line(x0, fy - 4.6 * S, x0 + availW, fy - 4.6 * S, t.rule, this.L.HAIRLINE_W);
+      const src = (IMAGERY_SOURCES[currentImagerySource] || IMAGERY_SOURCES.eox);
+      const attr = String(src.attribution || '').replace(/<[^>]*>/g, '');
+      const extra = (document.getElementById('poster-credit')?.value || '').trim();
+      const left = `ELEVATION: AWS TERRAIN TILES / USGS 3DEP  ·  IMAGERY: ${attr}${extra ? '  ·  ' + extra : ''}`;
+      s += this._txt(x0, fy, left, { cls: 'p-label', size: 2.2 * S, fill: t.inkSoft, fitw: availW - 26 * S });
+      const d = new Date();
+      const mo = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][d.getMonth()];
+      s += this._txt(x0 + availW, fy, `${mo} ${d.getFullYear()}`, { cls: 'p-label', size: 2.2 * S, fill: t.inkSoft, anchor: 'end' });
+    }
+
+    return s + `</g>`;
+  },
+
+  // Alternating filled/open 5-division bar — the standard cartographic form, readable at a glance
+  // and measurable with a ruler.
+  _scaleBar(x, y, maxW, t, m, S = 1) {
+    const imperial = this._units() === 'imperial';
+    const bar = imperial ? m.barI : m.bar;
+    let barMM = bar.barMM;
+    // If the round distance would overrun its column, step DOWN the nice ladder rather than
+    // squashing the bar — a scale bar whose length no longer matches its label is a lie.
+    if (barMM > maxW) {
+      const ladder = imperial ? [50, 100, 200, 500, 1000, 2000, 5280, 10560, 26400, 52800]
+                              : this.NICE;
+      const perUnit = barMM / (imperial ? bar.distFt : bar.distM);
+      let pick = ladder[0];
+      for (const n of ladder) if (n * perUnit <= maxW) pick = n;
+      barMM = pick * perUnit;
+      bar.label = imperial
+        ? (pick >= 5280 ? `${+(pick / 5280).toFixed(2)} mi` : `${pick} ft`)
+        : (pick >= 1000 ? `${pick / 1000} km` : `${pick} m`);
+    }
+    const h = 2.2 * S, div = 5, dw = barMM / div;
+    let s = `<g id="scalebar">`;
+    for (let i = 0; i < div; i++) {
+      s += this._rect(x + i * dw, y, dw, h, { fill: i % 2 ? 'none' : t.ink, stroke: t.ink, sw: this.L.HAIRLINE_W });
+    }
+    s += this._txt(x, y + h + 3.4 * S, '0', { cls: 'p-data', size: 2.5 * S, fill: t.inkSoft, anchor: 'middle' });
+    s += this._txt(x + barMM, y + h + 3.4 * S, bar.label, { cls: 'p-data', size: 2.5 * S, fill: t.inkSoft, anchor: 'middle' });
+    return s + `</g>`;
+  },
+
+  // Band legend. Swatches keep their REAL filament hexes in every theme — they are data, not
+  // decoration (the same rule the app applies to the topo palette on screen).
+  _legend(x, y, w, t, mesh, S = 1) {
+    const palette = getBandConfig().colors;
+    const present = this._presentBands(mesh, palette.length);
+    const sw = 3.6 * S, gap = 1.8 * S, lh = 2.6 * S, rowH = 5.4 * S;
+    let s = `<g id="legend">`;
+    let cy = y + 2.8 * S;
+    s += this._txt(x, cy, 'PRINT BANDS', { cls: 'p-label', size: 2.4 * S, fill: t.inkSoft });
+    cy += 3.9 * S;
+    for (const b of present) {
+      const c = palette[b]; if (!c) continue;
+      s += this._rect(x, cy - sw + 0.6 * S, sw, sw, { fill: c.hex, stroke: t.swatch, sw: 0.1 });
+      s += this._txt(x + sw + gap, cy, c.name, { cls: 'p-label', size: lh, fill: t.ink, fitw: w - sw - gap });
+      cy += rowH;
+    }
+    return { svg: s + `</g>`, y: cy };
+  },
+
+  // Which bands actually appear in this tile — mirrors what the 3D cartouche legend does, so the
+  // poster never advertises a filament the print doesn't use.
+  _presentBands(mesh, n) {
+    const out = [];
+    if (mesh.pixelBands) {
+      const seen = new Set();
+      for (let i = 0; i < mesh.pixelBands.length; i++) seen.add(mesh.pixelBands[i]);
+      for (let i = 0; i < n; i++) if (seen.has(i)) out.push(i);
+    }
+    return out.length ? out : Array.from({ length: n }, (_, i) => i);
+  },
+
+  _routeBlock(x, y, w, t, mesh, S = 1) {
+    const gt = State.gpxTrack;
+    const clip = this._on('poster-gpx-clip') ? mesh.bounds : null;
+    const st = this._trackStats(gt.points, clip);
+    if (!st || !st.n) return '';
+    const u = this._units();
+    const dist = u === 'metric' ? `${st.km.toFixed(1)} km`
+               : u === 'imperial' ? `${st.mi.toFixed(1)} mi`
+               : `${st.km.toFixed(1)} km / ${st.mi.toFixed(1)} mi`;
+    const gain = st.gainM === null ? '' :
+      (u === 'imperial' ? `  ·  +${Math.round(st.gainFt)} ft` : `  ·  +${Math.round(st.gainM)} m`);
+    const routeHex = document.getElementById('route-color')?.value || '#C0392B';
+    let cy = y + 2.8 * S;
+    let s = `<g id="route">`;
+    s += this._txt(x, cy, 'ROUTE', { cls: 'p-label', size: 2.4 * S, fill: t.inkSoft });
+    cy += 4.1 * S;
+    s += this._line(x, cy - 0.9 * S, x + 4 * S, cy - 0.9 * S, routeHex, 0.9 * S);
+    s += this._txt(x + 5.6 * S, cy, gt.name, { cls: 'p-label', size: 2.6 * S, fill: t.ink, fitw: w - 5.6 * S });
+    cy += 3.9 * S;
+    s += this._txt(x, cy, dist + gain + (st.clipped ? '  in frame' : ''),
+      { cls: 'p-data', size: 2.7 * S, fill: t.ink, fitw: w });
+    return s + `</g>`;
+  },
+
+  // ─── GPX stats ──────────────────────────────────────────────────────────
+
+  // Track length + elevation gain.
+  //   points     : [{lat, lon, ele?}] — State.gpxTrack.points
+  //   clipBounds : {north,south,east,west} to measure only the in-frame portion, or null
+  // → { km, mi, gainM, gainFt, n, clipped }
+  //
+  // Deliberately haversine, NOT the flat 111320·cos(lat) convention used elsewhere in this file
+  // (MeshGen, the 3D cartouche, the hillshade). The flat form is fine for a tile's own span but
+  // drifts on long north–south tracks, and this number gets compared against Garmin/Strava.
+  // Don't "fix" it back.
+  _trackStats(points, clipBounds) {
+    if (!points || points.length < 2) return null;
+    const R = 6371008.8, rad = Math.PI / 180;
+    const GAIN_EPS = 3;   // metres — below this is consumer-GPS noise, not climb
+    const inB = p => !clipBounds || (p.lat >= clipBounds.south && p.lat <= clipBounds.north &&
+                                     p.lon >= clipBounds.west  && p.lon <= clipBounds.east);
+    let meters = 0, gain = 0, n = 0, withEle = 0, prevEle = null;
+    for (const p of points) if (isFinite(p.ele)) withEle++;
+    const haveEle = withEle >= points.length * 0.8;
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1], b = points[i];
+      // Accumulate only when BOTH ends are in frame — accurate to one sample interval, and far
+      // simpler than clipping sub-segments against the bounds.
+      if (!inB(a) || !inB(b)) { prevEle = null; continue; }
+      const dLat = (b.lat - a.lat) * rad, dLon = (b.lon - a.lon) * rad;
+      const s1 = Math.sin(dLat / 2), s2 = Math.sin(dLon / 2);
+      const h = s1 * s1 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * s2 * s2;
+      meters += 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+      n++;
+      if (haveEle && isFinite(a.ele) && isFinite(b.ele)) {
+        // Seed from the segment's START, or the very first ascent of the track is lost.
+        if (prevEle === null) prevEle = a.ele;
+        // `prevEle` tracks the last confirmed low point: only a rise clearing GAIN_EPS counts,
+        // and any new low resets the datum, so noise oscillating under the threshold adds nothing.
+        if (b.ele - prevEle > GAIN_EPS) { gain += b.ele - prevEle; prevEle = b.ele; }
+        else if (b.ele < prevEle) prevEle = b.ele;
+      }
+    }
+    return {
+      km: meters / 1000, mi: meters / 1609.344,
+      gainM: haveEle ? gain : null, gainFt: haveEle ? gain * 3.28084 : null, n,
+      clipped: !!clipBounds,
+    };
+  },
+
+  // ─── auto-fit ───────────────────────────────────────────────────────────
+
+  // Post-mount pass: any <text data-fitw="…"> that overruns its budget wraps at the last space,
+  // then shrinks, then ellipsizes. getComputedTextLength() returns user units (= mm) but only
+  // works on a node inside a rendered document — hence "post-mount".
+  _autoFit(svgEl) {
+    svgEl.querySelectorAll('[data-fitw]').forEach(node => {
+      const budget = parseFloat(node.getAttribute('data-fitw'));
+      if (!isFinite(budget) || budget <= 0) return;
+      let size = parseFloat(node.getAttribute('font-size')) || 3;
+      const floor = size * 0.62;
+      let len = 0;
+      try { len = node.getComputedTextLength(); } catch (e) { return; }
+      if (len <= budget) return;
+      while (len > budget && size > floor) {
+        size = Math.max(floor, size - 0.4);
+        node.setAttribute('font-size', this._n(size));
+        try { len = node.getComputedTextLength(); } catch (e) { return; }
+      }
+      if (len <= budget) return;
+      let s = node.textContent;
+      while (s.length > 2 && len > budget) {
+        s = s.slice(0, -2);
+        node.textContent = s + '…';
+        try { len = node.getComputedTextLength(); } catch (e) { return; }
+      }
+    });
+  },
+
+  // ─── overlay ────────────────────────────────────────────────────────────
+
+  open() {
+    if (!State.selectedBounds) { toast('Draw a rectangle or circle on the map first.'); return; }
+    if (!State.meshData) {
+      // The aperture is DEFINED by meshW/meshH, which only exist after a generate — never guess
+      // it from printSize × aspect or the printed hole won't match the printed tile.
+      toast('Generate the 3D model first — the poster needs the tile\'s exact printed size.',
+        { duration: 7000, action: 'Generate', onAction: () => UI.generateModel() });
+      return;
+    }
+    const mesh = State.meshData;
+    const lay = this._layout(mesh, this._sheet());
+    if (!lay.fit.ok) {
+      const mp = lay.fit.minPaper;
+      const msg = `Tile is ${mesh.meshW.toFixed(0)} × ${mesh.meshH.toFixed(0)} mm — too big for `
+                + `${this._sheet().label}.` + (mp ? ` Try ${mp.label}, or lower Print Size.` : ' Lower Print Size.');
+      toast(msg, mp
+        ? { duration: 9000, action: `Use ${mp.label}`, onAction: () => {
+            if (mp.landscape) { const o = document.getElementById('poster-orient'); if (o) o.value = 'landscape'; }
+            this.selectPaper(mp.key); this.open();
+          } }
+        : 9000);
+      return;
+    }
+    if (!this._warnedBig && lay.ap.w > lay.field.w * 0.75) {
+      this._warnedBig = true;
+      toast('Tile fills most of the sheet — consider a larger paper size.', 5000);
+    }
+    this._open = true;
+    document.getElementById('poster-overlay').style.display = 'flex';
+    this.refresh();
+  },
+
+  close() {
+    this._open = false;
+    const ov = document.getElementById('poster-overlay');
+    if (ov) ov.style.display = 'none';
+    const st = document.getElementById('poster-stage');
+    if (st) st.innerHTML = '';
+  },
+
+  // Debounced rebuild — the panel stays live while the overlay is open, so every control edit
+  // redraws the sheet.
+  refresh() {
+    this._syncFit();
+    if (!this._open) return;
+    clearTimeout(this._timer);
+    this._timer = setTimeout(() => this._render(), 120);
+  },
+
+  _render() {
+    const mesh = State.meshData; if (!mesh) return;
+    const stage = document.getElementById('poster-stage'); if (!stage) return;
+    const lay = this._layout(mesh, this._sheet());
+    if (!lay.fit.ok) {
+      stage.innerHTML = `<p style="color:#f0e6d8;font-size:13px;max-width:32ch;text-align:center;">`
+        + `The tile doesn't fit this sheet. Pick a larger paper size or lower Print Size.</p>`;
+      return;
+    }
+    const el = this.build(mesh);
+    stage.innerHTML = '';
+    stage.appendChild(el);
+    this._autoFit(el);                       // must run mounted — getComputedTextLength needs layout
+    // Inline style beats the mm presentation attributes, so the preview is the exact export scaled.
+    el.style.width = '100%'; el.style.height = 'auto'; el.style.maxHeight = '100%';
+    el.style.boxShadow = '0 6px 28px rgba(0,0,0,.35)';
+    const sheet = this._sheet();
+    const info = document.getElementById('poster-info');
+    if (info) {
+      const m = this._metrics(mesh);
+      info.textContent = `${sheet.label} · ${sheet.wMM.toFixed(0)} × ${sheet.hMM.toFixed(0)} mm · 1:${m.ratioStr}`;
+    }
+  },
+
+  // Live fit readout in the panel — visible BEFORE the user clicks Preview, which matters because
+  // Print Size goes to 300mm and that doesn't fit 8×10 or 11×14.
+  _syncFit() {
+    const el = document.getElementById('poster-fit'); if (!el) return;
+    const mesh = State.meshData;
+    if (!mesh) { el.textContent = 'Generate the model to size the aperture.'; el.style.color = 'var(--text-muted)'; return; }
+    const sheet = this._sheet();
+    const lay = this._layout(mesh, sheet);
+    el.textContent = `Tile ${mesh.meshW.toFixed(0)} × ${mesh.meshH.toFixed(0)} mm · field `
+      + `${lay.field.w.toFixed(0)} × ${lay.field.h.toFixed(0)} mm`;
+    el.style.color = lay.fit.ok ? 'var(--text-secondary)' : 'var(--danger)';
+  },
+
+  // ─── export ─────────────────────────────────────────────────────────────
+
+  // Build + measure off-screen, then serialize. The measure host is needed because _autoFit
+  // depends on getComputedTextLength(), which only works on a laid-out node.
+  _serialize(el) {
+    const host = document.getElementById('poster-measure');
+    host.innerHTML = ''; host.appendChild(el);
+    this._autoFit(el);
+    const xml = new XMLSerializer().serializeToString(el);
+    host.innerHTML = '';
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + xml;
+  },
+
+  downloadSVG() {
+    const mesh = State.meshData; if (!mesh) { toast('Generate the 3D model first.'); return; }
+    const xml = this._serialize(this.build(mesh));
+    downloadBlob(new Blob([xml], { type: 'image/svg+xml;charset=utf-8' }), exportName('svg', '_poster'));
+    toast('Poster SVG downloaded.', 3000);
+  },
+
+  // Cut line for the acrylic sheet: aperture path plus four registration crosses at the neatline
+  // corners, in the universal red-hairline laser/CNC convention. Falls out of the layout engine
+  // for free and is what actually solves the mounting.
+  downloadCutTemplate() {
+    const mesh = State.meshData; if (!mesh) { toast('Generate the 3D model first.'); return; }
+    const sheet = this._sheet(), lay = this._layout(mesh, sheet);
+    const CUT = '#FF0000', sw = 0.1, k = 4;
+    let s = `<path d="${this._apPath(mesh, lay.ap)}" fill="none" fill-rule="evenodd" stroke="${CUT}" stroke-width="${sw}"/>`;
+    for (const [x, y] of [[lay.live.x, lay.live.y], [lay.live.x + lay.live.w, lay.live.y],
+                          [lay.live.x, lay.live.y + lay.live.h], [lay.live.x + lay.live.w, lay.live.y + lay.live.h]]) {
+      s += this._line(x - k, y, x + k, y, CUT, sw) + this._line(x, y - k, x, y + k, CUT, sw);
+    }
+    const xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
+      + `<svg xmlns="http://www.w3.org/2000/svg" version="1.1" `
+      + `width="${this._n(sheet.wMM)}mm" height="${this._n(sheet.hMM)}mm" `
+      + `viewBox="0 0 ${this._n(sheet.wMM)} ${this._n(sheet.hMM)}">`
+      + `<g id="cut">${s}</g></svg>`;
+    downloadBlob(new Blob([xml], { type: 'image/svg+xml;charset=utf-8' }), exportName('svg', '_acrylic-cut'));
+    toast('Acrylic cut template downloaded — red hairlines are the cut path.', 5000);
+  },
+
+  // Print at true physical size. @page size is honoured exactly by Chrome's Save-as-PDF; a
+  // physical printer additionally needs that paper loaded and "fit to page" OFF.
+  print() {
+    const mesh = State.meshData; if (!mesh) { toast('Generate the 3D model first.'); return; }
+    const sheet = this._sheet();
+    const ps = document.getElementById('poster-page-style');
+    if (ps) ps.textContent = `@page { size: ${sheet.wIn}in ${sheet.hIn}in; margin: 0; }`;
+    const host = document.getElementById('poster-print-host');
+    const el = this.build(mesh);
+    host.innerHTML = ''; host.appendChild(el);
+    this._autoFit(el);
+    const cleanup = () => {
+      host.innerHTML = '';
+      if (ps) ps.textContent = '';
+      window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup);
+    window.print();
+  },
+};
+
+// ═══════════════════════════════════════════════
 //  3D PREVIEW (Three.js with simple orbit)
 // ═══════════════════════════════════════════════
 
@@ -6714,6 +7804,8 @@ const UI = {
       State.meshData = meshData;
       // Print estimate (filament / time / cost / AMS changes) — computed once, cached, shown in the card.
       try { meshData.printEstimate = PrintEstimate.compute(meshData); } catch (e) { console.warn('Print estimate failed:', e); }
+      // The poster's aperture is sized from meshW/meshH, so a fresh mesh re-sizes it.
+      Poster.refresh();
 
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
       showLoading('Building preview…');
@@ -7534,6 +8626,9 @@ function initApp() {
     const tiling = document.getElementById('tiling-enable')?.checked;
     const grid = tiling ? `${v('tile-cols', 1)}×${v('tile-rows', 1)} tiles` : '';
     set('sum-composition', [frame ? 'frame' : 'no frame', grid].filter(Boolean).join(' · '));
+    const paper = Poster.PAPERS[v('poster-paper', '18x24')]?.label || '18 × 24 in';
+    const theme = Poster.THEMES[v('poster-theme', 'quad')]?.label || 'Quadrangle';
+    set('sum-poster', `${paper} · ${theme}`);
   };
   const panelEl = document.getElementById('side-panel');
   panelEl?.addEventListener('change', () => { syncContextTag(); syncStepSummaries(); });
@@ -7542,6 +8637,8 @@ function initApp() {
   syncStepSummaries();
 
   _syncFrameChip();         // reflect the default 'custom' selection on the chip grid
+  Poster._syncChips();      // same for the poster paper/theme grids
+  Poster._syncFit();        // fit readout starts as "generate the model to size the aperture"
   UI._syncDrawCallout();  // show the [Draw here →] hint while no selection exists
   Intro.maybeShow();    // first-visit how-to (dismissible)
 
@@ -7558,8 +8655,10 @@ function initApp() {
     if (e.key !== 'Escape') return;
     const intro = document.getElementById('intro-modal');
     const paint = document.getElementById('paint-modal');
+    const poster = document.getElementById('poster-overlay');
     if (intro && intro.style.display !== 'none' && intro.style.display !== '') Intro.close();
     else if (paint && paint.style.display !== 'none' && paint.style.display !== '') Paint.close();
+    else if (poster && poster.style.display !== 'none' && poster.style.display !== '') Poster.close();
     else if (Preview.isFullscreen) Preview.exitFullscreen();
   });
 }
