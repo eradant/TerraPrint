@@ -1628,7 +1628,14 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
         </div>
 
         <div class="sub-head">Marginalia</div>
-        <p class="hint" style="margin:-4px 0 8px;">Title and subtitle come from Composition → Frame &amp; Card.</p>
+        <p class="hint" style="margin:-4px 0 8px;">Title and subtitle come from Composition → Frame &amp; Card. Blocks reflow to fill the band as you turn them on and off.</p>
+        <div class="input-group">
+          <label>Title size</label>
+          <div class="range-row">
+            <input type="range" id="poster-title-scale" min="0.6" max="2.2" step="0.1" value="1" oninput="document.getElementById('poster-title-scale-val').textContent=this.value+'×';Poster.refresh()">
+            <span class="range-val" id="poster-title-scale-val">1×</span>
+          </div>
+        </div>
         <div class="input-group" style="display:flex;align-items:center;gap:8px;">
           <input type="checkbox" id="poster-subtitle-on" checked style="width:15px;height:15px;" onchange="Poster.refresh()">
           <label for="poster-subtitle-on" style="margin:0;cursor:pointer;">Subtitle</label>
@@ -6503,12 +6510,15 @@ const Poster = {
   // 24000 → "24 000" (thin space). Reads as a scale, not a phone number.
   _group(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); },
 
-  // Pure sheet geometry — no DOM reads beyond the two controls, no DOM writes.
-  _layout(mesh, sheet) {
+  // Pure sheet geometry. The marginalia band is sized from what is actually IN it (see _bandPlan)
+  // rather than a fixed fraction of the sheet — a fixed fraction either overflows on a small sheet
+  // or leaves a dead strip on a large one.
+  _layout(mesh, sheet, probe = false) {
     const L = this.L;
     const M = Math.max(9, Math.min(20, 0.05 * Math.min(sheet.wMM, sheet.hMM)));
     const live = { x: M, y: M, w: sheet.wMM - 2 * M, h: sheet.hMM - 2 * M };
-    const bandH = Math.max(26, Math.min(78, 0.135 * live.h));
+    const plan = this._bandPlan(live, mesh);
+    const bandH = plan.bandH;
     const band = { x: live.x, y: live.y + live.h - bandH, w: live.w, h: bandH };
     const field = { x: live.x, y: live.y, w: live.w, h: live.h - bandH };
 
@@ -6522,12 +6532,14 @@ const Poster = {
     const needW = ap.w + 2 * L.APERTURE_CLEAR;
     const needH = ap.h + L.APERTURE_CLEAR + L.MIN_HEADROOM;
     const fit = { ok: needW <= field.w && needH <= field.h, needW, needH, minPaper: null };
-    if (!fit.ok) fit.minPaper = this._smallestFitting(mesh);
-    return { live, band, field, ap, fit, M };
+    if (!fit.ok && !probe) fit.minPaper = this._smallestFitting(mesh);
+    return { live, band, field, ap, fit, M, plan };
   },
 
   // First paper (ascending area, both orientations) whose field would hold this tile — so the
-  // failure toast can name a real fix instead of just complaining.
+  // failure toast can name a real fix instead of just complaining. Runs the REAL layout per
+  // candidate (probe mode, to avoid recursing back into here) so its verdict can't drift from
+  // the content-driven band height.
   _smallestFitting(mesh) {
     const keys = Object.keys(this.PAPERS).sort((a, b) =>
       this.PAPERS[a].w * this.PAPERS[a].h - this.PAPERS[b].w * this.PAPERS[b].h);
@@ -6536,11 +6548,7 @@ const Poster = {
         const p = this.PAPERS[k];
         const wIn = land ? p.h : p.w, hIn = land ? p.w : p.h;
         const s = { wMM: wIn * this.MM_IN, hMM: hIn * this.MM_IN };
-        const M = Math.max(9, Math.min(20, 0.05 * Math.min(s.wMM, s.hMM)));
-        const liveW = s.wMM - 2 * M, liveH = s.hMM - 2 * M;
-        const fieldH = liveH - Math.max(26, Math.min(78, 0.135 * liveH));
-        if (mesh.meshW + 2 * this.L.APERTURE_CLEAR <= liveW &&
-            mesh.meshH + this.L.APERTURE_CLEAR + this.L.MIN_HEADROOM <= fieldH) {
+        if (this._layout(mesh, s, true).fit.ok) {
           return { key: k, label: this.PAPERS[k].label, landscape: land };
         }
       }
@@ -6855,83 +6863,234 @@ const Poster = {
         || 'Untitled Terrain';
   },
 
-  _marginalia(lay, t, mesh, m) {
-    const { band, live } = lay, P = this.L.BAND_PAD, G = this.L.BLOCK_GAP;
-    const x0 = band.x + P, availW = band.w - 2 * P;
-    const gut = 6;
-    const cw = [0.46, 0.27, 0.27].map(f => f * (availW - 2 * gut));
-    const cx = [x0, x0 + cw[0] + gut, x0 + cw[0] + cw[1] + 2 * gut];
-    const top = band.y + P;
-    // Type scale: 1.0 at 18×24. Without it the same fixed millimetre sizes read cramped on a
-    // 24×36 and oversized on an 8×10.
-    const S = Math.max(0.78, Math.min(1.5, live.w / 417));
+  // ─── marginalia: a measured block layout ────────────────────────────────
+  //
+  // Every marginalia element is a BLOCK that can measure itself, so the band can be built from
+  // its actual contents instead of a fixed fraction of the sheet. That fixes three things at
+  // once: content can no longer overflow the footer rule on a small sheet, turning a block off
+  // reflows the rest instead of leaving a hole, and the band shrinks when there is little to say.
+  //
+  // Each builder has the signature (x, yTop, w) → { svg, h } and draws downward from yTop.
+  // Builders are called twice — once at (0,0) to measure, once in place — which is cheap because
+  // they only concatenate strings.
 
+  // Vertical rhythm helper: a run of text rows, each advancing by its own size. Returns the
+  // stack's markup and its true height, so callers never hand-maintain cursor arithmetic.
+  _stack(x, yTop, w, rows) {
+    let y = yTop, out = '';
+    for (const r of rows) {
+      if (r.text === '' || r.text === null || r.text === undefined) continue;
+      y += r.size * 1.15;                                   // baseline for this row
+      out += this._txt(x, y, r.text, { cls: r.cls, size: r.size, fill: r.fill,
+                                       style: r.style, fitw: r.fitw !== undefined ? r.fitw : w });
+      y += r.size * 0.38;                                   // trailing leading
+    }
+    return { svg: out, h: y - yTop };
+  },
+
+  // Decide what goes in the band, how it columnises, and how tall the band must therefore be.
+  // Shrinks the type scale only if the content genuinely cannot fit in a sensible band depth.
+  _bandPlan(live, mesh) {
+    const P = this.L.BAND_PAD, G = this.L.BLOCK_GAP, gut = 6;
+    const availW = live.w - 2 * P;
+    const hasFooter = this._on('poster-credit-on');
+    const titleMul = parseFloat(document.getElementById('poster-title-scale')?.value) || 1;
+    const t = this._theme();
+    const m = this._metrics(mesh);
+    const maxBandH = live.h * 0.45;                          // the band must never eat the field
+
+    let plan = null;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const S = Math.max(0.55, Math.min(1.5, live.w / 417) * Math.pow(0.92, attempt));
+
+      // Which data blocks are switched on. Order here is the reading order they fill columns in.
+      const makers = [];
+      if (this._on('poster-scale-on'))
+        makers.push({ id: 'scale', mk: (x, y, w) => this._blkScale(x, y, w, t, m, S) });
+      if (this._on('poster-stats-on')) {
+        makers.push({ id: 'elevation', mk: (x, y, w) => this._blkElevation(x, y, w, t, mesh, S) });
+        makers.push({ id: 'model', mk: (x, y, w) => this._blkModel(x, y, w, t, mesh, S) });
+      }
+      if (this._on('poster-legend-on'))
+        makers.push({ id: 'legend', mk: (x, y, w) => this._blkLegend(x, y, w, t, mesh, S) });
+      if (this._on('poster-route-on') && State.gpxTrack)
+        makers.push({ id: 'route', mk: (x, y, w) => this._blkRoute(x, y, w, t, mesh, S) });
+
+      // Column count follows the content: two data blocks per column, never more than two data
+      // columns. With nothing switched on the title takes the whole width and can breathe.
+      const dataCols = makers.length === 0 ? 0 : Math.min(2, Math.ceil(makers.length / 2));
+      const fracs = dataCols === 0 ? [1] : dataCols === 1 ? [0.52, 0.48] : [0.46, 0.27, 0.27];
+      const totalGut = gut * (fracs.length - 1);
+      const widths = fracs.map(f => f * (availW - totalGut));
+      const xs = []; let cx = live.x + P;
+      for (const w of widths) { xs.push(cx); cx += w + gut; }
+
+      // Title grows when it owns more of the band, then honours the user's multiplier. The base
+      // coefficient is set so an 11×14 still gets a title you can read across a room.
+      const titleSize = Math.max(7, Math.min(26,
+        0.028 * live.w * (dataCols === 0 ? 1.5 : dataCols === 1 ? 1.15 : 1) * titleMul));
+
+      const titleBlk = this._blkTitle(0, 0, widths[0], t, mesh, S, titleSize);
+
+      // Fill columns in READING ORDER, breaking to the next one once a column has met its share
+      // of the total height. Balancing by height alone (tallest into shortest) packs tighter but
+      // scrambles the order — the scale bar would end up right of the model stats.
+      const measured = makers.map(b => ({ ...b, h: b.mk(0, 0, widths[1] || widths[0]).h }));
+      const cols = Array.from({ length: dataCols }, () => ({ blocks: [], h: 0 }));
+      const totalH = measured.reduce((a, b) => a + b.h, 0);
+      const share = dataCols ? totalH / dataCols : 0;
+      let ci = 0;
+      measured.forEach((b, i) => {
+        if (ci < dataCols - 1) {
+          const colsLeft = dataCols - ci - 1, blocksLeft = measured.length - i;
+          // Advance if staying would starve a later column, or if this one has had its share.
+          if (blocksLeft <= colsLeft) ci++;
+          else if (cols[ci].h > 0 && cols[ci].h + b.h / 2 >= share) ci++;
+        }
+        cols[ci].blocks.push(b);
+        cols[ci].h += (cols[ci].blocks.length > 1 ? G : 0) + b.h;
+      });
+
+      const footerH = hasFooter ? 7.2 * S + 2 : 0;
+      const contentH = Math.max(titleBlk.h, ...cols.map(c => c.h), 0);
+      const bandH = Math.max(22, P + contentH + footerH + P * 0.7);
+
+      plan = { S, widths, xs, cols, titleSize, bandH, footerH, hasFooter, P, G, t, m };
+      if (bandH <= maxBandH) break;                          // fits — done
+      plan.bandH = maxBandH;                                 // last attempt: clamp and accept
+    }
+    return plan;
+  },
+
+  _blkTitle(x, y, w, t, mesh, S, titleSize) {
+    const sub = (document.getElementById('frame-subtitle')?.value || '').trim();
+    const rows = [{ cls: 'p-display', size: titleSize, fill: t.ink, text: this._title() }];
+    if (this._on('poster-subtitle-on') && sub)
+      rows.push({ cls: 'p-display', size: titleSize * 0.4, fill: t.inkSoft, style: 'italic', text: sub });
+    if (this._on('poster-coords-on'))
+      rows.push({ cls: 'p-data', size: 3.2 * S, fill: t.ink, text: ThreeMFExport._coordString(mesh) });
+    const r = this._stack(x, y, w, rows);
+    return { svg: `<g id="title">${r.svg}</g>`, h: r.h };
+  },
+
+  // Alternating filled/open 5-division bar — the standard cartographic form, readable at a glance
+  // and measurable with a ruler.
+  _blkScale(x, y, w, t, m, S) {
+    const imperial = this._units() === 'imperial';
+    const src = imperial ? m.barI : m.bar;
+    let barMM = src.barMM, label = src.label;
+    // If the round distance would overrun its column, step DOWN the nice ladder rather than
+    // squashing the bar — a scale bar whose length no longer matches its label is a lie.
+    if (barMM > w) {
+      const ladder = imperial ? [50, 100, 200, 500, 1000, 2000, 5280, 10560, 26400, 52800] : this.NICE;
+      const perUnit = barMM / (imperial ? src.distFt : src.distM);
+      let pick = ladder[0];
+      for (const n of ladder) if (n * perUnit <= w) pick = n;
+      barMM = pick * perUnit;
+      label = imperial ? (pick >= 5280 ? `${+(pick / 5280).toFixed(2)} mi` : `${pick} ft`)
+                       : (pick >= 1000 ? `${pick / 1000} km` : `${pick} m`);
+    }
+    const h = 2.2 * S, div = 5, dw = barMM / div;
+    let cy = y + 1.4 * S, out = '';
+    for (let i = 0; i < div; i++)
+      out += this._rect(x + i * dw, cy, dw, h, { fill: i % 2 ? 'none' : t.ink, stroke: t.ink, sw: this.L.HAIRLINE_W });
+    cy += h + 3.2 * S;
+    out += this._txt(x, cy, '0', { cls: 'p-data', size: 2.5 * S, fill: t.inkSoft, anchor: 'middle' });
+    out += this._txt(x + barMM, cy, label, { cls: 'p-data', size: 2.5 * S, fill: t.inkSoft, anchor: 'middle' });
+    cy += 1.0 * S;
+    const r = this._stack(x, cy, w, [{ cls: 'p-data', size: 3.4 * S, fill: t.ink, text: `1 : ${m.ratioStr}` }]);
+    return { svg: `<g id="scalebar">${out}${r.svg}</g>`, h: (cy + r.h) - y };
+  },
+
+  _blkElevation(x, y, w, t, mesh, S) {
+    const lo = Math.round(mesh.minElev), hi = Math.round(mesh.maxElev);
+    const u = this._units();
+    const elev = u === 'imperial' ? `${Math.round(lo * 3.28084)}–${Math.round(hi * 3.28084)} ft`
+               : u === 'metric'   ? `${lo}–${hi} m`
+               : `${lo}–${hi} m · ${Math.round(lo * 3.28084)}–${Math.round(hi * 3.28084)} ft`;
+    const r = this._stack(x, y, w, [
+      { cls: 'p-label', size: 2.4 * S, fill: t.inkSoft, text: 'ELEVATION' },
+      { cls: 'p-data',  size: 2.9 * S, fill: t.ink,     text: elev },
+      { cls: 'p-data',  size: 2.6 * S, fill: t.inkSoft, text: `${Math.round(mesh.maxElev - mesh.minElev)} m relief` },
+    ]);
+    return { svg: `<g id="elevation">${r.svg}</g>`, h: r.h };
+  },
+
+  _blkModel(x, y, w, t, mesh, S) {
+    const maxZ = (mesh.maxElev - mesh.minElev) * mesh.elevScale + mesh.baseHeight;
+    const vx = parseFloat(document.getElementById('vert-exag')?.value) || 1;
+    const r = this._stack(x, y, w, [
+      { cls: 'p-label', size: 2.4 * S, fill: t.inkSoft, text: 'MODEL' },
+      { cls: 'p-data',  size: 2.9 * S, fill: t.ink,
+        text: `${mesh.meshW.toFixed(0)} × ${mesh.meshH.toFixed(0)} × ${maxZ.toFixed(1)} mm` },
+      { cls: 'p-data',  size: 2.6 * S, fill: t.inkSoft, text: `${vx}× vertical` },
+    ]);
+    return { svg: `<g id="model">${r.svg}</g>`, h: r.h };
+  },
+
+  // Band legend. Swatches keep their REAL filament hexes in every theme — they are data, not
+  // decoration (the same rule the app applies to the topo palette on screen).
+  _blkLegend(x, y, w, t, mesh, S) {
+    const palette = getBandConfig().colors;
+    const present = this._presentBands(mesh, palette.length);
+    const sw = 3.6 * S, gap = 1.8 * S, lh = 2.6 * S, rowH = 5.2 * S;
+    const head = this._stack(x, y, w, [{ cls: 'p-label', size: 2.4 * S, fill: t.inkSoft, text: 'PRINT BANDS' }]);
+    let cy = y + head.h, out = head.svg;
+    for (const b of present) {
+      const c = palette[b]; if (!c) continue;
+      cy += rowH;
+      out += this._rect(x, cy - sw, sw, sw, { fill: c.hex, stroke: t.swatch, sw: 0.1 });
+      out += this._txt(x + sw + gap, cy - sw * 0.22, c.name,
+        { cls: 'p-label', size: lh, fill: t.ink, fitw: w - sw - gap });
+    }
+    return { svg: `<g id="legend">${out}</g>`, h: cy - y };
+  },
+
+  _blkRoute(x, y, w, t, mesh, S) {
+    const gt = State.gpxTrack;
+    const clip = this._on('poster-gpx-clip') ? mesh.bounds : null;
+    const st = this._trackStats(gt.points, clip);
+    if (!st || !st.n) return { svg: '', h: 0 };
+    const u = this._units();
+    const dist = u === 'metric'   ? `${st.km.toFixed(1)} km`
+               : u === 'imperial' ? `${st.mi.toFixed(1)} mi`
+               : `${st.km.toFixed(1)} km / ${st.mi.toFixed(1)} mi`;
+    const gain = st.gainM === null ? ''
+      : (u === 'imperial' ? ` · +${Math.round(st.gainFt)} ft` : ` · +${Math.round(st.gainM)} m`);
+    const routeHex = document.getElementById('route-color')?.value || '#E8442A';
+    const head = this._stack(x, y, w, [{ cls: 'p-label', size: 2.4 * S, fill: t.inkSoft, text: 'ROUTE' }]);
+    let cy = y + head.h, out = head.svg;
+    cy += 2.6 * S * 1.15;
+    out += this._line(x, cy - 0.9 * S, x + 4 * S, cy - 0.9 * S, routeHex, 0.9 * S);
+    out += this._txt(x + 5.6 * S, cy, gt.name, { cls: 'p-label', size: 2.6 * S, fill: t.ink, fitw: w - 5.6 * S });
+    cy += 2.6 * S * 0.38;
+    const tail = this._stack(x, cy, w, [{ cls: 'p-data', size: 2.7 * S, fill: t.ink,
+      text: dist + gain + (st.clipped ? '  in frame' : '') }]);
+    return { svg: `<g id="route">${out}${tail.svg}</g>`, h: (cy + tail.h) - y };
+  },
+
+  _marginalia(lay, t, mesh, m) {
+    const p = lay.plan, { band } = lay, P = p.P, G = p.G, S = p.S;
+    const top = band.y + P;
     let s = `<g id="marginalia">`;
 
-    // ── Column L: title / subtitle / coordinates
-    const titleSize = Math.max(6, Math.min(14, 0.024 * live.w));
-    let y = top + titleSize * 0.82;
-    s += this._txt(cx[0], y, this._title(), { cls: 'p-display', size: titleSize, fill: t.ink, fitw: cw[0] });
-    y += G;
-    const sub = (document.getElementById('frame-subtitle')?.value || '').trim();
-    if (this._on('poster-subtitle-on') && sub) {
-      y += titleSize * 0.42;
-      s += this._txt(cx[0], y, sub, { cls: 'p-display', size: titleSize * 0.42, fill: t.inkSoft, style: 'italic', fitw: cw[0] });
-      y += G * 0.7;
-    }
-    if (this._on('poster-coords-on')) {
-      y += 3.4 * S;
-      s += this._txt(cx[0], y, ThreeMFExport._coordString(mesh), { cls: 'p-data', size: 3.2 * S, fill: t.ink, fitw: cw[0] });
-    }
+    // Title column always leads.
+    s += this._blkTitle(p.xs[0], top, p.widths[0], t, mesh, S, p.titleSize).svg;
 
-    // ── Column C: scale bar / ratio / elevation / model stats
-    let cy = top;
-    if (this._on('poster-scale-on')) {
-      cy += 2.4 * S;
-      s += this._scaleBar(cx[1], cy, cw[1], t, m, S);
-      cy += 9.5 * S;
-      s += this._txt(cx[1], cy, `1 : ${m.ratioStr}`, { cls: 'p-data', size: 3.4 * S, fill: t.ink });
-      cy += G + 1;
-    }
-    if (this._on('poster-stats-on')) {
-      const lo = Math.round(mesh.minElev), hi = Math.round(mesh.maxElev);
-      const relief = Math.round((mesh.maxElev - mesh.minElev));
-      const u = this._units();
-      const elev = u === 'imperial'
-        ? `${Math.round(lo * 3.28084)}–${Math.round(hi * 3.28084)} ft`
-        : u === 'metric' ? `${lo}–${hi} m`
-        : `${lo}–${hi} m  ·  ${Math.round(lo * 3.28084)}–${Math.round(hi * 3.28084)} ft`;
-      cy += 2.8 * S;
-      s += this._txt(cx[1], cy, 'ELEVATION', { cls: 'p-label', size: 2.4 * S, fill: t.inkSoft });
-      cy += 3.8 * S;
-      s += this._txt(cx[1], cy, elev, { cls: 'p-data', size: 2.9 * S, fill: t.ink, fitw: cw[1] });
-      cy += 3.9 * S;
-      s += this._txt(cx[1], cy, `${relief} m relief`, { cls: 'p-data', size: 2.6 * S, fill: t.inkSoft });
-      cy += G + 1;
-      const maxZ = (mesh.maxElev - mesh.minElev) * mesh.elevScale + mesh.baseHeight;
-      const vx = parseFloat(document.getElementById('vert-exag')?.value) || 1;
-      cy += 2.8 * S;
-      s += this._txt(cx[1], cy, 'MODEL', { cls: 'p-label', size: 2.4 * S, fill: t.inkSoft });
-      cy += 3.8 * S;
-      s += this._txt(cx[1], cy, `${mesh.meshW.toFixed(0)} × ${mesh.meshH.toFixed(0)} × ${maxZ.toFixed(1)} mm`,
-        { cls: 'p-data', size: 2.9 * S, fill: t.ink, fitw: cw[1] });
-      cy += 3.9 * S;
-      s += this._txt(cx[1], cy, `${vx}× vertical`, { cls: 'p-data', size: 2.6 * S, fill: t.inkSoft });
-    }
+    // Data columns, in the order _bandPlan balanced them into.
+    p.cols.forEach((col, ci) => {
+      let cy = top;
+      for (const b of col.blocks) {
+        const r = b.mk(p.xs[ci + 1], cy, p.widths[ci + 1]);
+        s += r.svg;
+        cy += r.h + G;
+      }
+    });
 
-    // ── Column R: legend / route
-    let ry = top;
-    if (this._on('poster-legend-on')) {
-      const r = this._legend(cx[2], ry, cw[2], t, mesh, S);
-      s += r.svg; ry = r.y + G;
-    }
-    if (this._on('poster-route-on') && State.gpxTrack) {
-      s += this._routeBlock(cx[2], ry, cw[2], t, mesh, S);
-    }
-
-    // ── Footer: data sources + credit + date
-    if (this._on('poster-credit-on')) {
-      const fy = band.y + band.h - P + 1;
+    // Footer: data sources + credit + date, pinned to the band's bottom edge.
+    if (p.hasFooter) {
+      const availW = band.w - 2 * P, x0 = band.x + P;
+      const fy = band.y + band.h - P * 0.7;
       s += this._line(x0, fy - 4.6 * S, x0 + availW, fy - 4.6 * S, t.rule, this.L.HAIRLINE_W);
       const src = (IMAGERY_SOURCES[currentImagerySource] || IMAGERY_SOURCES.eox);
       const attr = String(src.attribution || '').replace(/<[^>]*>/g, '');
@@ -6940,58 +7099,11 @@ const Poster = {
       s += this._txt(x0, fy, left, { cls: 'p-label', size: 2.2 * S, fill: t.inkSoft, fitw: availW - 26 * S });
       const d = new Date();
       const mo = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][d.getMonth()];
-      s += this._txt(x0 + availW, fy, `${mo} ${d.getFullYear()}`, { cls: 'p-label', size: 2.2 * S, fill: t.inkSoft, anchor: 'end' });
+      s += this._txt(x0 + availW, fy, `${mo} ${d.getFullYear()}`,
+        { cls: 'p-label', size: 2.2 * S, fill: t.inkSoft, anchor: 'end' });
     }
 
     return s + `</g>`;
-  },
-
-  // Alternating filled/open 5-division bar — the standard cartographic form, readable at a glance
-  // and measurable with a ruler.
-  _scaleBar(x, y, maxW, t, m, S = 1) {
-    const imperial = this._units() === 'imperial';
-    const bar = imperial ? m.barI : m.bar;
-    let barMM = bar.barMM;
-    // If the round distance would overrun its column, step DOWN the nice ladder rather than
-    // squashing the bar — a scale bar whose length no longer matches its label is a lie.
-    if (barMM > maxW) {
-      const ladder = imperial ? [50, 100, 200, 500, 1000, 2000, 5280, 10560, 26400, 52800]
-                              : this.NICE;
-      const perUnit = barMM / (imperial ? bar.distFt : bar.distM);
-      let pick = ladder[0];
-      for (const n of ladder) if (n * perUnit <= maxW) pick = n;
-      barMM = pick * perUnit;
-      bar.label = imperial
-        ? (pick >= 5280 ? `${+(pick / 5280).toFixed(2)} mi` : `${pick} ft`)
-        : (pick >= 1000 ? `${pick / 1000} km` : `${pick} m`);
-    }
-    const h = 2.2 * S, div = 5, dw = barMM / div;
-    let s = `<g id="scalebar">`;
-    for (let i = 0; i < div; i++) {
-      s += this._rect(x + i * dw, y, dw, h, { fill: i % 2 ? 'none' : t.ink, stroke: t.ink, sw: this.L.HAIRLINE_W });
-    }
-    s += this._txt(x, y + h + 3.4 * S, '0', { cls: 'p-data', size: 2.5 * S, fill: t.inkSoft, anchor: 'middle' });
-    s += this._txt(x + barMM, y + h + 3.4 * S, bar.label, { cls: 'p-data', size: 2.5 * S, fill: t.inkSoft, anchor: 'middle' });
-    return s + `</g>`;
-  },
-
-  // Band legend. Swatches keep their REAL filament hexes in every theme — they are data, not
-  // decoration (the same rule the app applies to the topo palette on screen).
-  _legend(x, y, w, t, mesh, S = 1) {
-    const palette = getBandConfig().colors;
-    const present = this._presentBands(mesh, palette.length);
-    const sw = 3.6 * S, gap = 1.8 * S, lh = 2.6 * S, rowH = 5.4 * S;
-    let s = `<g id="legend">`;
-    let cy = y + 2.8 * S;
-    s += this._txt(x, cy, 'PRINT BANDS', { cls: 'p-label', size: 2.4 * S, fill: t.inkSoft });
-    cy += 3.9 * S;
-    for (const b of present) {
-      const c = palette[b]; if (!c) continue;
-      s += this._rect(x, cy - sw + 0.6 * S, sw, sw, { fill: c.hex, stroke: t.swatch, sw: 0.1 });
-      s += this._txt(x + sw + gap, cy, c.name, { cls: 'p-label', size: lh, fill: t.ink, fitw: w - sw - gap });
-      cy += rowH;
-    }
-    return { svg: s + `</g>`, y: cy };
   },
 
   // Which bands actually appear in this tile — mirrors what the 3D cartouche legend does, so the
@@ -7004,30 +7116,6 @@ const Poster = {
       for (let i = 0; i < n; i++) if (seen.has(i)) out.push(i);
     }
     return out.length ? out : Array.from({ length: n }, (_, i) => i);
-  },
-
-  _routeBlock(x, y, w, t, mesh, S = 1) {
-    const gt = State.gpxTrack;
-    const clip = this._on('poster-gpx-clip') ? mesh.bounds : null;
-    const st = this._trackStats(gt.points, clip);
-    if (!st || !st.n) return '';
-    const u = this._units();
-    const dist = u === 'metric' ? `${st.km.toFixed(1)} km`
-               : u === 'imperial' ? `${st.mi.toFixed(1)} mi`
-               : `${st.km.toFixed(1)} km / ${st.mi.toFixed(1)} mi`;
-    const gain = st.gainM === null ? '' :
-      (u === 'imperial' ? `  ·  +${Math.round(st.gainFt)} ft` : `  ·  +${Math.round(st.gainM)} m`);
-    const routeHex = document.getElementById('route-color')?.value || '#C0392B';
-    let cy = y + 2.8 * S;
-    let s = `<g id="route">`;
-    s += this._txt(x, cy, 'ROUTE', { cls: 'p-label', size: 2.4 * S, fill: t.inkSoft });
-    cy += 4.1 * S;
-    s += this._line(x, cy - 0.9 * S, x + 4 * S, cy - 0.9 * S, routeHex, 0.9 * S);
-    s += this._txt(x + 5.6 * S, cy, gt.name, { cls: 'p-label', size: 2.6 * S, fill: t.ink, fitw: w - 5.6 * S });
-    cy += 3.9 * S;
-    s += this._txt(x, cy, dist + gain + (st.clipped ? '  in frame' : ''),
-      { cls: 'p-data', size: 2.7 * S, fill: t.ink, fitw: w });
-    return s + `</g>`;
   },
 
   // ─── GPX stats ──────────────────────────────────────────────────────────
