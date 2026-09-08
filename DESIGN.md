@@ -13,6 +13,10 @@ colors:
   accent: "#C67139"
   accent-hover: "#B2622D"
   accent-ink: "#8C491A"
+  accent-fill: "#A35726"
+  accent-fill-hover: "#97511F"
+  accent-fill-active: "#8C491A"
+  placeholder: "#645C50"
   accent-2: "#7A8A5E"
   sage-100: "#F0FAE1"
   neutral-100: "#F9F4ED"
@@ -27,6 +31,14 @@ colors:
   danger: "#B3402F"
   success: "#728157"
 typography:
+  wordmark:
+    fontFamily: "'Caprasimo', Georgia, serif"
+    fontSize: "19px"
+    fontWeight: 400
+  headline:
+    fontFamily: "'Caprasimo', Georgia, serif"
+    fontSize: "23px"
+    fontWeight: 400
   heading:
     fontFamily: "'Caprasimo', Georgia, serif"
     fontWeight: 400
@@ -34,6 +46,14 @@ typography:
   title:
     fontFamily: "'Caprasimo', Georgia, serif"
     fontSize: "17px"
+    fontWeight: 400
+  subtitle:
+    fontFamily: "'Caprasimo', Georgia, serif"
+    fontSize: "16px"
+    fontWeight: 400
+  button:
+    fontFamily: "'Caprasimo', Georgia, serif"
+    fontSize: "14px"
     fontWeight: 400
   body:
     fontFamily: "'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
@@ -53,6 +73,28 @@ typography:
     fontFamily: "ui-monospace, 'SF Mono', Menlo, Consolas, monospace"
     fontSize: "11px"
     fontWeight: 400
+  micro:
+    fontFamily: "'Figtree', -apple-system, sans-serif"
+    fontSize: "10px"
+    fontWeight: 600
+    letterSpacing: "0.1em"
+  chevron:
+    fontFamily: "'Figtree', -apple-system, sans-serif"
+    fontSize: "9px"
+    fontWeight: 400
+  # The printed poster is a separate artifact from the app chrome. Its stacks are deliberately
+  # generic: a downloaded SVG has no webfonts at a print shop, and Georgia/Helvetica/mono all
+  # substitute invisibly, where Caprasimo would substitute loudly. Never used in the UI.
+  poster-print-display:
+    fontFamily: "Georgia, 'Times New Roman', 'Liberation Serif', serif"
+    fontWeight: 400
+  poster-print-label:
+    fontFamily: "'Helvetica Neue', Helvetica, Arial, 'Liberation Sans', sans-serif"
+    fontWeight: 400
+    letterSpacing: "0.09em"
+  poster-print-data:
+    fontFamily: "'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace"
+    fontWeight: 400
 rounded:
   pill: "999px"
   md: "16px"
@@ -70,12 +112,14 @@ components:
     rounded: "{rounded.pill}"
     padding: "8px 16px"
   button-primary:
-    backgroundColor: "{colors.accent}"
+    backgroundColor: "{colors.accent-fill}"
     textColor: "{colors.bg}"
     rounded: "{rounded.pill}"
     padding: "8px 16px"
   button-primary-hover:
-    backgroundColor: "{colors.accent-hover}"
+    backgroundColor: "{colors.accent-fill-hover}"
+  button-primary-active:
+    backgroundColor: "{colors.accent-fill-active}"
   input:
     backgroundColor: "{colors.neutral-100}"
     textColor: "{colors.ink-primary}"
@@ -90,149 +134,148 @@ components:
 
 ## 1. Overview
 
-**Creative North Star: "Organic"**
+**The Organic Field Guide.** TerraPrint is a client-side pipeline that turns a map selection into a
+print-ready, multi-color 3D terrain model. The interface is a warm paper workbench: a solid cream
+ground, softly rounded surface cards, one earthy terracotta reserved for action, and sage for the
+things that grow or flow. The terrain — the map, the 3D preview, the color bands — carries the
+visual weight; the chrome is quiet, tactile and legible around it.
 
-A warm, tactile field-guide feel: a **cream** paper ground, soft rounded **surface cards**, and one
-earthy **terracotta** as the single action color, with **sage** carrying nature and water. Headings
-and buttons are set in **Caprasimo** (a chunky display serif); everything else is **Figtree**.
-Controls are friendly pills — pill buttons, pill inputs, 38×22 toggles, sage-track/terracotta-fill
-sliders. The workflow reads as **numbered step cards** (Model → … → Selected Area). The satellite is
-gently washed so the cream chrome floats cleanly over it. Print-data colors (filament swatches,
-painted water) keep their real hexes as circular swatches — they are data, not theme.
+The register is **product**: design serves the task. The user is a maker iterating between browser
+and slicer, often for many rounds. Density and earned familiarity beat novelty. Success is
+*print-ready on first slice*, so every readout that predicts a print's cost (dimensions, triangle
+count, filament estimate, fit warnings) is part of the design, not decoration.
 
-The system is mechanical and trustworthy: controls snap rather than glide, switches rock, sliders
-run on ruler-tick tracks, and a status LED in the header tells you at a glance whether the
-instrument is idle, working, done, or fault. It rejects the vibe-coded AI aesthetic — big radii,
-glows, gradient text, pills, cream — and anything toy-like; it also now rejects decorative
-translucency, its own former material.
-
-**Key Characteristics:**
-- Solid faceplate docked flush-left; full-bleed map framed by a sepia neatline with corner ticks
-- Selection coordinates printed as map marginalia, quad-sheet style
-- Four ink roles: orange = action, hydro = water, sepia = structure, green = success
-- Mechanical motion: 100–150ms snaps, out-expo, LED state signaling
-- 2px radii, warm charcoal surfaces, monospace tabular numerals on every readout
+**Key characteristics**
+- Solid warm surfaces at every level — no translucency, no backdrop blur, no glass.
+- Generous pill radii (999px on controls, 16–32px on cards); nothing is hard-cornered.
+- Caprasimo display serif for the wordmark, step headings and buttons; Figtree for everything else.
+- One terracotta for action, one sage for nature/success — and a separate, untouchable
+  filament palette for data.
+- A numbered accordion of step cards that reads as a workflow, not a settings dump.
 
 ## 2. Colors
 
-Four deliberate ink roles over warm charcoal — a full palette where every color has exactly one job.
+Strategy: **Restrained.** Warm tinted neutrals carry the surfaces; a single accent carries action.
 
-### Primary
-- **Signal Orange** (#FF4D1C): THE action color. Generate/Apply, working LED, focus rings, slider
-  thumbs, engaged switch thumbs, active paint chip. Hover: **Signal Orange Bright** (#FF6A3D).
-  6.3:1 with black button text.
+### Surfaces
+Five warm neutral steps, all fully opaque: `bg` #F5EAD8 (page), `surface` #EBDDC5 (panel),
+`surface-deep` #E3D4BA (footers, map controls, wells), `surface-raise` #F1E7D5 and
+`surface-hover` #E7D8BD (control fills). Depth is a **surface step plus a hairline rule** —
+never a shadow stack, never alpha.
 
-### Secondary
-- **Hydro Blue** (#4D9FFF): the water role — Water sub-head, Paint Water button ink. Everything
-  that touches water in the UI speaks this ink; nothing else does.
+### Action
+**Terracotta** is the one action color. It appears in three roles, and the distinction is
+load-bearing:
+- `accent` #C67139 — accent as a **surface**: toggle tracks, slider fills, focus rings, borders.
+  These owe only 3:1 against the page, which it clears at 4.16:1.
+- `accent-fill` #A35726 — accent **behind text**: filled primary buttons. Cream #FAF6EF on it is
+  4.94:1. `accent` itself is only 3.35:1 with that text, which is why the two are separate tokens.
+  Hover #97511F, active #8C491A.
+- `accent-ink` #8C491A — terracotta **as text** on the page ground (5:1).
 
-### Tertiary
-- **Contour Sepia** (#A8794A): structure — section rules, accordion chevrons, neatline, corner
-  ticks, marginalia, slider tick tracks. The quad sheet's skeleton; never body text.
-- **Topo palette** (Water/Lowland/Forest/Alpine) — the print-color data bands, in swatches and
-  legends only.
-- **Success Green** (#3FB950) — LED done-state, mesh-sealed health. **Warning** (#F0A020),
-  **Danger** (#F85149) as before.
+**Sage** `accent-2` #7A8A5E is the second voice: the brand mark, completed-step pills, water and
+land-cover contexts. It is never an action color.
 
-### Neutral
-- **Bench** (#191714): page ground, header, input wells. **Faceplate** (#24211B) / **Faceplate
-  Deep** (#201D17): panel, modals / footer, toasts, map controls. **Surface Raise / Hover**
-  (#2E2A22 / #37322A): control fills. All solid — no alpha surfaces.
-- **Ink Primary / Secondary / Muted** (#ECE7DE / #ADA598 / #9A9285): silk-screen text ramp,
-  contrast-verified 13.0 / 6.6 / 5.2 : 1 on the faceplate.
+### Data — do not theme
+`topo-water` #2D6ABF, `topo-lowland` #C47F17, `topo-forest` #3D8C40, `topo-alpine` #C8C8C8 are
+**real filament hexes**. They appear in swatches, legends, the 3D preview and the exported 3MF.
+They are data, not palette: they do not shift between light and dark, and they are never
+substituted for aesthetic reasons.
 
-### Named Rules
-**The One Orange Rule.** Signal Orange is action and only action. If it isn't a control the user
-fires or a state the machine is in, it isn't orange.
+### Ink
+`ink-primary` #201E1D, `ink-secondary` #645C50, `ink-muted` #675D50, plus `placeholder` #645C50.
+Body text clears 4.5:1 on every surface it sits on; placeholders are explicitly tokenized because
+the browser default (#757575) does not.
 
-**The Ink Roles Rule.** Four roles, one job each: orange acts, hydro is water, sepia structures,
-green succeeds. A color used outside its role is a defect.
-
-**The Solid Surface Rule.** No translucent chrome, no backdrop blur, no alpha surfaces. Depth
-comes from surface steps (bench → faceplate → raise) and sepia rules.
+### Dark theme
+A full parallel ramp under `:root[data-theme="dark"]` and `prefers-color-scheme`. Terracotta is
+replaced by **blue** #3D7FC4 (surface) / #3672B0 (behind text) — warm accents muddy on a dark
+ground. Surfaces invert to #1C1A17 / #201D1A; the filament palette does not move.
 
 ## 3. Typography
 
-**Body Font:** system sans (-apple-system → Segoe UI → Helvetica)
-**Data Font:** ui-monospace (SF Mono → Menlo → Consolas)
+Two families on a genuine contrast axis — a display serif against a humanist sans.
 
-**Character:** silk-screened hardware labels — one quiet sans printed on the faceplate, monospace
-for everything measured. Unchanged in structure from the previous system; re-inked warm.
+- **Caprasimo** (display serif, 400): wordmark, step headings, buttons, the intro headline.
+  Used deliberately as brand voice; it is the one place this product register bends its own rule
+  about display faces in controls.
+- **Figtree** (400/500/600/700): every label, control, hint and paragraph.
+- **System mono** (`ui-monospace, SF Mono, Menlo`) with `tabular-nums`: every numeral a user might
+  compare or re-read — dimensions, coordinates, elevations, triangle counts, fit readouts.
 
-### Hierarchy
-- **Title** (600, 14px, 0.4px): wordmark, modal titles. No display tier; instruments don't shout.
-- **Label** (600, 10px, 1.2px, UPPERCASE): section headers and sub-heads — the stamped voice.
-- **Body** (400, 13px): control labels, options, buttons.
-- **Data** (400, 11–12px, tabular mono): every numeral, including the map marginalia.
+Fixed rem/px steps, not fluid clamps: this is dense product UI viewed at a consistent size.
+Scale in use: 23px intro headline · 19px wordmark · 17px step heading · 14px button · 13px body ·
+12px label/mono · 11px hint · 10–11px uppercase sub-head (0.08em tracking).
 
-### Named Rules
-**The Mono Numerals Rule.** Any value a user might compare or re-read renders in the data font
-with tabular numerals — including coordinates printed on the map.
+**The mono numerals rule.** Any value that gets compared renders in the mono face with tabular
+figures, so columns of numbers stay aligned as they change.
 
 ## 4. Elevation
 
-Depth is **physical, not optical**: surfaces step lighter as they rise (bench → faceplate → raised
-control), separated by sepia rules. There is no blur and no translucency anywhere. Shadows remain
-near-absent — the one ambient shadow under the floating 3D preview (a device with a bezel sitting
-on the bench) survives; everything else is flat at every state, with press feedback as a 1px
-downward translate.
+Depth is **physical, not optical**. Surfaces step lighter as they rise (page → panel → card →
+raised control), separated by hairline rules. There is no translucency and no backdrop blur
+anywhere in the app, by policy.
 
-### Named Rules
-**The Bench Step Rule.** To lift a surface, step its charcoal one level lighter and rule its edge
-in sepia. Never add blur; never add a shadow.
+Three shadow tokens exist (`shadow-sm/md/lg`, all `color-mix` on #2E2B25) and are used sparingly:
+the floating 3D preview panel, modals, and the toast. Everything else earns its depth from the
+surface step and a 1px hairline.
+
+Layering follows a semantic ramp rather than arbitrary values:
+map chrome (200–700) → panel (900) → mobile note (950) → preview (1000) → poster overlay (1500) →
+paint modal (2000) → intro modal (3000) → toast (3500).
 
 ## 5. Components
 
-Mechanical and trustworthy: everything snaps, nothing glides decoratively.
+**Buttons.** One pill shape at every size. `.btn` is a transparent outline; `.btn-primary` is the
+filled terracotta (at `accent-fill`); `.btn-ghost` drops the border; `.btn-danger` tints toward
+`danger`. Caprasimo, 14px. Hover lifts the background by a 7% ink mix; active darkens the fill.
 
-### Buttons
-- **Shape:** flat, 2px radius, 1px rule border
-- **Default:** Surface Raise fill, Ink Primary 13px/500; hover steps to Surface Hover with a
-  stronger sepia border; **active presses down 1px**
-- **Primary:** Signal Orange fill, black text — one per view region
-- **Danger/Success:** transparent fill, 35%-alpha colored border + colored text
+**Inputs and selects.** Pill-radius, `neutral-100` fill, hairline border. Focus swaps the border to
+`accent`. Numerals render mono with tabular figures.
 
-### Switches (checkboxes)
-- **Rocker style:** 28×15px well in bench charcoal, 9px thumb that snaps left (muted) to right
-  (orange) in 120ms; engaged well warms slightly. No pseudo-elements — layered backgrounds.
+**Pill toggles.** 38×22 track with a sliding white thumb, terracotta when on. Layered backgrounds
+only — no pseudo-elements — for cross-engine reliability.
 
-### Sliders
-- **Ruler-tick tracks:** 1px sepia baseline + ticks at 10% intervals; 9×16px Signal Orange thumb
-  with a 1px dark edge. Fader, not pill.
+**Ruler sliders.** A `linear-gradient` fill to the thumb over a sage track, with the numeric value
+in a mono readout to the right.
 
-### Inputs / Fields
-- **Style:** recessed bench-charcoal well, 1px rule, 2px radius; numbers in data font
-- **Focus:** border shifts to 55%-alpha Signal Orange; no glow
+**Step cards.** The panel is a numbered accordion. Each section is a rounded card with a
+counter-driven step dot; a completed section collapses, the dot becomes a sage checkmark, and a
+one-line summary of its settings replaces the body. Headings are `h2` and keyboard-operable
+(`role="button"`, Enter/Space).
 
-### Status LED (signature)
-8px header LED: off (dark umber) → **working** (orange, 0.9s two-step blink; steady under
-reduced-motion) → **ok** (green, 2s hold) → **err** (red, 2.5s hold). Driven by the loading
-pipeline; titles announce state on hover.
+**Chip grids.** A hidden input carries the value so settings persistence keeps working, with a row
+of SVG-thumbnail buttons as the interaction surface. Used for frame style, poster paper and poster
+theme.
 
-### Quad-sheet framing (signature)
-The map carries a 1px sepia **neatline** (inset, clearing the faceplate) with graticule corner
-crosses, and the selection's coordinates print as **marginalia** along the bottom edge in sepia-lit
-mono — data living where a printed quad would put it.
+**Accessible naming.** Every control has a programmatic name — a `<label for>`, a wrapping label, or
+an `aria-label` where the control's meaning lives in an adjacent swatch or row rather than in text.
 
-### Navigation
-- **Header:** bench bar, sepia rule, SRL mark + wordmark + LED left, utility buttons right
-- **Accordion:** stamped uppercase labels, sepia chevrons snapping -90° when collapsed; state persists
+**Focus.** One rule, everywhere: `:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }`.
+
+**Motion.** 120–250ms, `--ease-mech` (`cubic-bezier(0.22, 1, 0.36, 1)`), transform and opacity only.
+A global `prefers-reduced-motion` block collapses every duration to 0.01ms; no information is ever
+gated on an animation completing. The 3D preview renders on demand — it parks its render loop when
+the camera is still.
 
 ## 6. Do's and Don'ts
 
-### Do:
-- **Do** keep every chrome surface solid and matte; depth is a surface step + sepia rule.
-- **Do** reserve orange for action (The One Orange Rule) and hydro ink for water contexts only.
-- **Do** snap: 100–150ms, out-expo, press-down feedback; LED carries long-running state.
-- **Do** keep numerals mono-tabular everywhere, including map marginalia.
-- **Do** frame the map cartographically — the neatline and marginalia are identity, not decoration.
+### Do
+- **Do** keep every surface solid and warm; depth is a surface step plus a hairline rule.
+- **Do** reserve terracotta for action, and pick the right accent token for the job — `accent` for
+  surfaces, `accent-fill` behind text, `accent-ink` as text.
+- **Do** keep the filament palette (`topo-*`) untouched across themes. It is data.
+- **Do** set every numeral a user might compare in the mono face with tabular figures.
+- **Do** give every control a programmatic name, and let `:focus-visible` show one consistent ring.
+- **Do** surface the consequences of a setting (size, triangle count, fit, cost) before it costs a print.
 
-### Don't:
-- **Don't** reintroduce translucency, backdrop blur, or alpha surfaces — the former glass system
-  is an anti-reference now.
-- **Don't** ship the vibe-coded AI aesthetic (PRODUCT.md, verbatim): "big radii, glows, gradient
-  text, pill buttons, cream backgrounds, generic SaaS landing energy."
-- **Don't** add anything toy-like or gamified: "cartoon markers, confetti, badges."
-- **Don't** use orange decoratively, sepia for body text, or radii above 2px (LED excepted — it's
-  physically round).
-- **Don't** ease bouncily or animate longer than 150ms for state feedback.
+### Don't
+- **Don't** reintroduce the retired "Quad Bench" direction: charcoal faceplates, Signal Orange,
+  mono-everything, 2px corners. PRODUCT.md names it an anti-reference.
+- **Don't** add translucency, backdrop blur, or alpha surfaces.
+- **Don't** ship the SaaS-cream slop set: gradient text, glows, hero-metric blocks, or a tracked
+  eyebrow above every section.
+- **Don't** use terracotta decoratively, or sage for actions.
+- **Don't** put accent behind text without using `accent-fill` — plain `accent` fails contrast there.
+- **Don't** let the poster SVG inherit screen theme tokens. It is a print artifact: literal hexes
+  only, so a dark-mode viewer never exports a dark sheet.

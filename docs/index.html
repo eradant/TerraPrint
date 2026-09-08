@@ -40,9 +40,17 @@
   --text-muted:     #5e5648;            /* AA with headroom on the toned surface (labels/sub-heads) */
   /* Action = terracotta (the ONLY action color); water UI chrome = sage */
   --accent:      #c67139;               /* the fill (buttons, toggles, slider fill, selection) */
+  /* Accent used BEHIND TEXT. --accent is tuned as a surface (it only owes 3:1 against the page,
+     which it clears at 4.16:1) but cream on it is 3.35:1 — below the 4.5:1 body-text floor. So
+     filled buttons get their own darker step; toggles, slider fills, focus rings and borders keep
+     --accent, because none of those carry text. */
+  --accent-fill: #a35726;               /* cream #faf6ef on this = 4.94:1 */
+  --accent-fill-hover: #97511f;         /* 5.55:1 */
+  --accent-fill-active: #8c491a;        /* 6.32:1 */
   --accent-hover: #b2622d;              /* accent-600 */
   --accent-ink:  #8c491a;               /* accent-700 — terracotta as TEXT/links on cream (5:1) */
   --on-accent:   #faf6ef;               /* text on the accent fill (light on terracotta) */
+  --placeholder: #645c50;               /* 5.34:1 on the input fill — placeholders owe 4.5:1 too */
   --accent-2:    #7a8a5e;               /* sage — fills: brand mark, done pills */
   --hydro:       #56633f;               /* water-role UI ink: sage-700, AA on cream (print water stays --topo-water) */
   /* Terracotta ramp (hover/press/tints) */
@@ -96,9 +104,15 @@
   --text-secondary: #b7ae9f;
   --text-muted:     #948b7d;
   --accent:      #3d7fc4;                /* blue action (replaces terracotta) */
+  /* Same split in dark: white on #3d7fc4 is 4.17:1. Hover goes DARKER here, not lighter — on a
+     dark ground a lighter fill would cost the white label its contrast. */
+  --accent-fill: #3672b0;                /* white on this = 5.01:1, and 3.46:1 against the page */
+  --accent-fill-hover: #2f6199;          /* 6.10:1 */
+  --accent-fill-active: #2a5b8d;         /* 7.05:1 */
   --accent-hover: #4f8ecf;
   --accent-ink:  #86b8ee;               /* blue as TEXT/links on dark */
   --on-accent:   #ffffff;               /* text on the blue fill */
+  --placeholder: #9c9488;               /* 5.21:1 on the dark input fill */
   --accent-2:    #8ba871;               /* sage, lifted for dark */
   --hydro:       #9db87f;               /* water-role ink on dark */
   --accent-100: #17293c; --accent-200: #1f3a54; --accent-300: #2b527a;
@@ -140,6 +154,9 @@ header .logo {
   display: flex;
   align-items: center;
   gap: 10px;
+  /* This is the document's h1; reset the UA margin and weight so it stays a wordmark. */
+  margin: 0;
+  font-weight: 400;
   font-family: var(--font-heading);
   font-size: 19px;
   letter-spacing: 0;
@@ -232,7 +249,7 @@ header .header-actions { display: flex; align-items: center; gap: 10px; margin-l
 }
 .panel-section:not(.collapsed) { box-shadow: var(--shadow-sm); }
 .panel-section.collapsed { background: var(--sage-100); border-color: color-mix(in srgb, var(--accent-2) 32%, transparent); box-shadow: none; }
-.panel-section h3 {
+.panel-section h2 {
   font-family: var(--font-heading);
   font-size: 17px;
   letter-spacing: -0.01em;
@@ -243,7 +260,7 @@ header .header-actions { display: flex; align-items: center; gap: 10px; margin-l
 }
 /* Status dot (not a step number — the cards are a free-form checklist, not an ordered wizard):
    active step = terracotta ring, done step = filled sage check. */
-.panel-section h3::before {
+.panel-section h2::before {
   content: '';
   width: 22px; height: 22px; flex: none; margin-right: 12px;
   border-radius: 50%;
@@ -252,17 +269,17 @@ header .header-actions { display: flex; align-items: center; gap: 10px; margin-l
   display: grid; place-items: center;
   font-family: var(--font-body); font-size: 12px; font-weight: 700;
 }
-.panel-section.collapsed h3::before { content: '\2713'; background: var(--accent-2); color: #fbfaf5; box-shadow: none; }
-.panel-section.collapsible h3 { cursor: pointer; user-select: none; }
-.panel-section.collapsible h3:hover { color: var(--accent-ink); }
-.panel-section.collapsible h3::after {
+.panel-section.collapsed h2::before { content: '\2713'; background: var(--accent-2); color: #fbfaf5; box-shadow: none; }
+.panel-section.collapsible h2 { cursor: pointer; user-select: none; }
+.panel-section.collapsible h2:hover { color: var(--accent-ink); }
+.panel-section.collapsible h2::after {
   content: '▾';
   margin-left: auto;
   font-size: 11px;
   transition: transform 0.2s var(--ease-mech);
   color: var(--neutral-500);
 }
-.panel-section.collapsed h3::after {
+.panel-section.collapsed h2::after {
   content: 'Edit';
   transform: none;
   font-family: var(--font-body);
@@ -457,12 +474,12 @@ input[type="range"] { width: 100%; }
 .btn:active { background: color-mix(in srgb, var(--text-primary) 12%, transparent); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-primary {
-  background: var(--accent);   /* the one action color */
-  border-color: var(--accent);
+  background: var(--accent-fill);   /* the one action color, at its text-safe step */
+  border-color: var(--accent-fill);
   color: var(--on-accent);
 }
-.btn-primary:hover { background: var(--accent-600); border-color: var(--accent-600); }
-.btn-primary:active { background: var(--accent-700); border-color: var(--accent-700); }
+.btn-primary:hover { background: var(--accent-fill-hover); border-color: var(--accent-fill-hover); }
+.btn-primary:active { background: var(--accent-fill-active); border-color: var(--accent-fill-active); }
 .btn-sm { padding: 6px 13px; font-size: 13px; }
 .btn-block { width: 100%; }
 .btn-row { display: flex; gap: 8px; margin-top: 8px; }
@@ -513,7 +530,10 @@ input[type="range"] { width: 100%; }
   font-size: 13px;
   outline: none;
 }
-#map-search input::placeholder { color: var(--text-muted); }
+/* Placeholders inherit the browser's #757575 otherwise, which is 3.74:1 on the light input fill
+   and 3.39:1 on the dark one — both under the 4.5:1 floor that placeholder text still owes. */
+::placeholder { color: var(--placeholder); opacity: 1; }   /* Firefox dims placeholders by default */
+#map-search input::placeholder { color: var(--placeholder); }
 #map-search .btn { padding: 5px 11px; }
 
 /* ─── 3D Preview ─── */
@@ -619,9 +639,12 @@ canvas#preview-canvas { width: 100%; height: 100%; display: block; }
   border-radius: var(--radius-lg);
   padding: 10px 20px;
   font-size: 13px;
-  z-index: 9999;
+  /* Above the intro modal (3000) — the ramp is deliberate, so this sits on it rather than
+     reaching for 9999. Transition is enumerated: `all` would also animate background and
+     border-color on every theme switch. */
+  z-index: 3500;
   opacity: 0;
-  transition: all 0.25s ease;
+  transition: transform 0.25s var(--ease-mech), opacity 0.25s var(--ease-mech);
   pointer-events: none;
 }
 #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
@@ -834,7 +857,9 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
   font-weight: 600;
   letter-spacing: 1.2px;
   text-transform: uppercase;
-  color: var(--sepia);
+  /* --sepia on --face-deep is 2.69:1 at 10px — unreadable, and this is the one hint a
+     first-time user needs. --text-muted takes it to 4.53:1. */
+  color: var(--text-muted);
   background: var(--face-deep);
   border: 1px solid var(--hairline-hi);
   padding: 6px 10px;
@@ -863,6 +888,21 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
   #draw-callout.show { animation: none; }
 }
 
+/* ─── Leaflet chrome ───
+   Leaflet ships its attribution as #333 on a white box. Our dark theme leaves the box dark and
+   the text unreadable (1.37:1) — and this is the attribution we're required to display. Theme it
+   against our own surfaces in both modes. */
+.leaflet-control-attribution {
+  background: var(--face-deep) !important;
+  color: var(--text-muted) !important;          /* 4.53:1 light, 4.99:1 dark */
+  border-top-left-radius: var(--radius-md);
+  padding: 2px 8px;
+}
+/* --accent-ink is tuned for the page ground (5:1 on cream) but only reaches 4.26:1 on this
+   deeper box; --accent-800 clears it in both themes. */
+.leaflet-control-attribution a { color: var(--accent-800) !important; }
+.leaflet-control-attribution a:hover { text-decoration: underline; }
+
 /* Keyboard focus: one visible terracotta ring everywhere, no glow */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -879,10 +919,26 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
 #mobile-note { display: none; }
 @media (max-width: 768px) {
   .panel { display: none; }
+  /* The header's three actions are wider than a phone. Let them wrap under the wordmark
+     rather than pushing the document 200px past the viewport — and let the bar grow to fit
+     the second row, since its 50px is a fixed height the wrapped row would otherwise sit under. */
+  header { flex-wrap: wrap; row-gap: 8px; height: auto; min-height: 50px; padding: 8px 14px; }
+  header .header-actions { margin-left: 0; width: 100%; justify-content: flex-start; }
+  /* Search is the main thing you can still do here, so keep the Go button out from under the
+     zoom control instead of centring the bar across the whole width. */
+  #map-search {
+    left: 12px; right: 62px;
+    transform: none;
+    max-width: none;
+  }
+  #map-search input { min-width: 0; }
   #mobile-note {
     display: block;
     position: absolute;
-    left: 12px; right: 12px; bottom: 12px;
+    left: 12px; right: 12px;
+    /* Clear of the Leaflet attribution strip — this note was being cut in half by it, which
+       made the deliberate "come back on desktop" message read as a broken page. */
+    bottom: 34px;
     z-index: 950;
     background: var(--face-deep);
     border: 1px solid var(--hairline-hi);
@@ -956,7 +1012,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
 <body>
 
 <header>
-  <div class="logo">
+  <h1 class="logo">
     <span class="brand-mark">
       <!-- SRL mark: faceted peak, shoulder summit, sawtooth ridge, detached foothill -->
       <svg width="21" height="18" viewBox="0 0 96 80" fill="currentColor" aria-label="TerraPrint">
@@ -965,7 +1021,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
     </span>
     TerraPrint
     <span id="status-led" title="Idle"></span>
-  </div>
+  </h1>
   <span class="tag tag-neutral" id="context-tag">satellite · 8 colors</span>
   <div class="header-actions">
     <button class="btn btn-sm theme-toggle" onclick="Theme.toggle()" title="Toggle dark mode" aria-label="Toggle dark mode">
@@ -977,33 +1033,35 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
   </div>
 </header>
 
-<div class="app-body">
+<!-- The working surface. `main` gives assistive tech a skip target; the class carries the
+     layout exactly as before. -->
+<main class="app-body">
   <!-- ─── Side Panel ─── -->
   <div class="panel" id="side-panel">
 
     <div class="panel-section collapsible" id="sec-model">
-      <h3 onclick="UI.toggleSection(this)"><span class="step-titles"><span>Model</span><span class="step-summary" id="sum-model"></span></span></h3>
+      <h2 onclick="UI.toggleSection(this)"><span class="step-titles"><span>Model</span><span class="step-summary" id="sum-model"></span></span></h2>
       <div class="section-body">
         <div class="input-group">
-          <label>Print Size (mm per tile)</label>
+          <label for="print-size">Print Size (mm per tile)</label>
           <input type="number" id="print-size" value="150" min="50" max="300" step="10">
         </div>
         <div class="input-group">
-          <label>Vertical Exaggeration</label>
+          <label for="vert-exag">Vertical Exaggeration</label>
           <div class="range-row">
             <input type="range" id="vert-exag" min="1" max="5" step="0.25" value="2" oninput="document.getElementById('vert-exag-val').textContent=this.value+'×'">
             <span class="range-val" id="vert-exag-val">2×</span>
           </div>
         </div>
         <div class="input-group">
-          <label>Base Thickness (mm)</label>
+          <label for="base-height">Base Thickness (mm)</label>
           <div class="range-row">
             <input type="range" id="base-height" min="1" max="15" step="0.5" value="4" oninput="document.getElementById('base-val').textContent=this.value+'mm'">
             <span class="range-val" id="base-val">4mm</span>
           </div>
         </div>
         <div class="input-group">
-          <label>Resolution (samples per side)</label>
+          <label for="mesh-res">Resolution (samples per side)</label>
           <div class="range-row">
             <input type="range" id="mesh-res" min="128" max="1024" step="64" value="512" oninput="document.getElementById('res-val').textContent=this.value">
             <span class="range-val" id="res-val">512</span>
@@ -1018,7 +1076,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
           <label for="step-mode" style="margin:0;cursor:pointer;">Contour steps (terraced layers)</label>
         </div>
         <div class="input-group" id="step-interval-group" style="margin-top:6px;display:none;">
-          <label>Step interval (meters)</label>
+          <label for="step-interval">Step interval (meters)</label>
           <div class="range-row">
             <input type="range" id="step-interval" min="25" max="500" step="25" value="100" oninput="document.getElementById('step-val').textContent=this.value+'m'">
             <span class="range-val" id="step-val">100m</span>
@@ -1028,11 +1086,11 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
     </div>
 
     <div class="panel-section collapsible collapsed" id="sec-imagery">
-      <h3 onclick="UI.toggleSection(this)"><span class="step-titles"><span>Imagery &amp; Color</span><span class="step-summary" id="sum-imagery"></span></span></h3>
+      <h2 onclick="UI.toggleSection(this)"><span class="step-titles"><span>Imagery &amp; Color</span><span class="step-summary" id="sum-imagery"></span></span></h2>
       <div class="section-body">
         <!-- Mode switch: everything below shows/hides per mode (Advanced._updateSectionVisibility) -->
         <div class="input-group" style="display:flex;align-items:center;gap:8px;">
-          <label style="margin:0;">Color source</label>
+          <label for="color-source" style="margin:0;">Color source</label>
           <select id="color-source" onchange="Advanced.setTopSource(this.value)" style="flex:1 1 auto;">
             <option value="classic" selected>Elevation — classic 4 color</option>
             <option value="elevation">Elevation bands — 4/8 color</option>
@@ -1042,7 +1100,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
           </select>
         </div>
         <div class="input-group" id="imagery-source-group" style="display:none;">
-          <label>Base imagery <span class="hint">(map + photo colors)</span></label>
+          <label for="imagery-source">Base imagery <span class="hint">(map + photo colors)</span></label>
           <select id="imagery-source" onchange="setBaseImagery(this.value)">
             <option value="eox" selected>Sentinel-2 cloudless — global, clean</option>
             <option value="naip">NAIP / USGS — US only, high-res</option>
@@ -1058,13 +1116,13 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
             <span class="swatch" style="background:var(--topo-flat)"></span>
             <span>Lowland</span>
             <span style="color:var(--text-muted)">below</span>
-            <input type="number" id="thresh-forest-lo" value="400" step="50"> <span style="color:var(--text-muted)">m</span>
+            <input type="number" id="thresh-forest-lo" value="400" step="50" aria-label="Lowland upper limit, metres"> <span style="color:var(--text-muted)">m</span>
           </div>
           <div class="threshold-row">
             <span class="swatch" style="background:var(--topo-hills)"></span>
             <span>Forest</span>
             <span style="color:var(--text-muted)">to</span>
-            <input type="number" id="thresh-hills" value="1500" step="50"> <span style="color:var(--text-muted)">m</span>
+            <input type="number" id="thresh-hills" value="1500" step="50" aria-label="Forest upper limit, metres"> <span style="color:var(--text-muted)">m</span>
           </div>
           <div class="threshold-row">
             <span class="swatch" style="background:var(--topo-mountain)"></span>
@@ -1083,14 +1141,14 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
         </label>
         <div id="adv-colors" style="display:none;">
           <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-            <label style="margin:0;">Colors</label>
+            <label for="adv-count" style="margin:0;">Colors</label>
             <select id="adv-count" onchange="Advanced.setCount(this.value)" style="flex:0 0 auto;">
               <option value="8" selected>8 — 2 AMS</option>
               <option value="4">4 — 1 AMS</option>
             </select>
           </div>
           <div class="input-group" id="adv-source-row" style="display:none;align-items:center;gap:8px;margin-bottom:8px;">
-            <label style="margin:0;">Color source</label>
+            <label for="adv-source" style="margin:0;">Color source</label>
             <select id="adv-source" onchange="Advanced.setSource(this.value)" style="flex:1 1 auto;">
               <option value="elevation" selected>Elevation bands</option>
               <option value="satellite">Satellite photo</option>
@@ -1101,7 +1159,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
           <p id="sat-note" style="display:none;font-size:11px;color:var(--text-muted);margin:0 0 8px;">Colors below are auto-derived on Generate (satellite / hybrid = sampled photo; land cover = classified). They print only in the top "Color depth" mm; everything beneath prints in the single Base color.</p>
           <!-- Region shaping — how the colour bands are segmented -->
           <div id="sat-detail-group" class="input-group" style="display:none;">
-            <label>Detail <span class="hint">(sharper ↔ cleaner blocks)</span></label>
+            <label for="sat-detail">Detail <span class="hint">(sharper ↔ cleaner blocks)</span></label>
             <div class="range-row">
               <input type="range" id="sat-detail" min="1" max="15" step="1" value="5" oninput="document.getElementById('sat-detail-val').textContent=this.value">
               <span class="range-val" id="sat-detail-val">5</span>
@@ -1109,14 +1167,14 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
           </div>
           <div id="sat-shape-group" style="display:none;">
             <div class="input-group">
-              <label>Region shape <span class="hint">(edge-hug ↔ smooth)</span></label>
+              <label for="sat-shape">Region shape <span class="hint">(edge-hug ↔ smooth)</span></label>
               <div class="range-row">
                 <input type="range" id="sat-shape" min="1" max="40" step="1" value="10" oninput="document.getElementById('sat-shape-val').textContent=this.value">
                 <span class="range-val" id="sat-shape-val">10</span>
               </div>
             </div>
             <div class="input-group">
-              <label>Texture smoothing <span class="hint">(crisp ↔ clean)</span></label>
+              <label for="sat-smooth">Texture smoothing <span class="hint">(crisp ↔ clean)</span></label>
               <div class="range-row">
                 <input type="range" id="sat-smooth" min="0" max="10" step="1" value="5" oninput="document.getElementById('sat-smooth-val').textContent=this.value=='0'?'off':this.value">
                 <span class="range-val" id="sat-smooth-val">5</span>
@@ -1124,7 +1182,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
             </div>
           </div>
           <div id="sat-feather-group" class="input-group" style="display:none;">
-            <label>Edge feather <span class="hint">(off ↔ stippled transitions)</span></label>
+            <label for="sat-feather">Edge feather <span class="hint">(off ↔ stippled transitions)</span></label>
             <div class="range-row">
               <input type="range" id="sat-feather" min="0" max="5" step="1" value="0" oninput="document.getElementById('sat-feather-val').textContent=this.value=='0'?'off':this.value">
               <span class="range-val" id="sat-feather-val">off</span>
@@ -1138,21 +1196,21 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
               <div class="sub-fold-body">
                 <p style="font-size:11px;color:var(--text-muted);margin:6px 0 8px;">Applied on Generate — these change the printed palette, not just a preview.</p>
                 <div class="input-group">
-                  <label>Saturation <span class="hint">(separate ↔ muted)</span></label>
+                  <label for="sat-satur">Saturation <span class="hint">(separate ↔ muted)</span></label>
                   <div class="range-row">
                     <input type="range" id="sat-satur" min="-50" max="80" step="5" value="0" oninput="document.getElementById('sat-satur-val').textContent=(this.value>0?'+':'')+this.value">
                     <span class="range-val" id="sat-satur-val">0</span>
                   </div>
                 </div>
                 <div class="input-group">
-                  <label>Contrast</label>
+                  <label for="sat-contrast">Contrast</label>
                   <div class="range-row">
                     <input type="range" id="sat-contrast" min="-50" max="50" step="5" value="0" oninput="document.getElementById('sat-contrast-val').textContent=(this.value>0?'+':'')+this.value">
                     <span class="range-val" id="sat-contrast-val">0</span>
                   </div>
                 </div>
                 <div class="input-group">
-                  <label>Brightness</label>
+                  <label for="sat-bright">Brightness</label>
                   <div class="range-row">
                     <input type="range" id="sat-bright" min="-50" max="50" step="5" value="0" oninput="document.getElementById('sat-bright-val').textContent=(this.value>0?'+':'')+this.value">
                     <span class="range-val" id="sat-bright-val">0</span>
@@ -1163,14 +1221,14 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
           </div>
           <!-- Satellite-photo-only refinements -->
           <div id="sat-cap-group" class="input-group" style="display:none;">
-            <label>Elevation cap <span class="hint">(treeline — pushes shaded high slopes off low colors)</span></label>
+            <label for="sat-cap">Elevation cap <span class="hint">(treeline — pushes shaded high slopes off low colors)</span></label>
             <div class="range-row">
               <input type="range" id="sat-cap" min="0" max="100" step="5" value="0" oninput="document.getElementById('sat-cap-val').textContent=this.value=='0'?'off':this.value+'%'">
               <span class="range-val" id="sat-cap-val">off</span>
             </div>
           </div>
           <div id="sat-high-group" class="input-group" style="display:none;align-items:center;gap:8px;">
-            <label style="margin:0;">High-elevation tints <span class="hint">(split rock into light + shadow)</span></label>
+            <label for="sat-high" style="margin:0;">High-elevation tints <span class="hint">(split rock into light + shadow)</span></label>
             <select id="sat-high" style="flex:0 0 auto;">
               <option value="0">Off</option>
               <option value="2" selected>2</option>
@@ -1179,71 +1237,71 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
           </div>
           <div id="sat-shell-group" style="display:none;">
             <div class="input-group">
-              <label>Color depth (mm) <span class="hint">(top photo shell · auto-deepens on steep faces)</span></label>
+              <label for="sat-depth">Color depth (mm) <span class="hint">(top photo shell · auto-deepens on steep faces)</span></label>
               <div class="range-row">
                 <input type="range" id="sat-depth" min="0.6" max="8" step="0.1" value="2.5" oninput="document.getElementById('sat-depth-val').textContent=this.value+'mm'">
                 <span class="range-val" id="sat-depth-val">2.5mm</span>
               </div>
             </div>
             <div class="input-group">
-              <label>Color overlap (mm) <span class="hint">(fewer sliced gaps ↔ more bleed · 0 = off)</span></label>
+              <label for="color-overlap">Color overlap (mm) <span class="hint">(fewer sliced gaps ↔ more bleed · 0 = off)</span></label>
               <div class="range-row">
                 <input type="range" id="color-overlap" min="0" max="0.6" step="0.05" value="0.15" oninput="document.getElementById('color-overlap-val').textContent=this.value=='0'?'off':this.value+'mm'">
                 <span class="range-val" id="color-overlap-val">0.15mm</span>
               </div>
             </div>
             <div class="threshold-row">
-              <input type="color" id="sat-base-color" value="#444444" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+              <input type="color" id="sat-base-color" value="#444444" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;" aria-label="Base colour">
               <span>Base</span>
               <span class="hint">under photo shell</span>
             </div>
           </div>
           <div class="threshold-row">
-            <input type="color" id="adv-color-0" value="#2D6ABF" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+            <input type="color" id="adv-color-0" value="#2D6ABF" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;" aria-label="Water colour">
             <span>Water</span>
             <span class="hint">ocean + lakes</span>
           </div>
           <div class="threshold-row">
-            <input type="color" id="adv-color-1" value="#2E7D32" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+            <input type="color" id="adv-color-1" value="#2E7D32" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;" aria-label="Tint 1 colour">
             <span>Tint 1</span>
             <span style="color:var(--text-muted)">low</span>
           </div>
           <div class="threshold-row">
-            <input type="color" id="adv-color-2" value="#6FA84B" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+            <input type="color" id="adv-color-2" value="#6FA84B" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;" aria-label="Tint 2 colour">
             <span>Tint 2</span>
             <span style="color:var(--text-muted)">≥</span>
-            <input type="number" id="adv-thresh-1" value="400" step="10"> <span style="color:var(--text-muted)">m</span>
+            <input type="number" id="adv-thresh-1" value="400" step="10" aria-label="Tint 2 lower limit, metres"> <span style="color:var(--text-muted)">m</span>
           </div>
           <div class="threshold-row">
-            <input type="color" id="adv-color-3" value="#A7C24B" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+            <input type="color" id="adv-color-3" value="#A7C24B" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;" aria-label="Tint 3 colour">
             <span>Tint 3</span>
             <span style="color:var(--text-muted)">≥</span>
-            <input type="number" id="adv-thresh-2" value="800" step="10"> <span style="color:var(--text-muted)">m</span>
+            <input type="number" id="adv-thresh-2" value="800" step="10" aria-label="Tint 3 lower limit, metres"> <span style="color:var(--text-muted)">m</span>
           </div>
           <div id="adv-extra">
             <div class="threshold-row">
-              <input type="color" id="adv-color-4" value="#D8C56B" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+              <input type="color" id="adv-color-4" value="#D8C56B" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;" aria-label="Tint 4 colour">
               <span>Tint 4</span>
               <span style="color:var(--text-muted)">≥</span>
-              <input type="number" id="adv-thresh-3" value="1200" step="10"> <span style="color:var(--text-muted)">m</span>
+              <input type="number" id="adv-thresh-3" value="1200" step="10" aria-label="Tint 4 lower limit, metres"> <span style="color:var(--text-muted)">m</span>
             </div>
             <div class="threshold-row">
-              <input type="color" id="adv-color-5" value="#BE8A4A" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+              <input type="color" id="adv-color-5" value="#BE8A4A" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;" aria-label="Tint 5 colour">
               <span>Tint 5</span>
               <span style="color:var(--text-muted)">≥</span>
-              <input type="number" id="adv-thresh-4" value="1700" step="10"> <span style="color:var(--text-muted)">m</span>
+              <input type="number" id="adv-thresh-4" value="1700" step="10" aria-label="Tint 5 lower limit, metres"> <span style="color:var(--text-muted)">m</span>
             </div>
             <div class="threshold-row">
-              <input type="color" id="adv-color-6" value="#8A6E5A" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+              <input type="color" id="adv-color-6" value="#8A6E5A" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;" aria-label="Tint 6 colour">
               <span>Tint 6</span>
               <span style="color:var(--text-muted)">≥</span>
-              <input type="number" id="adv-thresh-5" value="2200" step="10"> <span style="color:var(--text-muted)">m</span>
+              <input type="number" id="adv-thresh-5" value="2200" step="10" aria-label="Tint 6 lower limit, metres"> <span style="color:var(--text-muted)">m</span>
             </div>
             <div class="threshold-row">
-              <input type="color" id="adv-color-7" value="#ECECEC" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+              <input type="color" id="adv-color-7" value="#ECECEC" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;" aria-label="Tint 7 colour">
               <span>Tint 7</span>
               <span style="color:var(--text-muted)">≥</span>
-              <input type="number" id="adv-thresh-6" value="2700" step="10"> <span style="color:var(--text-muted)">m</span>
+              <input type="number" id="adv-thresh-6" value="2700" step="10" aria-label="Tint 7 lower limit, metres"> <span style="color:var(--text-muted)">m</span>
             </div>
           </div>
           <button class="btn btn-sm btn-block" style="margin-top:8px;" onclick="Advanced.autofit()">Auto-fit thresholds to tile</button>
@@ -1258,11 +1316,11 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
         </div>
         <div id="winter-opts" style="display:none;margin-top:8px;">
           <div class="input-group">
-            <label>Snowline (m) <span class="hint">(snow above · steep rock stays bare)</span></label>
+            <label for="snowline">Snowline (m) <span class="hint">(snow above · steep rock stays bare)</span></label>
             <input type="number" id="snowline" value="1800" min="0" max="6000" step="50">
           </div>
           <div class="input-group">
-            <label>Transition (m) <span class="hint">(feathered band above the line)</span></label>
+            <label for="snow-transition">Transition (m) <span class="hint">(feathered band above the line)</span></label>
             <div class="range-row">
               <input type="range" id="snow-transition" min="50" max="400" step="25" value="150" oninput="document.getElementById('snow-transition-val').textContent=this.value+'m'">
               <span class="range-val" id="snow-transition-val">150m</span>
@@ -1274,7 +1332,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
     </div>
 
     <div class="panel-section collapsible collapsed" id="sec-features">
-      <h3 onclick="UI.toggleSection(this)"><span class="step-titles"><span>Terrain Features</span><span class="step-summary" id="sum-features"></span></span></h3>
+      <h2 onclick="UI.toggleSection(this)"><span class="step-titles"><span>Terrain Features</span><span class="step-summary" id="sum-features"></span></span></h2>
       <div class="section-body">
         <div class="sub-head sub-head-hydro">Water</div>
         <label class="input-group" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
@@ -1282,14 +1340,14 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
           <span>Detect water (ocean + lakes)</span>
         </label>
         <div class="input-group" style="margin-top:10px;">
-          <label>Water depth (mm)</label>
+          <label for="water-depth">Water depth (mm)</label>
           <div class="range-row">
             <input type="range" id="water-depth" min="0.5" max="10" step="0.5" value="2" oninput="document.getElementById('water-depth-val').textContent=this.value+'mm'">
             <span class="range-val" id="water-depth-val">2mm</span>
           </div>
         </div>
         <div class="input-group" style="margin-top:10px;">
-          <label>Max water slope (°)</label>
+          <label for="water-slope">Max water slope (°)</label>
           <div class="range-row">
             <input type="range" id="water-slope" min="1" max="30" step="1" value="6" oninput="document.getElementById('water-slope-val').textContent=this.value+'°'">
             <span class="range-val" id="water-slope-val">6°</span>
@@ -1303,19 +1361,19 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
         <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0;">Extrudes OpenStreetMap building footprints onto the terrain. Best for cities at small selections (high zoom). Off by default.</p>
         <div id="buildings-opts" style="display:none;margin-top:10px;">
           <div class="threshold-row">
-            <input type="color" id="building-color" value="#9A9A9A" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+            <input type="color" id="building-color" value="#9A9A9A" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;" aria-label="Building colour">
             <span>Building color</span>
             <span class="hint">3MF</span>
           </div>
           <div class="input-group" style="margin-top:10px;">
-            <label>Height scale</label>
+            <label for="building-height-scale">Height scale</label>
             <div class="range-row">
               <input type="range" id="building-height-scale" min="0.25" max="3" step="0.25" value="1" oninput="document.getElementById('building-height-scale-val').textContent=this.value+'×'">
               <span class="range-val" id="building-height-scale-val">1×</span>
             </div>
           </div>
           <div class="input-group" style="margin-top:10px;">
-            <label>Default height (m) <span class="hint">(untagged footprints)</span></label>
+            <label for="building-min-height">Default height (m) <span class="hint">(untagged footprints)</span></label>
             <input type="number" id="building-min-height" value="6" min="2" max="100" step="1">
           </div>
         </div>
@@ -1348,14 +1406,14 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
         <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0;">Carves the enabled boundaries as grooves into the printed surface.</p>
         <div id="bnd-engrave-opts" style="display:none;margin-top:10px;">
           <div class="input-group">
-            <label>Groove width (mm)</label>
+            <label for="bnd-groove-width">Groove width (mm)</label>
             <div class="range-row">
               <input type="range" id="bnd-groove-width" min="0.8" max="3" step="0.1" value="1.5" oninput="document.getElementById('bnd-groove-width-val').textContent=this.value+'mm'">
               <span class="range-val" id="bnd-groove-width-val">1.5mm</span>
             </div>
           </div>
           <div class="input-group" style="margin-top:8px;">
-            <label>Groove depth (mm)</label>
+            <label for="bnd-groove-depth">Groove depth (mm)</label>
             <div class="range-row">
               <input type="range" id="bnd-groove-depth" min="0.4" max="2" step="0.1" value="0.8" oninput="document.getElementById('bnd-groove-depth-val').textContent=this.value+'mm'">
               <span class="range-val" id="bnd-groove-depth-val">0.8mm</span>
@@ -1366,7 +1424,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
             <label for="bnd-inlay" style="margin:0;cursor:pointer;">Color inlay <span class="hint">(fills the groove)</span></label>
           </div>
           <div class="threshold-row" id="bnd-inlay-opts" style="display:none;margin-top:8px;">
-            <input type="color" id="bnd-inlay-color" value="#8A5A2B" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+            <input type="color" id="bnd-inlay-color" value="#8A5A2B" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;" aria-label="Boundary inlay colour">
             <span>Boundary color</span>
             <span class="hint">3MF</span>
           </div>
@@ -1375,7 +1433,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
     </div>
 
     <div class="panel-section collapsible collapsed" id="sec-composition">
-      <h3 onclick="UI.toggleSection(this)"><span class="step-titles"><span>Composition</span><span class="step-summary" id="sum-composition"></span></span></h3>
+      <h2 onclick="UI.toggleSection(this)"><span class="step-titles"><span>Composition</span><span class="step-summary" id="sum-composition"></span></span></h2>
       <div class="section-body">
         <div class="sub-head">Frame &amp; Card</div>
         <div class="input-group" style="display:flex;align-items:center;gap:8px;">
@@ -1384,7 +1442,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
         </div>
         <div id="frame-opts" style="display:none;margin-top:8px;">
           <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-            <label style="margin:0;">Layout</label>
+            <label for="frame-layout" style="margin:0;">Layout</label>
             <select id="frame-layout" onchange="UI.setFrameLayout(this.value)" style="flex:1 1 auto;">
               <option value="frame" selected>Attached frame (classic)</option>
               <option value="edge">Engrave base edges</option>
@@ -1392,22 +1450,22 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
             </select>
           </div>
           <div class="input-group">
-            <label>Title</label>
+            <label for="frame-title">Title</label>
             <input type="text" id="frame-title" placeholder="e.g. Mount Hood, OR" value="">
           </div>
           <div class="input-group" style="margin-top:6px;">
-            <label>Subtitle</label>
+            <label for="frame-subtitle">Subtitle</label>
             <input type="text" id="frame-subtitle" placeholder="e.g. Cascade Range" value="">
           </div>
           <div class="input-group" style="margin-top:6px;">
-            <label>Text size <span class="hint">(all cartouche text)</span></label>
+            <label for="frame-text-scale">Text size <span class="hint">(all cartouche text)</span></label>
             <div class="range-row">
               <input type="range" id="frame-text-scale" min="0.7" max="2.5" step="0.1" value="1" oninput="document.getElementById('frame-text-scale-val').textContent=this.value+'×'">
               <span class="range-val" id="frame-text-scale-val">1×</span>
             </div>
           </div>
           <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:6px;">
-            <label style="margin:0;">Align</label>
+            <label for="frame-align" style="margin:0;">Align</label>
             <select id="frame-align" style="flex:1 1 auto;">
               <option value="left" selected>Left</option>
               <option value="center">Center</option>
@@ -1457,16 +1515,16 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
             </div>
             <div class="input-row" style="margin-top:6px;">
               <div>
-                <label>Margin (mm)</label>
+                <label for="frame-width">Margin (mm)</label>
                 <input type="number" id="frame-width" value="8" min="2" max="40" step="1">
               </div>
               <div>
-                <label>Panel (mm)</label>
+                <label for="frame-panel">Panel (mm)</label>
                 <input type="number" id="frame-panel" value="30" min="10" max="120" step="2">
               </div>
             </div>
             <div class="input-group" style="margin-top:6px;">
-              <label>Inset depth (mm) <span class="hint">(0 = flush · &gt;0 = terrain recessed in a well)</span></label>
+              <label for="frame-inset">Inset depth (mm) <span class="hint">(0 = flush · &gt;0 = terrain recessed in a well)</span></label>
               <input type="number" id="frame-inset" value="0" min="0" max="20" step="0.5">
             </div>
             <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
@@ -1475,11 +1533,11 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
             </div>
             <div class="input-row" id="frame-border-opts" style="display:none;margin-top:6px;">
               <div>
-                <label>Rim width (mm)</label>
+                <label for="frame-rim-width">Rim width (mm)</label>
                 <input type="number" id="frame-rim-width" value="4" min="1" max="20" step="0.5">
               </div>
               <div>
-                <label>Rim height (mm)</label>
+                <label for="frame-rim-height">Rim height (mm)</label>
                 <input type="number" id="frame-rim-height" value="4" min="1" max="20" step="0.5">
               </div>
             </div>
@@ -1488,7 +1546,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
           <!-- Edge-engraving options -->
           <div id="frame-opts-edge" style="display:none;">
             <div class="input-group" style="display:flex;align-items:center;gap:8px;margin:8px 0;">
-              <label style="margin:0;">Letter style</label>
+              <label for="edge-style" style="margin:0;">Letter style</label>
               <select id="edge-style" style="flex:1 1 auto;">
                 <option value="raised" selected>Raised (proud of the wall)</option>
                 <option value="flush">Flush (inlaid, wall stays flat)</option>
@@ -1496,7 +1554,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
             </div>
             <div class="input-row">
               <div>
-                <label>Title edge</label>
+                <label for="edge-title-side">Title edge</label>
                 <select id="edge-title-side">
                   <option value="front" selected>Front</option>
                   <option value="back">Back</option>
@@ -1505,7 +1563,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
                 </select>
               </div>
               <div>
-                <label>Coords edge</label>
+                <label for="edge-coords-side">Coords edge</label>
                 <select id="edge-coords-side">
                   <option value="front">Front</option>
                   <option value="back" selected>Back</option>
@@ -1521,11 +1579,11 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
           <div id="frame-opts-card" style="display:none;">
             <div class="input-row" style="margin-top:8px;">
               <div>
-                <label>Card width (mm)</label>
+                <label for="card-width">Card width (mm)</label>
                 <input type="number" id="card-width" value="150" min="40" max="300" step="5">
               </div>
               <div>
-                <label>Thickness (mm)</label>
+                <label for="card-thick">Thickness (mm)</label>
                 <input type="number" id="card-thick" value="4" min="1.5" max="15" step="0.5">
               </div>
             </div>
@@ -1556,11 +1614,11 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
         <div id="tiling-opts" style="display:none;margin-top:10px;">
           <div class="input-row">
             <div>
-              <label>Rows</label>
+              <label for="tile-rows">Rows</label>
               <input type="number" id="tile-rows" value="2" min="1" max="8" step="1" oninput="UI.onTileGridChange()">
             </div>
             <div>
-              <label>Columns</label>
+              <label for="tile-cols">Columns</label>
               <input type="number" id="tile-cols" value="2" min="1" max="8" step="1" oninput="UI.onTileGridChange()">
             </div>
           </div>
@@ -1570,16 +1628,16 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
 
         <div class="sub-head">Route (GPX)</div>
         <div class="input-group">
-          <input type="file" id="gpx-file" accept=".gpx" onchange="Gpx.onFile(this)" style="font-size:11px;width:100%;color:var(--text-secondary);">
+          <input type="file" id="gpx-file" accept=".gpx" onchange="Gpx.onFile(this)" style="font-size:11px;width:100%;color:var(--text-secondary);" aria-label="Load a GPX route file">
         </div>
         <p id="gpx-status" style="font-size:11px;color:var(--text-muted);margin:4px 0 8px;font-family:var(--mono);">No route loaded</p>
         <div class="threshold-row">
-          <input type="color" id="route-color" value="#E8442A" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;">
+          <input type="color" id="route-color" value="#E8442A" style="width:24px;height:20px;padding:0;border:none;background:none;cursor:pointer;" aria-label="Route colour">
           <span>Route color</span>
           <span class="hint">raised ribbon</span>
         </div>
         <div class="input-group" style="margin-top:8px;">
-          <label>Route width (mm)</label>
+          <label for="route-width">Route width (mm)</label>
           <div class="range-row">
             <input type="range" id="route-width" min="1" max="4" step="0.25" value="2" oninput="document.getElementById('route-width-val').textContent=this.value+'mm'">
             <span class="range-val" id="route-width-val">2mm</span>
@@ -1590,7 +1648,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
     </div>
 
     <div class="panel-section collapsible collapsed" id="sec-poster">
-      <h3 onclick="UI.toggleSection(this)"><span class="step-titles"><span>Poster</span><span class="step-summary" id="sum-poster"></span></span></h3>
+      <h2 onclick="UI.toggleSection(this)"><span class="step-titles"><span>Poster</span><span class="step-summary" id="sum-poster"></span></span></h2>
       <div class="section-body">
         <p style="font-size:11px;color:var(--text-muted);margin:0 0 10px;">A printed sheet the tile mounts onto — the tile's footprint is left as an open aperture.</p>
 
@@ -1601,12 +1659,12 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
         <p id="poster-slot-empty" style="font-size:11px;color:var(--text-muted);margin:0 0 8px;">
           One tile, taken from the current model. Add more to build a multi-map sheet — up to six.</p>
         <div id="poster-slot-list" style="display:none;margin-bottom:8px;">
-          <div class="pslot" id="pslot-0" style="display:none;"><span class="pslot-n" id="pslot-num-0">1.</span><input type="text" id="pslot-title-0" data-nosave oninput="Poster.editSlot(0,'title',this.value)" placeholder="auto"><input type="number" id="pslot-size-0" data-nosave min="10" max="300" step="5" oninput="Poster.editSlot(0,'printSize',this.value)" title="Printed size, mm"><span class="pslot-warn" id="pslot-warn-0"></span><button type="button" onclick="Poster.updateSlot(0)" title="Re-capture from the current model">⟳</button><button type="button" onclick="Poster.moveSlot(0,-1)" title="Move up">↑</button><button type="button" onclick="Poster.moveSlot(0,1)" title="Move down">↓</button><button type="button" onclick="Poster.removeSlot(0)" title="Remove">✕</button></div>
-          <div class="pslot" id="pslot-1" style="display:none;"><span class="pslot-n" id="pslot-num-1">2.</span><input type="text" id="pslot-title-1" data-nosave oninput="Poster.editSlot(1,'title',this.value)" placeholder="auto"><input type="number" id="pslot-size-1" data-nosave min="10" max="300" step="5" oninput="Poster.editSlot(1,'printSize',this.value)" title="Printed size, mm"><span class="pslot-warn" id="pslot-warn-1"></span><button type="button" onclick="Poster.updateSlot(1)" title="Re-capture from the current model">⟳</button><button type="button" onclick="Poster.moveSlot(1,-1)" title="Move up">↑</button><button type="button" onclick="Poster.moveSlot(1,1)" title="Move down">↓</button><button type="button" onclick="Poster.removeSlot(1)" title="Remove">✕</button></div>
-          <div class="pslot" id="pslot-2" style="display:none;"><span class="pslot-n" id="pslot-num-2">3.</span><input type="text" id="pslot-title-2" data-nosave oninput="Poster.editSlot(2,'title',this.value)" placeholder="auto"><input type="number" id="pslot-size-2" data-nosave min="10" max="300" step="5" oninput="Poster.editSlot(2,'printSize',this.value)" title="Printed size, mm"><span class="pslot-warn" id="pslot-warn-2"></span><button type="button" onclick="Poster.updateSlot(2)" title="Re-capture from the current model">⟳</button><button type="button" onclick="Poster.moveSlot(2,-1)" title="Move up">↑</button><button type="button" onclick="Poster.moveSlot(2,1)" title="Move down">↓</button><button type="button" onclick="Poster.removeSlot(2)" title="Remove">✕</button></div>
-          <div class="pslot" id="pslot-3" style="display:none;"><span class="pslot-n" id="pslot-num-3">4.</span><input type="text" id="pslot-title-3" data-nosave oninput="Poster.editSlot(3,'title',this.value)" placeholder="auto"><input type="number" id="pslot-size-3" data-nosave min="10" max="300" step="5" oninput="Poster.editSlot(3,'printSize',this.value)" title="Printed size, mm"><span class="pslot-warn" id="pslot-warn-3"></span><button type="button" onclick="Poster.updateSlot(3)" title="Re-capture from the current model">⟳</button><button type="button" onclick="Poster.moveSlot(3,-1)" title="Move up">↑</button><button type="button" onclick="Poster.moveSlot(3,1)" title="Move down">↓</button><button type="button" onclick="Poster.removeSlot(3)" title="Remove">✕</button></div>
-          <div class="pslot" id="pslot-4" style="display:none;"><span class="pslot-n" id="pslot-num-4">5.</span><input type="text" id="pslot-title-4" data-nosave oninput="Poster.editSlot(4,'title',this.value)" placeholder="auto"><input type="number" id="pslot-size-4" data-nosave min="10" max="300" step="5" oninput="Poster.editSlot(4,'printSize',this.value)" title="Printed size, mm"><span class="pslot-warn" id="pslot-warn-4"></span><button type="button" onclick="Poster.updateSlot(4)" title="Re-capture from the current model">⟳</button><button type="button" onclick="Poster.moveSlot(4,-1)" title="Move up">↑</button><button type="button" onclick="Poster.moveSlot(4,1)" title="Move down">↓</button><button type="button" onclick="Poster.removeSlot(4)" title="Remove">✕</button></div>
-          <div class="pslot" id="pslot-5" style="display:none;"><span class="pslot-n" id="pslot-num-5">6.</span><input type="text" id="pslot-title-5" data-nosave oninput="Poster.editSlot(5,'title',this.value)" placeholder="auto"><input type="number" id="pslot-size-5" data-nosave min="10" max="300" step="5" oninput="Poster.editSlot(5,'printSize',this.value)" title="Printed size, mm"><span class="pslot-warn" id="pslot-warn-5"></span><button type="button" onclick="Poster.updateSlot(5)" title="Re-capture from the current model">⟳</button><button type="button" onclick="Poster.moveSlot(5,-1)" title="Move up">↑</button><button type="button" onclick="Poster.moveSlot(5,1)" title="Move down">↓</button><button type="button" onclick="Poster.removeSlot(5)" title="Remove">✕</button></div>
+          <div class="pslot" id="pslot-0" style="display:none;"><span class="pslot-n" id="pslot-num-0">1.</span><input type="text" id="pslot-title-0" data-nosave oninput="Poster.editSlot(0,'title',this.value)" placeholder="auto" aria-label="Tile 1 title"><input type="number" id="pslot-size-0" data-nosave min="10" max="300" step="5" oninput="Poster.editSlot(0,'printSize',this.value)" title="Printed size, mm" aria-label="Tile 1 printed size, mm"><span class="pslot-warn" id="pslot-warn-0"></span><button type="button" onclick="Poster.updateSlot(0)" title="Re-capture from the current model">⟳</button><button type="button" onclick="Poster.moveSlot(0,-1)" title="Move up">↑</button><button type="button" onclick="Poster.moveSlot(0,1)" title="Move down">↓</button><button type="button" onclick="Poster.removeSlot(0)" title="Remove">✕</button></div>
+          <div class="pslot" id="pslot-1" style="display:none;"><span class="pslot-n" id="pslot-num-1">2.</span><input type="text" id="pslot-title-1" data-nosave oninput="Poster.editSlot(1,'title',this.value)" placeholder="auto" aria-label="Tile 2 title"><input type="number" id="pslot-size-1" data-nosave min="10" max="300" step="5" oninput="Poster.editSlot(1,'printSize',this.value)" title="Printed size, mm" aria-label="Tile 2 printed size, mm"><span class="pslot-warn" id="pslot-warn-1"></span><button type="button" onclick="Poster.updateSlot(1)" title="Re-capture from the current model">⟳</button><button type="button" onclick="Poster.moveSlot(1,-1)" title="Move up">↑</button><button type="button" onclick="Poster.moveSlot(1,1)" title="Move down">↓</button><button type="button" onclick="Poster.removeSlot(1)" title="Remove">✕</button></div>
+          <div class="pslot" id="pslot-2" style="display:none;"><span class="pslot-n" id="pslot-num-2">3.</span><input type="text" id="pslot-title-2" data-nosave oninput="Poster.editSlot(2,'title',this.value)" placeholder="auto" aria-label="Tile 3 title"><input type="number" id="pslot-size-2" data-nosave min="10" max="300" step="5" oninput="Poster.editSlot(2,'printSize',this.value)" title="Printed size, mm" aria-label="Tile 3 printed size, mm"><span class="pslot-warn" id="pslot-warn-2"></span><button type="button" onclick="Poster.updateSlot(2)" title="Re-capture from the current model">⟳</button><button type="button" onclick="Poster.moveSlot(2,-1)" title="Move up">↑</button><button type="button" onclick="Poster.moveSlot(2,1)" title="Move down">↓</button><button type="button" onclick="Poster.removeSlot(2)" title="Remove">✕</button></div>
+          <div class="pslot" id="pslot-3" style="display:none;"><span class="pslot-n" id="pslot-num-3">4.</span><input type="text" id="pslot-title-3" data-nosave oninput="Poster.editSlot(3,'title',this.value)" placeholder="auto" aria-label="Tile 4 title"><input type="number" id="pslot-size-3" data-nosave min="10" max="300" step="5" oninput="Poster.editSlot(3,'printSize',this.value)" title="Printed size, mm" aria-label="Tile 4 printed size, mm"><span class="pslot-warn" id="pslot-warn-3"></span><button type="button" onclick="Poster.updateSlot(3)" title="Re-capture from the current model">⟳</button><button type="button" onclick="Poster.moveSlot(3,-1)" title="Move up">↑</button><button type="button" onclick="Poster.moveSlot(3,1)" title="Move down">↓</button><button type="button" onclick="Poster.removeSlot(3)" title="Remove">✕</button></div>
+          <div class="pslot" id="pslot-4" style="display:none;"><span class="pslot-n" id="pslot-num-4">5.</span><input type="text" id="pslot-title-4" data-nosave oninput="Poster.editSlot(4,'title',this.value)" placeholder="auto" aria-label="Tile 5 title"><input type="number" id="pslot-size-4" data-nosave min="10" max="300" step="5" oninput="Poster.editSlot(4,'printSize',this.value)" title="Printed size, mm" aria-label="Tile 5 printed size, mm"><span class="pslot-warn" id="pslot-warn-4"></span><button type="button" onclick="Poster.updateSlot(4)" title="Re-capture from the current model">⟳</button><button type="button" onclick="Poster.moveSlot(4,-1)" title="Move up">↑</button><button type="button" onclick="Poster.moveSlot(4,1)" title="Move down">↓</button><button type="button" onclick="Poster.removeSlot(4)" title="Remove">✕</button></div>
+          <div class="pslot" id="pslot-5" style="display:none;"><span class="pslot-n" id="pslot-num-5">6.</span><input type="text" id="pslot-title-5" data-nosave oninput="Poster.editSlot(5,'title',this.value)" placeholder="auto" aria-label="Tile 6 title"><input type="number" id="pslot-size-5" data-nosave min="10" max="300" step="5" oninput="Poster.editSlot(5,'printSize',this.value)" title="Printed size, mm" aria-label="Tile 6 printed size, mm"><span class="pslot-warn" id="pslot-warn-5"></span><button type="button" onclick="Poster.updateSlot(5)" title="Re-capture from the current model">⟳</button><button type="button" onclick="Poster.moveSlot(5,-1)" title="Move up">↑</button><button type="button" onclick="Poster.moveSlot(5,1)" title="Move down">↓</button><button type="button" onclick="Poster.removeSlot(5)" title="Remove">✕</button></div>
         </div>
         <div class="btn-row">
           <button class="btn btn-sm" id="poster-add-slot" onclick="Poster.captureSlot()" title="Snapshot the current model's size, coordinates and palette into a tile">+ Add current model</button>
@@ -1640,7 +1698,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
           </button>
         </div>
         <div class="input-group" style="display:flex;align-items:center;gap:8px;">
-          <label style="margin:0;">Orientation</label>
+          <label for="poster-orient" style="margin:0;">Orientation</label>
           <select id="poster-orient" onchange="Poster.refresh()" style="flex:1 1 auto;">
             <option value="portrait" selected>Portrait</option>
             <option value="landscape">Landscape</option>
@@ -1670,7 +1728,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
         </div>
         <p id="poster-theme-note" style="display:none;font-size:11px;color:var(--warning);margin:0 0 8px;"></p>
         <div class="input-group" style="display:flex;align-items:center;gap:8px;">
-          <label style="margin:0;">Field</label>
+          <label for="poster-field" style="margin:0;">Field</label>
           <select id="poster-field" onchange="Poster.refresh()" style="flex:1 1 auto;">
             <option value="grid" selected>Graticule (hairline grid)</option>
             <option value="blank">Blank paper</option>
@@ -1678,7 +1736,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
         </div>
         <p id="poster-field-hint" class="hint" style="display:none;margin:2px 0 0;">Graticule needs a single tile — each tile carries its own scale bar.</p>
         <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:6px;">
-          <label style="margin:0;">Units</label>
+          <label for="poster-units" style="margin:0;">Units</label>
           <select id="poster-units" onchange="Poster.refresh()" style="flex:1 1 auto;">
             <option value="both" selected>Metric + imperial</option>
             <option value="metric">Metric</option>
@@ -1688,11 +1746,11 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
 
         <div class="sub-head">Title</div>
         <div class="input-group">
-          <label>Title <span class="hint">(blank follows the selection)</span></label>
+          <label for="poster-title">Title <span class="hint">(blank follows the selection)</span></label>
           <input type="text" id="poster-title" placeholder="auto" oninput="Poster._syncTitle();Poster.refresh()">
         </div>
         <div class="input-group" style="margin-top:6px;">
-          <label>Subtitle</label>
+          <label for="poster-subtitle">Subtitle</label>
           <input type="text" id="poster-subtitle" placeholder="auto" oninput="Poster._syncTitle();Poster.refresh()">
         </div>
         <p id="poster-title-preview" style="font-size:11px;font-family:var(--mono);color:var(--text-secondary);margin:6px 0 6px;"></p>
@@ -1704,7 +1762,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
         <div class="sub-head">Marginalia</div>
         <p class="hint" style="margin:-4px 0 8px;">Blocks reflow to fill the band as you turn them on and off.</p>
         <div class="input-group">
-          <label>Title size</label>
+          <label for="poster-title-scale">Title size</label>
           <div class="range-row">
             <input type="range" id="poster-title-scale" min="0.6" max="2.2" step="0.1" value="1" oninput="document.getElementById('poster-title-scale-val').textContent=this.value+'×';Poster.refresh()">
             <span class="range-val" id="poster-title-scale-val">1×</span>
@@ -1743,7 +1801,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
           <label for="poster-credit-on" style="margin:0;cursor:pointer;">Data sources &amp; date</label>
         </div>
         <div class="input-group" style="margin-top:6px;">
-          <label>Credit line <span class="hint">(added under the data sources)</span></label>
+          <label for="poster-credit">Credit line <span class="hint">(added under the data sources)</span></label>
           <input type="text" id="poster-credit" placeholder="e.g. Printed for the Radant family">
         </div>
         <div class="input-group" style="display:flex;align-items:center;gap:8px;margin-top:6px;">
@@ -1766,7 +1824,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
     </div>
 
     <div class="panel-section panel-footer">
-      <h3>Selected Area</h3>
+      <h2>Selected Area</h2>
       <div class="section-body" id="selection-info">
         <p style="font-size:12px;color:var(--text-muted);">Draw a rectangle on the map to select an area.</p>
       </div>
@@ -1781,7 +1839,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
         <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>
       </svg>
       <input type="text" id="search-input" placeholder="Search a place — city, mountain, address…"
-             onkeydown="if(event.key==='Enter')Geocode.search()" autocomplete="off" spellcheck="false">
+             onkeydown="if(event.key==='Enter')Geocode.search()" autocomplete="off" spellcheck="false" aria-label="Search for a place">
       <button class="btn btn-sm btn-primary" onclick="Geocode.search()">Go</button>
     </div>
     <div id="neatline"></div>
@@ -1809,7 +1867,7 @@ input[type="color"]::-moz-color-swatch { border: 2px solid var(--bg-deep); borde
       </div>
     </div>
   </div>
-</div>
+</main>
 
 <div id="toast" role="status" aria-live="polite"></div>
 
@@ -8055,7 +8113,7 @@ const Poster = {
     });
     if (!slot) return;
     const r = PosterDoc.saveNow();
-    if (r.dropped) toast(`Added — boundary outline dropped to fit storage (${r.dropped}).`, 5000);
+    if (r.dropped) toast(`Tile added. ${r.dropped} boundary outline${r.dropped > 1 ? 's' : ''} dropped to fit storage.`, 5000);
     else toast(`Added “${this._slotTitle({ slot, mesh: slot.digest, src: {} })}” — ${PosterDoc.count()} of ${PosterDoc.MAX_SLOTS}.`, 3500);
     this._syncSlots(); this.refresh();
   },
@@ -8258,12 +8316,14 @@ const Preview = {
       this.spherical.theta -= dx * 0.01;
       this.spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, this.spherical.phi - dy * 0.01));
       this.prevMouse = { x: e.clientX, y: e.clientY };
+      this.invalidate();
     });
     canvas.addEventListener('mouseup', () => this.isDragging = false);
     canvas.addEventListener('mouseleave', () => this.isDragging = false);
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
       this.spherical.radius = Math.max(20, Math.min(1000, this.spherical.radius + e.deltaY * 0.3));
+      this.invalidate();
     }, { passive: false });
 
     // Touch controls
@@ -8281,18 +8341,26 @@ const Preview = {
       this.spherical.theta -= dx * 0.01;
       this.spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, this.spherical.phi - dy * 0.01));
       this.prevMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      this.invalidate();
     }, { passive: false });
     canvas.addEventListener('touchend', () => this.isDragging = false);
   },
 
+  // Positions the camera from the spherical coords. Returns whether anything actually moved,
+  // which is what lets animate() skip the draw on an idle frame.
   updateCamera() {
     const s = this.spherical;
+    const l = this._lastCam;
+    const moved = !l || l.r !== s.radius || l.p !== s.phi || l.t !== s.theta;
+    if (!moved) return false;
+    this._lastCam = { r: s.radius, p: s.phi, t: s.theta };
     this.camera.position.set(
       s.radius * Math.sin(s.phi) * Math.cos(s.theta),
       s.radius * Math.sin(s.phi) * Math.sin(s.theta),
       s.radius * Math.cos(s.phi)
     );
     this.camera.lookAt(this.target || new THREE.Vector3(0, 0, 0));
+    return true;
   },
 
   showMesh(meshData) {
@@ -8350,7 +8418,7 @@ const Preview = {
     this.spherical.radius = maxDim * 1.5;
 
     // Start render loop if not running
-    if (!this.frameId) this.animate();
+    this.invalidate();   // a fresh mesh always needs a draw, even at an unchanged camera
 
     this.resize();
   },
@@ -8401,12 +8469,30 @@ const Preview = {
     this.renderer.setSize(wrap.clientWidth, wrap.clientHeight);
     this.camera.aspect = wrap.clientWidth / wrap.clientHeight;
     this.camera.updateProjectionMatrix();
+    this.invalidate();   // the projection changed even though the camera didn't orbit
   },
 
+  // Render on demand. This used to redraw the WebGL scene every frame for as long as a mesh was
+  // shown — a stationary camera over a static model, burning GPU on a laptop mid-iteration.
+  // updateCamera() reports whether anything actually moved; we draw only then, plus a few settle
+  // frames after the last change so eased motion finishes cleanly.
+  _settle: 0,
+  // Anything that changes what the scene should look like calls this: a drag, a wheel, a resize,
+  // a new mesh. It restarts the loop if it had parked.
+  invalidate() {
+    this._settle = 3;
+    if (!this.frameId) this.frameId = requestAnimationFrame(() => this.animate());
+  },
   animate() {
-    this.frameId = requestAnimationFrame(() => this.animate());
-    this.updateCamera();
-    this.renderer.render(this.scene, this.camera);
+    const moved = this.updateCamera();
+    if (moved) this._settle = 3;
+    if (moved || this._settle > 0) {
+      if (!moved) this._settle--;
+      this.renderer.render(this.scene, this.camera);
+      this.frameId = requestAnimationFrame(() => this.animate());
+    } else {
+      this.frameId = null;   // nothing is moving — park until something invalidates
+    }
   },
 
   toggleFullscreen() {
@@ -9600,7 +9686,7 @@ function initApp() {
 
   // Keyboard floor: accordion + fold headers are real controls, so make them focusable and
   // Enter/Space-operable; Escape backs out of overlays in visual-stack order.
-  document.querySelectorAll('.panel-section.collapsible h3, .sub-fold-head').forEach(el => {
+  document.querySelectorAll('.panel-section.collapsible h2, .sub-fold-head').forEach(el => {
     el.setAttribute('tabindex', '0');
     el.setAttribute('role', 'button');
     el.addEventListener('keydown', e => {

@@ -48,12 +48,15 @@ industrial. The workflow reads as friendly numbered step cards.
 
 ## Design Principles
 
-1. **The terrain is the hero.** The map and 3D preview carry the visual weight; chrome is
-   translucent, hairline, and monochrome so the data reads through it.
+1. **The terrain is the hero.** The map and 3D preview carry the visual weight; the chrome is
+   quiet around them — solid warm surfaces, hairline rules, and one accent — so nothing competes
+   with the data.
 2. **Print-ready is the bar.** Every geometry feature ships watertight and slicer-verified;
    readouts (dimensions, triangle count, file size) surface consequences before they cost a print.
-3. **Instrument, not app.** Monospace numerals, functional-only accent color, 150–250ms state
-   motion, no decoration that doesn't inform.
+3. **Warm, but exact.** The mood is a field guide for making, not a cold instrument — rounded
+   surfaces, Caprasimo, terracotta. The precision lives in the data: monospace tabular numerals on
+   every comparable value, functional-only accent color, 120–250ms state motion, and no decoration
+   that doesn't inform.
 4. **Every control earns its place.** Mode-driven visibility (only applicable settings show),
    occasional controls fold away, defaults are the recommended path.
 5. **Familiar to a slicer user.** Vocabulary, density, and affordances match the tools the model
