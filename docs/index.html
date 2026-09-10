@@ -6601,6 +6601,10 @@ const PosterDoc = {
       palette: d.palette.filter(c => c && typeof c.hex === 'string')
                         .map(c => ({ name: String(c.name || ''), hex: c.hex })),
       advNames: Array.isArray(d.advNames) ? d.advNames.map(String) : null,
+      tiled: (d.tiled && this._num(d.tiled.rows) && this._num(d.tiled.cols)
+              && this._num(d.tiled.tileW) && this._num(d.tiled.tileH))
+        ? { rows: d.tiled.rows | 0, cols: d.tiled.cols | 0,
+            tileW: +d.tiled.tileW, tileH: +d.tiled.tileH } : null,
       res: this._num(d.res) ? d.res : null,
       at: this._num(d.at) ? d.at : null,
     };
@@ -6923,13 +6927,31 @@ const Poster = {
   //
   // `src` carries what the aperture path needs (shape / bounds / boundary rings), which used to be
   // read straight off State. Routing it through here is what lets six tiles each keep their own.
+  // A tiled run prints R×C pieces that butt together into ONE continuous map, so the poster
+  // mounts one assembled block, not R×C separate plates. State.meshData holds the whole
+  // selection's bounds and elevation range (correct) but sized as a single tile (wrong), so the
+  // footprint is re-derived from the tiling controls — the same numbers generateTiles prints.
+  _assembledMesh(m) {
+    if (!this._on('tiling-enable') || !m) return null;
+    const g = UI.tileGeometry();
+    if (!g.known || (g.rows === 1 && g.cols === 1)) return null;
+    return { ...m, meshW: g.w, meshH: g.h,
+             // MeshGen gives each tile its own elevScale from the TILE's span, not the whole
+             // selection's — carry that so the printed relief the caption quotes is the real one.
+             elevScale: m.elevScale * (m.meshW / g.tileW),
+             selectionShape: 'rect',       // tiling is rectangle-only
+             tiled: { rows: g.rows, cols: g.cols, tileW: g.tileW, tileH: g.tileH } };
+  },
+
   _tiles() {
     const doc = PosterDoc.doc();
     if (!doc.slots.length) {
       const m = State.meshData;
-      return m ? [{ live: true, slot: null, mesh: m,
-                    src: { selectionShape: m.selectionShape, bounds: m.bounds,
-                           boundaryPoly: State.boundaryPoly } }] : [];
+      if (!m) return [];
+      const asm = this._assembledMesh(m) || m;
+      return [{ live: true, slot: null, mesh: asm,
+                src: { selectionShape: asm.selectionShape, bounds: asm.bounds,
+                       boundaryPoly: asm.tiled ? null : State.boundaryPoly } }];
     }
     return doc.slots.map(s => {
       // A slot with no digest has not been captured yet. It still holds a cell so the grid keeps
@@ -7187,6 +7209,7 @@ const Poster = {
       this._neatline(lay, t),
       this._cornerTicks(lay, t),
       this._aperture(lay, t),
+      this._seams(lay, t),
       this._apCoords(lay, t),
       this._cropMarks(lay, t),
       this._captions(lay),
@@ -7328,16 +7351,49 @@ const Poster = {
       // the SW corner coordinate (drawn at +CROP_GAP+3.5) so the two stack instead of colliding.
       // On a multi-tile sheet the caption occupies that space, so it moves above the aperture.
       if (mesh && isFinite(mesh.meshW) && isFinite(mesh.meshH) && !mesh.placeholder) {
+        const tg = mesh.tiled;
+        const cap = tg
+          ? `APERTURE ${mesh.meshW.toFixed(1)} × ${mesh.meshH.toFixed(1)} MM · ${tg.cols}×${tg.rows} PIECES`
+          : `APERTURE ${mesh.meshW.toFixed(1)} × ${mesh.meshH.toFixed(1)} MM`;
         s += multi
           ? this._txt(ap.x - g, ap.y - g - 1.2,
               `${mesh.meshW.toFixed(0)} × ${mesh.meshH.toFixed(0)} MM`,
               { cls: 'p-label', size: 2.1, fill: t.inkSoft })
-          : this._txt(ap.x - g, ap.y + ap.h + g + 8.2,
-              `APERTURE ${mesh.meshW.toFixed(1)} × ${mesh.meshH.toFixed(1)} MM`,
+          : this._txt(ap.x - g, ap.y + ap.h + g + 8.2, cap,
               { cls: 'p-label', size: 2.4, fill: t.inkSoft });
       }
     }
     return s + `</g>`;
+  },
+
+  // Where the printed pieces meet. Only the assembled tiled block has these — for everything
+  // else the aperture is a single object and there is nothing to seam.
+  _seams(lay, t) {
+    let s = '';
+    for (const ap of lay.aps) {
+      const g = ap.mesh && ap.mesh.tiled;
+      if (!g || (g.rows < 2 && g.cols < 2)) continue;
+      // The seam lines end up UNDER the mounted pieces; the ticks that overhang the aperture are
+      // what you still see, so they carry the registration and get a little more weight.
+      const sw = this.L.HAIRLINE_W, tick = 5.5;
+      s += `<g class="seams">`;
+      for (let c = 1; c < g.cols; c++) {
+        const x = ap.x + (ap.w / g.cols) * c;
+        s += this._line(x, ap.y, x, ap.y + ap.h, t.inkSoft, sw);
+        // Registration ticks straddling the seam at both ends, so the join can be lined up
+        // without measuring.
+        s += this._line(x, ap.y - tick, x, ap.y, t.ink, sw * 2);
+        s += this._line(x, ap.y + ap.h, x, ap.y + ap.h + tick, t.ink, sw * 2);
+      }
+      for (let r = 1; r < g.rows; r++) {
+        const y = ap.y + (ap.h / g.rows) * r;
+        s += this._line(ap.x, y, ap.x + ap.w, y, t.inkSoft, sw);
+        s += this._line(ap.x - tick, y, ap.x, y, t.ink, sw * 2);
+        s += this._line(ap.x + ap.w, y, ap.x + ap.w + tick, y, t.ink, sw * 2);
+      }
+      s += `</g>`;
+    }
+    return s;
   },
 
   _northArrow(lay, t) {
@@ -7775,12 +7831,17 @@ const Poster = {
   _blkModel(x, y, w, t, mesh, S) {
     const maxZ = (mesh.maxElev - mesh.minElev) * mesh.elevScale + mesh.baseHeight;
     const vx = parseFloat(document.getElementById('vert-exag')?.value) || 1;
-    const r = this._stack(x, y, w, [
-      { cls: 'p-label', size: 2.4 * S, fill: t.inkSoft, text: 'MODEL' },
+    const g = mesh.tiled;
+    const rows = [
+      { cls: 'p-label', size: 2.4 * S, fill: t.inkSoft, text: g ? 'ASSEMBLED MODEL' : 'MODEL' },
       { cls: 'p-data',  size: 2.9 * S, fill: t.ink,
         text: `${mesh.meshW.toFixed(0)} × ${mesh.meshH.toFixed(0)} × ${maxZ.toFixed(1)} mm` },
-      { cls: 'p-data',  size: 2.6 * S, fill: t.inkSoft, text: `${vx}× vertical` },
-    ]);
+    ];
+    // A tiled sheet mounts several printed pieces, so say how many and how big each one is.
+    if (g) rows.push({ cls: 'p-data', size: 2.6 * S, fill: t.inkSoft,
+      text: `${g.cols} × ${g.rows} pieces · ${g.tileW.toFixed(0)} × ${g.tileH.toFixed(0)} mm each` });
+    rows.push({ cls: 'p-data', size: 2.6 * S, fill: t.inkSoft, text: `${vx}× vertical` });
+    const r = this._stack(x, y, w, rows);
     return { svg: `<g id="model">${r.svg}</g>`, h: r.h };
   },
 
@@ -8082,6 +8143,7 @@ const Poster = {
       bands: this._presentBands(mesh, cfg.colors.length),   // drops pixelBands (~1 MB)
       palette: cfg.colors.map(c => ({ name: c.name, hex: c.hex })),
       advNames: State.advNames ? State.advNames.slice() : null,
+      tiled: mesh.tiled ? { ...mesh.tiled } : null,   // an assembled multi-piece block
       res: mesh.gridW || null,
       at: Date.now(),
     };
@@ -8091,7 +8153,8 @@ const Poster = {
   // the poster never runs the mesh pipeline itself, so whatever you captured (including any
   // water/colour painting) is exactly what the sheet describes.
   captureSlot() {
-    const mesh = State.meshData;
+    // In tiling mode the thing you mount is the assembled block, not one piece.
+    const mesh = this._assembledMesh(State.meshData) || State.meshData;
     if (!mesh) {
       toast('Generate a model first, then add it to the poster.',
         { duration: 6000, action: 'Generate', onAction: () => UI.generateModel() });
@@ -8123,7 +8186,7 @@ const Poster = {
 
   // Re-capture the live model into an existing slot, so you can revise a peak in place.
   updateSlot(i) {
-    const mesh = State.meshData;
+    const mesh = this._assembledMesh(State.meshData) || State.meshData;
     if (!mesh) { toast('Generate a model first.'); return; }
     const b = mesh.bounds;
     PosterDoc.update(i, {
@@ -8549,6 +8612,10 @@ const UI = {
   },
 
   updateSelectionInfo() {
+    // Tile sizes and the poster's aperture are both derived from the selection, so they
+    // have to be recomputed whenever it changes — not just when the tiling controls move.
+    this._updateTileInfo();
+    if (typeof Poster !== 'undefined') Poster.refresh();
     this._syncDrawCallout();
     const el = document.getElementById('selection-info');
     if (!State.selectedBounds) {
@@ -8880,6 +8947,8 @@ const UI = {
     document.getElementById('tiling-opts').style.display = on ? 'block' : 'none';
     this._updateTileInfo();
     drawTileGrid();
+    // The poster mounts the assembled block, so its aperture changes with the tiling grid.
+    if (typeof Poster !== 'undefined') Poster.refresh();
   },
 
   // Accordion toggle for panel sections and sub-folds; persists open/closed state.
@@ -8900,15 +8969,35 @@ const UI = {
   onTileGridChange() {
     this._updateTileInfo();
     drawTileGrid();
+    if (typeof Poster !== 'undefined') Poster.refresh();
+  },
+
+  // The true printed geometry of a tiled run. `print-size` is the BOUNDING box of one tile, so
+  // only the tile's longer axis actually reaches it — the shorter one scales by the tile's aspect.
+  // Multiplying print-size by rows/cols (as this readout used to) overstates the assembled model:
+  // a 3×2 grid of 150mm tiles over a wide selection assembles to 316×300mm, not 450×300mm.
+  // MeshGen derives the same numbers from `tileScale`; this is the one place they're named.
+  tileGeometry() {
+    const rows = Math.max(1, Math.min(8, parseInt(document.getElementById('tile-rows')?.value) || 1));
+    const cols = Math.max(1, Math.min(8, parseInt(document.getElementById('tile-cols')?.value) || 1));
+    const ps   = parseFloat(document.getElementById('print-size')?.value) || 150;
+    const b = State.selectedBounds;
+    if (!b) return { rows, cols, printSize: ps, tileW: ps, tileH: ps, w: cols * ps, h: rows * ps, known: false };
+    const dLon = (b.getEast() - b.getWest()) / cols, dLat = (b.getNorth() - b.getSouth()) / rows;
+    const cosLat = Math.cos((b.getNorth() + b.getSouth()) / 2 * Math.PI / 180);
+    const aspect = (dLon * cosLat) / dLat;                       // one tile's ground aspect
+    const tileW = aspect >= 1 ? ps : ps * aspect;
+    const tileH = aspect >= 1 ? ps / aspect : ps;
+    return { rows, cols, printSize: ps, tileW, tileH, w: cols * tileW, h: rows * tileH, known: true };
   },
 
   _updateTileInfo() {
     const el = document.getElementById('tiling-info');
     if (!el) return;
-    const rows = Math.max(1, Math.min(8, parseInt(document.getElementById('tile-rows')?.value) || 1));
-    const cols = Math.max(1, Math.min(8, parseInt(document.getElementById('tile-cols')?.value) || 1));
-    const ps = parseFloat(document.getElementById('print-size')?.value) || 150;
-    el.textContent = `${rows*cols} tiles · each ${ps}mm · assembled ≈ ${(cols*ps)|0}×${(rows*ps)|0} mm`;
+    const g = this.tileGeometry();
+    el.textContent = g.known
+      ? `${g.rows * g.cols} tiles · each ${g.tileW.toFixed(0)}×${g.tileH.toFixed(0)}mm · assembled ${g.w.toFixed(0)}×${g.h.toFixed(0)} mm`
+      : `${g.rows * g.cols} tiles · draw a selection to size them`;
   },
 
   // Tiling: split the rectangle selection into rows×cols high-detail tiles that share one
@@ -8980,7 +9069,7 @@ const UI = {
       downloadBlob(zipBlob, exportName('zip', `_tiles_${rows}x${cols}`));
       hideLoading();
       Led.set('ok', 2000);
-      toast(`${total} tiles exported · assemble ${cols}×${rows} (${(cols*printSize)|0}×${(rows*printSize)|0} mm)`);
+      toast(`${total} tiles exported · assemble ${cols}×${rows} (${(cols*meshW).toFixed(0)}×${(rows*meshH).toFixed(0)} mm)`);
     } catch (e) {
       hideLoading();
       if (e && e.name === 'AbortError') {
