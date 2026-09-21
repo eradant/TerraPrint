@@ -1,147 +1,627 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-07-17T12:00:00Z",
+  "generatedAt": "2026-09-21T19:27:31.328084+00:00",
   "title": "Design System: TerraPrint",
   "extensions": {
     "colorMeta": {
-      "signal-orange": {
-        "role": "primary",
-        "displayName": "Signal Orange",
-        "canonical": "#FF4D1C",
-        "tonalRamp": [
-          "#330F05",
-          "#5F1D0A",
-          "#8C2B0F",
-          "#B83914",
-          "#DB4318",
-          "#FF4D1C",
-          "#FF8258",
-          "#FFC0A8"
-        ]
-      },
-      "hydro-blue": {
-        "role": "secondary",
-        "displayName": "Hydro Blue",
-        "canonical": "#4D9FFF",
-        "tonalRamp": [
-          "#0A1B33",
-          "#12335F",
-          "#1B4C8C",
-          "#2766B8",
-          "#3A82DB",
-          "#4D9FFF",
-          "#84BDFF",
-          "#C2DEFF"
-        ]
-      },
-      "contour-sepia": {
-        "role": "tertiary",
-        "displayName": "Contour Sepia",
-        "canonical": "#A8794A",
-        "tonalRamp": [
-          "#221709",
-          "#3F2C13",
-          "#5C411E",
-          "#79572A",
-          "#906637",
-          "#A8794A",
-          "#C29B72",
-          "#DDC3A4"
-        ]
-      },
-      "bench": {
+      "bg": {
         "role": "neutral",
-        "displayName": "Bench Charcoal",
-        "canonical": "#191714",
+        "displayName": "App Ground",
+        "canonical": "oklch(21% 0.033 285)",
         "tonalRamp": [
-          "#191714",
-          "#201D17",
-          "#24211B",
-          "#2E2A22",
-          "#37322A",
-          "#9A9285",
-          "#ADA598",
-          "#ECE7DE"
+          "#0f1017",
+          "#12141f",
+          "#161826",
+          "#1a1c28",
+          "#232532",
+          "#292b31",
+          "#3f424d",
+          "#595d6c"
         ]
       },
-      "success-green": {
-        "role": "tertiary",
-        "displayName": "Success Green",
-        "canonical": "#3FB950",
+      "bg-deep": {
+        "role": "neutral",
+        "displayName": "Bar Ground",
+        "canonical": "oklch(18% 0.030 285)",
         "tonalRamp": [
-          "#0B2410",
-          "#16451F",
-          "#22672E",
-          "#2F893E",
-          "#3FB950",
-          "#63CB71",
-          "#93DD9D",
-          "#C8EECD"
+          "#0f1017",
+          "#12141f",
+          "#161826",
+          "#1a1c28",
+          "#232532",
+          "#292b31",
+          "#3f424d",
+          "#595d6c"
         ]
       },
-      "danger-red": {
-        "role": "tertiary",
-        "displayName": "Danger Red",
-        "canonical": "#F85149",
+      "bg-well": {
+        "role": "neutral",
+        "displayName": "Well",
+        "canonical": "oklch(15% 0.021 285)",
         "tonalRamp": [
-          "#330D0B",
-          "#5F1A17",
-          "#8C2823",
-          "#B83630",
-          "#DB443D",
-          "#F85149",
-          "#FB8A85",
-          "#FDC5C2"
+          "#0f1017",
+          "#12141f",
+          "#161826",
+          "#1a1c28",
+          "#232532",
+          "#292b31",
+          "#3f424d",
+          "#595d6c"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Surface",
+        "canonical": "oklch(23% 0.026 285)",
+        "tonalRamp": [
+          "#0f1017",
+          "#12141f",
+          "#161826",
+          "#1a1c28",
+          "#232532",
+          "#292b31",
+          "#3f424d",
+          "#595d6c"
+        ]
+      },
+      "surface-2": {
+        "role": "neutral",
+        "displayName": "Raised Surface",
+        "canonical": "oklch(27% 0.023 285)",
+        "tonalRamp": [
+          "#0f1017",
+          "#12141f",
+          "#161826",
+          "#1a1c28",
+          "#232532",
+          "#292b31",
+          "#3f424d",
+          "#595d6c"
+        ]
+      },
+      "surface-hover": {
+        "role": "neutral",
+        "displayName": "Surface Hover",
+        "canonical": "oklch(29% 0.024 285)",
+        "tonalRamp": [
+          "#0f1017",
+          "#12141f",
+          "#161826",
+          "#1a1c28",
+          "#232532",
+          "#292b31",
+          "#3f424d",
+          "#595d6c"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Interactive Line",
+        "canonical": "oklch(38% 0.019 285)",
+        "tonalRamp": [
+          "#0f1017",
+          "#12141f",
+          "#161826",
+          "#1a1c28",
+          "#232532",
+          "#292b31",
+          "#3f424d",
+          "#595d6c"
+        ]
+      },
+      "line-soft": {
+        "role": "neutral",
+        "displayName": "Structural Line",
+        "canonical": "oklch(28% 0.010 285)",
+        "tonalRamp": [
+          "#0f1017",
+          "#12141f",
+          "#161826",
+          "#1a1c28",
+          "#232532",
+          "#292b31",
+          "#3f424d",
+          "#595d6c"
+        ]
+      },
+      "ink-primary": {
+        "role": "neutral",
+        "displayName": "Primary Ink",
+        "canonical": "oklch(93% 0.004 285)",
+        "tonalRamp": [
+          "#595d6c",
+          "#75798c",
+          "#9397ab",
+          "#b2b6ca",
+          "#cfd3e5",
+          "#e9e9ed",
+          "#f2f2f5",
+          "#ffffff"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Control Label",
+        "canonical": "oklch(77% 0.026 285)",
+        "tonalRamp": [
+          "#595d6c",
+          "#75798c",
+          "#9397ab",
+          "#b2b6ca",
+          "#cfd3e5",
+          "#e9e9ed",
+          "#f2f2f5",
+          "#ffffff"
+        ]
+      },
+      "ink-secondary": {
+        "role": "neutral",
+        "displayName": "Body Ink",
+        "canonical": "oklch(66% 0.031 285)",
+        "tonalRamp": [
+          "#595d6c",
+          "#75798c",
+          "#9397ab",
+          "#b2b6ca",
+          "#cfd3e5",
+          "#e9e9ed",
+          "#f2f2f5",
+          "#ffffff"
+        ]
+      },
+      "ink-muted": {
+        "role": "neutral",
+        "displayName": "Caption Ink",
+        "canonical": "oklch(55% 0.037 285)",
+        "tonalRamp": [
+          "#595d6c",
+          "#75798c",
+          "#9397ab",
+          "#b2b6ca",
+          "#cfd3e5",
+          "#e9e9ed",
+          "#f2f2f5",
+          "#ffffff"
+        ]
+      },
+      "ink-disabled": {
+        "role": "neutral",
+        "displayName": "Disabled Ink",
+        "canonical": "oklch(46% 0.037 285)",
+        "tonalRamp": [
+          "#595d6c",
+          "#75798c",
+          "#9397ab",
+          "#b2b6ca",
+          "#cfd3e5",
+          "#e9e9ed",
+          "#f2f2f5",
+          "#ffffff"
+        ]
+      },
+      "ink-button": {
+        "role": "neutral",
+        "displayName": "Button Label",
+        "canonical": "oklch(85% 0.020 285)",
+        "tonalRamp": [
+          "#595d6c",
+          "#75798c",
+          "#9397ab",
+          "#b2b6ca",
+          "#cfd3e5",
+          "#e9e9ed",
+          "#f2f2f5",
+          "#ffffff"
+        ]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Blurple",
+        "canonical": "oklch(62% 0.130 295)",
+        "tonalRamp": [
+          "#12111c",
+          "#1c1930",
+          "#2b2741",
+          "#3d3663",
+          "#5d5294",
+          "#7a6ec4",
+          "#9184d9",
+          "#b5abfc"
+        ]
+      },
+      "accent-bright": {
+        "role": "primary",
+        "displayName": "Blurple Bright",
+        "canonical": "oklch(74% 0.135 295)",
+        "tonalRamp": [
+          "#12111c",
+          "#1c1930",
+          "#2b2741",
+          "#3d3663",
+          "#5d5294",
+          "#7a6ec4",
+          "#9184d9",
+          "#b5abfc"
+        ]
+      },
+      "accent-text": {
+        "role": "primary",
+        "displayName": "Blurple Text",
+        "canonical": "oklch(84% 0.086 295)",
+        "tonalRamp": [
+          "#12111c",
+          "#1c1930",
+          "#2b2741",
+          "#3d3663",
+          "#5d5294",
+          "#7a6ec4",
+          "#9184d9",
+          "#b5abfc"
+        ]
+      },
+      "accent-tint": {
+        "role": "primary",
+        "displayName": "Blurple Tint",
+        "canonical": "oklch(27% 0.058 295)",
+        "tonalRamp": [
+          "#12111c",
+          "#1c1930",
+          "#2b2741",
+          "#3d3663",
+          "#5d5294",
+          "#7a6ec4",
+          "#9184d9",
+          "#b5abfc"
+        ]
+      },
+      "accent-line": {
+        "role": "primary",
+        "displayName": "Blurple Line",
+        "canonical": "oklch(45% 0.098 295)",
+        "tonalRamp": [
+          "#12111c",
+          "#1c1930",
+          "#2b2741",
+          "#3d3663",
+          "#5d5294",
+          "#7a6ec4",
+          "#9184d9",
+          "#b5abfc"
+        ]
+      },
+      "attribution-bg": {
+        "role": "neutral",
+        "displayName": "Attribution Ground",
+        "canonical": "oklch(22% 0.026 285)",
+        "tonalRamp": [
+          "#0f1017",
+          "#12141f",
+          "#161826",
+          "#1a1c28",
+          "#232532",
+          "#292b31",
+          "#3f424d",
+          "#595d6c"
+        ]
+      },
+      "attribution-link": {
+        "role": "primary",
+        "displayName": "Attribution Link",
+        "canonical": "oklch(52% 0.080 295)",
+        "tonalRamp": [
+          "#12111c",
+          "#1c1930",
+          "#2b2741",
+          "#3d3663",
+          "#5d5294",
+          "#7a6ec4",
+          "#9184d9",
+          "#b5abfc"
+        ]
+      },
+      "topo-water": {
+        "role": "data",
+        "displayName": "Filament - Water",
+        "canonical": "oklch(51% 0.161 260)",
+        "tonalRamp": [
+          "#0b1b31",
+          "#12294a",
+          "#1a3b6b",
+          "#22508f",
+          "#2d6abf",
+          "#5a8bd0",
+          "#8fb2e2",
+          "#c8daf2"
+        ]
+      },
+      "topo-lowland": {
+        "role": "data",
+        "displayName": "Filament - Lowland",
+        "canonical": "oklch(64% 0.142 65)",
+        "tonalRamp": [
+          "#312004",
+          "#4a3006",
+          "#6b450a",
+          "#8f5c0e",
+          "#c47f17",
+          "#d69a45",
+          "#e4b87e",
+          "#f2dcbc"
+        ]
+      },
+      "topo-forest": {
+        "role": "data",
+        "displayName": "Filament - Forest",
+        "canonical": "oklch(55% 0.125 145)",
+        "tonalRamp": [
+          "#0d2210",
+          "#153618",
+          "#1f4f23",
+          "#2b6d2f",
+          "#3d8c40",
+          "#66a869",
+          "#93c495",
+          "#c5e0c6"
+        ]
+      },
+      "topo-rock": {
+        "role": "data",
+        "displayName": "Filament - Rock",
+        "canonical": "oklch(54% 0.046 55)",
+        "tonalRamp": [
+          "#231b15",
+          "#37291f",
+          "#4f3c2e",
+          "#6b533f",
+          "#8a6e5a",
+          "#a88f7e",
+          "#c5b2a5",
+          "#e2d8d0"
+        ]
+      },
+      "topo-alpine": {
+        "role": "data",
+        "displayName": "Filament - Alpine",
+        "canonical": "oklch(83% 0 0)",
+        "tonalRamp": [
+          "#1f1f1f",
+          "#333333",
+          "#4d4d4d",
+          "#6b6b6b",
+          "#8f8f8f",
+          "#adadad",
+          "#c8c8c8",
+          "#e8e8e8"
+        ]
+      },
+      "model-base": {
+        "role": "data",
+        "displayName": "Model Base",
+        "canonical": "oklch(27% 0.020 285)",
+        "tonalRamp": [
+          "#0f1017",
+          "#12141f",
+          "#161826",
+          "#1a1c28",
+          "#232532",
+          "#292b31",
+          "#3f424d",
+          "#595d6c"
+        ]
+      },
+      "warning": {
+        "role": "semantic",
+        "displayName": "Warning",
+        "canonical": "oklch(74% 0.113 78)",
+        "tonalRamp": [
+          "#2e2008",
+          "#45300c",
+          "#634612",
+          "#855f19",
+          "#ab7c24",
+          "#d6a24a",
+          "#e5bd7c",
+          "#f2dcb4"
+        ]
+      },
+      "danger": {
+        "role": "semantic",
+        "displayName": "Danger",
+        "canonical": "oklch(68% 0.138 27)",
+        "tonalRamp": [
+          "#331512",
+          "#4c1f1a",
+          "#6d2d25",
+          "#933e33",
+          "#c05445",
+          "#e5705f",
+          "#ef9a8d",
+          "#f7c8c1"
+        ]
+      },
+      "success": {
+        "role": "semantic",
+        "displayName": "Success",
+        "canonical": "oklch(70% 0.078 162)",
+        "tonalRamp": [
+          "#0e241b",
+          "#163829",
+          "#204f3b",
+          "#2d6b50",
+          "#3f8c69",
+          "#6fb08a",
+          "#9dcbb0",
+          "#cbe5d7"
+        ]
+      },
+      "accent-tint-hover": {
+        "role": "primary",
+        "displayName": "Blurple Tint Hover",
+        "canonical": "oklch(29% 0.063 295)",
+        "tonalRamp": [
+          "#12111c",
+          "#1c1930",
+          "#2b2741",
+          "#3d3663",
+          "#5d5294",
+          "#7a6ec4",
+          "#9184d9",
+          "#b5abfc"
+        ]
+      },
+      "draw-btn-preinvert": {
+        "role": "neutral",
+        "displayName": "Draw Button (pre-invert)",
+        "canonical": "oklch(87% 0.016 100)",
+        "tonalRamp": [
+          "#8a8673",
+          "#a8a598",
+          "#c0bdb2",
+          "#d5d3c5",
+          "#dcdacd",
+          "#e6e5db",
+          "#f0efe9",
+          "#faf9f6"
+        ]
+      },
+      "draw-btn-preinvert-line": {
+        "role": "neutral",
+        "displayName": "Draw Button Line (pre-invert)",
+        "canonical": "oklch(78% 0.014 90)",
+        "tonalRamp": [
+          "#8a8673",
+          "#a8a598",
+          "#c0bdb2",
+          "#d5d3c5",
+          "#dcdacd",
+          "#e6e5db",
+          "#f0efe9",
+          "#faf9f6"
+        ]
+      },
+      "draw-btn-preinvert-hover": {
+        "role": "neutral",
+        "displayName": "Draw Button Hover (pre-invert)",
+        "canonical": "oklch(85% 0.019 95)",
+        "tonalRamp": [
+          "#8a8673",
+          "#a8a598",
+          "#c0bdb2",
+          "#d5d3c5",
+          "#dcdacd",
+          "#e6e5db",
+          "#f0efe9",
+          "#faf9f6"
+        ]
+      },
+      "draw-btn-preinvert-hover-line": {
+        "role": "neutral",
+        "displayName": "Draw Button Hover Line (pre-invert)",
+        "canonical": "oklch(58% 0.023 95)",
+        "tonalRamp": [
+          "#8a8673",
+          "#a8a598",
+          "#c0bdb2",
+          "#d5d3c5",
+          "#dcdacd",
+          "#e6e5db",
+          "#f0efe9",
+          "#faf9f6"
         ]
       }
     },
     "typographyMeta": {
-      "title": {
-        "displayName": "Title",
-        "purpose": "Wordmark and modal titles; no display tier."
+      "wordmark": {
+        "displayName": "Wordmark",
+        "purpose": "The brand lockup in the top bar. Inter 500, never bolder."
       },
-      "label": {
-        "displayName": "Label",
-        "purpose": "Stamped uppercase section headers."
+      "heading": {
+        "displayName": "Heading",
+        "purpose": "Dialog and panel titles. Hierarchy is size and space, never weight."
       },
-      "body": {
-        "displayName": "Body",
-        "purpose": "Control labels, options, buttons."
+      "kicker": {
+        "displayName": "Section kicker",
+        "purpose": "10px uppercase label above every group in a panel or drawer."
+      },
+      "badge": {
+        "displayName": "Viewport badge",
+        "purpose": "The label pinned inside a map or model half."
       },
       "data": {
-        "displayName": "Data",
-        "purpose": "Every numeral incl. map marginalia \u2014 mono tabular."
+        "displayName": "Numeric value",
+        "purpose": "Any figure a user compares between runs. Always tabular."
+      },
+      "data-figure": {
+        "displayName": "Ledger figure",
+        "purpose": "Print time and AMS changes in the filament ledger."
+      },
+      "data-instrument": {
+        "displayName": "Instrument value",
+        "purpose": "The tray's value-first column - the number you scan first."
+      },
+      "poster-print-display": {
+        "displayName": "Poster display",
+        "purpose": "The printed sheet only. Never used in the UI."
+      },
+      "micro": {
+        "displayName": "Micro",
+        "purpose": "Sheet-tile labels and the map attribution — the smallest type in the app, 9-9.5px."
       }
     },
     "shadows": [
       {
-        "name": "device-ambient",
-        "value": "0 16px 56px rgba(0,0,0,0.6)",
-        "purpose": "Only under the 3D-preview device bezel (The Bench Step Rule: everything else is flat)."
+        "name": "edge",
+        "value": "0 0 0 1px #3f424d",
+        "purpose": "Frame edge. On a dark ground, elevation starts as a hairline ring."
+      },
+      {
+        "name": "dialog",
+        "value": "0 0 0 1px #595d6c, 0 24px 60px rgba(0,0,0,0.6)",
+        "purpose": "Modal dialogs: ring plus ambient darkness."
+      },
+      {
+        "name": "drawer",
+        "value": "-1px 0 0 #3f424d, -24px 0 60px rgba(0,0,0,0.5)",
+        "purpose": "The All-settings drawer, lit from the bench side."
+      },
+      {
+        "name": "floating",
+        "value": "0 0 0 1px #595d6c, 0 16px 40px rgba(0,0,0,0.65)",
+        "purpose": "Cards floating over a well."
+      },
+      {
+        "name": "accent-glow",
+        "value": "0 0 8px rgba(145,132,217,0.6)",
+        "purpose": "Slider thumb, and the stale-mesh Regenerate button. The one glow in the system."
+      },
+      {
+        "name": "swatch-ring",
+        "value": "inset 0 0 0 1px rgba(0,0,0,0.35)",
+        "purpose": "Rings a filament hex against whatever surface it lands on. Part of the data device, not the chrome."
       }
     ],
     "motion": [
       {
-        "name": "mech-snap",
-        "value": "120ms cubic-bezier(0.16,1,0.3,1)",
-        "purpose": "Switches, presses, chevrons \u2014 mechanical out-expo."
+        "name": "ease-mech",
+        "value": "cubic-bezier(0.2, 0.8, 0.2, 1)",
+        "purpose": "Default easing. Drawer slide and every state transition."
       },
       {
-        "name": "state-fast",
-        "value": "150ms ease-out",
-        "purpose": "Hover/focus ink shifts."
+        "name": "duration-color",
+        "value": "120ms",
+        "purpose": "Color and opacity changes."
       },
       {
-        "name": "led-blink",
-        "value": "0.9s steps(2) infinite",
-        "purpose": "Working LED; steady under reduced-motion."
+        "name": "duration-move",
+        "value": "180ms",
+        "purpose": "Movement: tab underline, drawer. Nothing above 200ms."
       }
     ],
     "breakpoints": [
       {
-        "name": "panel-hide",
-        "value": "768px",
-        "purpose": "Faceplate hidden below; banner explains."
+        "name": "bench-min",
+        "value": "900px",
+        "purpose": "Below this the bench cannot hold two halves and a tray; the map stays browsable and a note explains why."
       }
     ]
   },
@@ -150,109 +630,143 @@
       "name": "Primary Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "The one orange action per region \u2014 Generate, Apply.",
-      "html": "<button class=\"ds-btn-primary\">Generate 3D Model</button>",
-      "css": ".ds-btn-primary { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:7px 14px; border:1px solid #FF4D1C; border-radius:2px; background:#FF4D1C; color:#000; font:600 13px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; cursor:pointer; transition:background 150ms; } .ds-btn-primary:hover { background:#FF6A3D; } .ds-btn-primary:active { transform:translateY(1px); } .ds-btn-primary:focus-visible { outline:1px solid rgba(255,77,28,0.6); outline-offset:2px; }"
+      "description": "The one action in a region. A border and a glow, never a flood.",
+      "html": "<button class=\"ds-btn-primary\">Generate model</button>",
+      "css": ".ds-btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:7px 13px;border:1px solid var(--accent,#9184d9);border-radius:var(--radius,8px);background:transparent;color:var(--accent-bright,#b5abfc);font:500 12px Inter,sans-serif;cursor:pointer;transition:background .12s cubic-bezier(.2,.8,.2,1),color .12s cubic-bezier(.2,.8,.2,1)}.ds-btn-primary:hover{background:rgba(145,132,217,.12);color:var(--accent-text,#d2cefd)}.ds-btn-primary:active{background:rgba(145,132,217,.2)}.ds-btn-primary:focus-visible{outline:2px solid var(--accent,#9184d9);outline-offset:2px}"
     },
     {
-      "name": "Standard Button",
+      "name": "Secondary Button",
       "kind": "button",
       "refersTo": "button",
-      "description": "Raised faceplate control for secondary actions.",
-      "html": "<button class=\"ds-btn\">3MF</button>",
-      "css": ".ds-btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:7px 14px; border:1px solid rgba(168,121,74,0.55); border-radius:2px; background:#2E2A22; color:#ECE7DE; font:500 13px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; cursor:pointer; transition:background 150ms, border-color 150ms; } .ds-btn:hover { background:#37322A; border-color:rgba(168,121,74,0.7); } .ds-btn:active { transform:translateY(1px); }"
+      "description": "Everything that isn't the one action.",
+      "html": "<button class=\"ds-btn\">All settings</button>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border:1px solid var(--line,#3f424d);border-radius:var(--radius,8px);background:transparent;color:var(--text-btn,#cfd3e5);font:500 12px Inter,sans-serif;cursor:pointer;transition:background .12s,border-color .12s}.ds-btn:hover{background:rgba(255,255,255,.03);border-color:var(--text-4,#75798c)}.ds-btn:active{background:rgba(145,132,217,.2)}.ds-btn:disabled{border-color:var(--line-soft,#292b31);color:var(--text-5,#595d6c);cursor:default}.ds-btn:focus-visible{outline:2px solid var(--accent,#9184d9);outline-offset:2px}"
     },
     {
-      "name": "Rocker Switch",
+      "name": "Text Input",
       "kind": "input",
       "refersTo": "input",
-      "description": "Mechanical two-state switch replacing checkboxes.",
-      "html": "<input class=\"ds-switch\" type=\"checkbox\" checked>",
-      "css": ".ds-switch { appearance:none; -webkit-appearance:none; width:28px; height:15px; border:1px solid rgba(168,121,74,0.55); border-radius:2px; background:radial-gradient(circle closest-side,#9A9285 0 92%,transparent 96%) left 3px center/9px 9px no-repeat,#191714; cursor:pointer; transition:background-color 120ms; } .ds-switch:checked { background:radial-gradient(circle closest-side,#FF4D1C 0 92%,transparent 96%) right 3px center/9px 9px no-repeat,#2A2017; border-color:rgba(255,77,28,0.5); }"
+      "description": "Place search, numeric fields, titles.",
+      "html": "<input class=\"ds-input\" type=\"text\" value=\"Mount Rainier\">",
+      "css": ".ds-input{width:220px;padding:7px 10px;background:var(--surface-2,#232532);border:1px solid var(--line,#3f424d);border-radius:var(--radius,8px);color:var(--text,#e9e9ed);font:400 12px Inter,sans-serif;outline:none;caret-color:var(--accent,#9184d9);transition:border-color .14s}.ds-input:hover{border-color:var(--text-4,#75798c)}.ds-input:focus{border-color:var(--accent,#9184d9)}.ds-input::placeholder{color:var(--text-4,#75798c);opacity:1}"
     },
     {
-      "name": "Ruler Slider",
-      "kind": "input",
-      "refersTo": "input",
-      "description": "Fader on a sepia tick track with an orange thumb.",
-      "html": "<input class=\"ds-slider\" type=\"range\" min=\"0\" max=\"100\" value=\"40\" style=\"width:200px\">",
-      "css": ".ds-slider { appearance:none; -webkit-appearance:none; height:16px; background:transparent; cursor:pointer; } .ds-slider::-webkit-slider-runnable-track { height:16px; background:linear-gradient(rgba(168,121,74,0.55),rgba(168,121,74,0.55)) 0 center/100% 1px no-repeat, repeating-linear-gradient(90deg, rgba(168,121,74,0.3) 0 1px, transparent 1px 10%) 0 center/100% 7px no-repeat; } .ds-slider::-webkit-slider-thumb { appearance:none; -webkit-appearance:none; width:9px; height:16px; background:#FF4D1C; border:1px solid rgba(0,0,0,0.55); border-radius:1px; }"
-    },
-    {
-      "name": "Number Input",
-      "kind": "input",
-      "refersTo": "input",
-      "description": "Recessed bench well, mono tabular numerals.",
-      "html": "<input class=\"ds-input-number\" type=\"number\" value=\"150\">",
-      "css": ".ds-input-number { width:100px; padding:6px 10px; background:#191714; border:1px solid rgba(168,121,74,0.3); border-radius:2px; color:#ECE7DE; font:400 12px ui-monospace,'SF Mono',Menlo,monospace; font-variant-numeric:tabular-nums; outline:none; transition:border-color 150ms; } .ds-input-number:focus { border-color:rgba(255,77,28,0.55); }"
-    },
-    {
-      "name": "Section Header",
-      "kind": "nav",
-      "refersTo": "label",
-      "description": "Stamped accordion row with sepia chevron.",
-      "html": "<div class=\"ds-section-head\">Imagery &amp; Color<span class=\"ds-chev\">\\u25be</span></div>",
-      "css": ".ds-section-head { display:flex; align-items:center; justify-content:space-between; padding:11px 14px 10px; font:600 10px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; text-transform:uppercase; letter-spacing:1.2px; color:#ADA598; border-bottom:1px solid rgba(168,121,74,0.3); cursor:pointer; user-select:none; background:#24211B; } .ds-section-head:hover { color:#ECE7DE; } .ds-chev { font-size:9px; color:#A8794A; }"
-    },
-    {
-      "name": "Status LED",
+      "name": "Knob (slider with consequence)",
       "kind": "custom",
-      "refersTo": "button-primary",
-      "description": "Header state LED: idle/working/ok/err.",
-      "html": "<span style=\"display:inline-flex;gap:10px;align-items:center;background:#191714;padding:10px 14px;border:1px solid rgba(168,121,74,0.3);border-radius:2px;\"><span class=\"ds-led\"></span><span class=\"ds-led ds-led-working\"></span><span class=\"ds-led ds-led-ok\"></span></span>",
-      "css": ".ds-led { width:8px; height:8px; border-radius:50%; background:#3A342B; border:1px solid rgba(0,0,0,0.5); display:inline-block; } .ds-led-working { background:#FF4D1C; animation:ds-blink 0.9s steps(2,jump-none) infinite; } .ds-led-ok { background:#3FB950; } @keyframes ds-blink { 0% { opacity:1; } 100% { opacity:0.25; } }"
+      "refersTo": null,
+      "description": "The tray primitive. A slider is never bare: under it sits what the value costs.",
+      "html": "<div class=\"ds-knob\"><div class=\"ds-knob-head\"><span class=\"ds-k-label\">Print size</span><span class=\"ds-k-val\">150 mm</span></div><input class=\"ds-range\" type=\"range\" min=\"50\" max=\"300\" value=\"150\"><div class=\"ds-knob-cap\">fits the 256 mm bed with 106 mm margin</div></div>",
+      "css": ".ds-knob{min-width:220px}.ds-knob-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px}.ds-k-label{font:500 11px Inter,sans-serif;color:var(--text-2,#b2b6ca)}.ds-k-val{font:400 11px ui-monospace,Menlo,monospace;color:var(--text,#e9e9ed);font-variant-numeric:tabular-nums}.ds-knob-cap{font-size:10px;color:var(--text-4,#75798c);margin-top:6px}.ds-range{-webkit-appearance:none;appearance:none;width:100%;height:12px;background:transparent;cursor:pointer;--pct:40%}.ds-range::-webkit-slider-runnable-track{height:4px;border-radius:999px;background:linear-gradient(var(--accent,#9184d9),var(--accent,#9184d9)) 0/var(--pct) 100% no-repeat,var(--line,#3f424d)}.ds-range::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;margin-top:-4px;border-radius:50%;background:var(--accent-bright,#b5abfc);box-shadow:0 0 8px rgba(145,132,217,.6);transition:transform .12s}.ds-range:hover::-webkit-slider-thumb{transform:scale(1.17);box-shadow:0 0 12px rgba(145,132,217,.75)}"
+    },
+    {
+      "name": "Toggle",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "32x18 track, 14px knob at a 2px inset. The track fill is one of the four legitimate accent floods.",
+      "html": "<label class=\"ds-tgl\"><input type=\"checkbox\" checked><span>Detect water</span><span class=\"ds-tgl-note\">2 mm deep</span></label>",
+      "css": ".ds-tgl{display:flex;align-items:center;gap:9px;font:400 11.5px Inter,sans-serif;color:var(--text,#e9e9ed);cursor:pointer}.ds-tgl input{-webkit-appearance:none;appearance:none;width:32px;height:18px;border:none;border-radius:999px;background:radial-gradient(circle closest-side,var(--text-2,#b2b6ca) 0 90%,transparent 94%) left 2px center/14px 14px no-repeat,var(--line,#3f424d);cursor:pointer;flex:none;transition:background-color .16s,background-position .16s}.ds-tgl input:checked{background:radial-gradient(circle closest-side,var(--bg,#161826) 0 90%,transparent 94%) right 2px center/14px 14px no-repeat,var(--accent,#9184d9)}.ds-tgl input:focus-visible{outline:2px solid var(--accent,#9184d9);outline-offset:2px}.ds-tgl-note{margin-left:auto;font:400 10.5px ui-monospace,Menlo,monospace;color:var(--text-4,#75798c)}"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "chip",
+      "refersTo": null,
+      "description": "Two to four exclusive options. The active option is an accent fill with dark text.",
+      "html": "<div class=\"ds-seg\"><button class=\"active\">8 &middot; 2 AMS</button><button>4 &middot; 1 AMS</button></div>",
+      "css": ".ds-seg{display:inline-flex;border:1px solid var(--line,#3f424d);border-radius:var(--radius,8px);overflow:hidden}.ds-seg button{padding:6px 12px;background:transparent;border:none;font:500 11px Inter,sans-serif;color:var(--text-3,#9397ab);cursor:pointer;white-space:nowrap;transition:background .12s,color .12s}.ds-seg button+button{border-left:1px solid var(--line,#3f424d)}.ds-seg button:hover{background:rgba(255,255,255,.03);color:var(--text-2,#b2b6ca)}.ds-seg button.active{background:var(--accent,#9184d9);color:var(--bg,#161826)}"
+    },
+    {
+      "name": "Viewport Badge",
+      "kind": "chip",
+      "refersTo": null,
+      "description": "Names what a map or model half is showing, pinned 12px inside it.",
+      "html": "<span class=\"ds-badge\">Print &middot; 4 filaments</span>",
+      "css": ".ds-badge{display:inline-block;font:500 10px Inter,sans-serif;letter-spacing:.09em;text-transform:uppercase;color:var(--text-3,#9397ab);background:var(--bg,#161826);border:1px solid var(--line,#3f424d);border-radius:6px;padding:4px 8px;white-space:nowrap}"
+    },
+    {
+      "name": "Filament Ledger",
+      "kind": "card",
+      "refersTo": null,
+      "description": "The print consequence, always on screen. Mass share as a stacked bar in the real filament colors, then time and AMS changes.",
+      "html": "<div class=\"ds-ledger\"><div class=\"ds-led-left\"><div class=\"ds-kicker\">Filament ledger</div><div class=\"ds-led-bar\"><span style=\"width:16%;background:#2d6abf\"></span><span style=\"width:34%;background:#c47f17\"></span><span style=\"width:29%;background:#3d8c40\"></span><span style=\"width:21%;background:#c8c8c8\"></span></div><div class=\"ds-led-masses\"><span>29 g water</span><span>63 g lowland</span><span>54 g forest</span><span>38 g alpine</span></div></div><div class=\"ds-led-right\"><div class=\"ds-led-figure\">9h 40m &middot; 1,842 changes</div><div class=\"ds-led-note\">watertight &middot; no floating parts</div></div></div>",
+      "css": ".ds-ledger{display:flex;align-items:flex-end;gap:16px;padding:12px;background:#0f1017}.ds-led-left{flex:1;min-width:0}.ds-kicker{font:500 10px Inter,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-4,#75798c)}.ds-led-bar{display:flex;height:10px;border-radius:3px;overflow:hidden;margin-top:5px}.ds-led-masses{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;font:400 10.5px ui-monospace,Menlo,monospace;color:var(--text-3,#9397ab);font-variant-numeric:tabular-nums}.ds-led-right{text-align:right;flex:none}.ds-led-figure{font:400 13px ui-monospace,Menlo,monospace;color:var(--text,#e9e9ed);font-variant-numeric:tabular-nums}.ds-led-note{font-size:10.5px;color:var(--text-4,#75798c);margin-top:3px}"
+    },
+    {
+      "name": "Fading Rule",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Every divider spanning a full frame fades out at both ends. Short marks stay solid.",
+      "html": "<div class=\"ds-rule\"></div>",
+      "css": ".ds-rule{height:1px;width:100%;background:linear-gradient(90deg,transparent,var(--line,#3f424d) 48px,var(--line,#3f424d) calc(100% - 48px),transparent)}"
+    },
+    {
+      "name": "Format Radio Row",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Export formats. The selected row is an accent tint with an accent border - one of the four legitimate fills.",
+      "html": "<button class=\"ds-radio selected\"><span class=\"ds-rr-ring\"><i></i></span><span class=\"ds-rr-label\">3MF &mdash; color, per-object</span><span class=\"ds-rr-size\">&#8776;11 MB</span></button>",
+      "css": ".ds-radio{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:10px;background:var(--surface-2,#232532);border:1px solid transparent;cursor:pointer;width:100%;text-align:left;font-family:Inter,sans-serif;transition:background .12s,border-color .12s}.ds-radio:hover{background:#2a2c3a}.ds-rr-ring{width:13px;height:13px;flex:none;border-radius:50%;border:1px solid var(--text-5,#595d6c);display:grid;place-items:center}.ds-rr-ring i{width:6px;height:6px;border-radius:50%;background:transparent}.ds-rr-label{flex:1;font:400 12px Inter,sans-serif;color:var(--text-2,#b2b6ca)}.ds-rr-size{font:400 10.5px ui-monospace,Menlo,monospace;color:var(--text-4,#75798c);font-variant-numeric:tabular-nums}.ds-radio.selected{background:var(--accent-tint,#2b2741);border-color:var(--accent,#9184d9)}.ds-radio.selected:hover{background:#2f2b48}.ds-radio.selected .ds-rr-ring{border-color:var(--accent-bright,#b5abfc)}.ds-radio.selected .ds-rr-ring i{background:var(--accent-bright,#b5abfc)}.ds-radio.selected .ds-rr-label{font-weight:500;color:var(--text,#e9e9ed)}"
     }
   ],
   "narrative": {
-    "northStar": "Organic",
-    "overview": "A warm, tactile field-guide feel: a cream paper ground, soft rounded surface cards, one earthy terracotta as the single action color, and sage carrying nature and water. Headings and buttons are set in Caprasimo (a chunky display serif) over Figtree body. Controls are friendly pills \u2014 pill buttons, pill inputs, 38x22 toggles, sage-track/terracotta-fill sliders. The workflow reads as numbered step cards that collapse to sage 'done' pills. The satellite is gently washed so cream chrome floats over it. Print-data colors keep their real filament hexes as circular swatches \u2014 they are data, not theme.",
+    "northStar": "Nocturne",
+    "overview": "A dark instrument ground with one blurple accent, carried as line and glow and almost never as a flood. The app is a workbench for a machine that makes a physical object, so the chrome recedes and two things stay loud: the terrain, and what printing it will cost.\n\nThe layout is a split bench. The map half and the model half sit side by side, permanently, separated by a single hairline the container paints. Under them, a 186px tabbed tray holds the knobs that change the print. Everything else lives behind an All settings drawer. The user never has to open a panel to find out what their model weighs.",
     "keyCharacteristics": [
-      "Solid faceplate docked flush-left; map framed by a sepia neatline with corner ticks",
-      "Selection coordinates printed as map marginalia, quad-sheet style",
-      "Four ink roles: orange = action, hydro = water, sepia = structure, green = success",
-      "Mechanical motion: 100\u2013150ms snaps, out-expo, LED state signaling",
-      "2px radii, warm charcoal surfaces, mono tabular numerals everywhere"
+      "Split bench: map and model side by side, permanently",
+      "One blurple accent, carried as line and glow",
+      "The print consequence is always on screen",
+      "Every knob states its cost in the units the user cares about",
+      "Inter 400/500 only; mono with tabular numerals for every compared figure",
+      "Radii 8/10/14px; 999px is for toggle and slider tracks only"
     ],
     "rules": [
       {
-        "name": "The One Orange Rule",
-        "body": "Signal Orange is action and only action. If it isn't a control the user fires or a state the machine is in, it isn't orange.",
-        "section": "colors"
+        "name": "Line, not flood",
+        "section": "colors",
+        "body": "The accent is a 1px border, a 4px slider fill, a 2px tab underline, a thumb glow. The only accent fills in the whole app are the active segmented option, the selected radio row, the open All-settings button, and a toggle track when it is on."
       },
       {
-        "name": "The Ink Roles Rule",
-        "body": "Four roles, one job each: orange acts, hydro is water, sepia structures, green succeeds. A color used outside its role is a defect.",
-        "section": "colors"
+        "name": "The ledger is always on",
+        "section": "elevation",
+        "body": "Weight, time and AMS changes render in the model half, not in a collapsed card. Every figure comes from one printEstimate object, so the ledger and the export dialog can never disagree."
       },
       {
-        "name": "The Solid Surface Rule",
-        "body": "No translucent chrome, no backdrop blur, no alpha surfaces. Depth comes from surface steps and sepia rules.",
-        "section": "colors"
+        "name": "Every knob states its cost",
+        "section": "typography",
+        "body": "A slider is never bare: under it sits what it costs in the units the user cares about - millimetres of bed margin, triangles, megabytes, layers."
       },
       {
-        "name": "The Mono Numerals Rule",
-        "body": "Any value a user might compare or re-read renders in the data font with tabular numerals \u2014 including coordinates printed on the map.",
-        "section": "typography"
+        "name": "Elevation is an edge plus darkness",
+        "section": "elevation",
+        "body": "One inset hairline ring and one soft shadow. Never a stack of shadows, never a glow used as depth."
       },
       {
-        "name": "The Bench Step Rule",
-        "body": "To lift a surface, step its charcoal one level lighter and rule its edge in sepia. Never add blur; never add a shadow.",
-        "section": "elevation"
+        "name": "The data is not the theme",
+        "section": "colors",
+        "body": "Filament hexes and poster ink are real-world values. They never take a token and never re-theme."
+      },
+      {
+        "name": "The fading rule",
+        "section": "elevation",
+        "body": "Every divider spanning a full frame fades out at both ends: 48px inset across the app frame, 16-24px inside a panel using --line-soft. Short marks - the 2px active-tab underline, a selected-row bar - stay solid. The fade is for rules, not marks."
       }
     ],
     "dos": [
-      "Do keep every chrome surface solid and matte; depth is a surface step + sepia rule.",
-      "Do reserve orange for action and hydro ink for water contexts only.",
-      "Do snap: 100\u2013150ms, out-expo, press-down feedback; LED carries long-running state.",
-      "Do keep numerals mono-tabular everywhere, including map marginalia.",
-      "Do frame the map cartographically \u2014 neatline and marginalia are identity."
+      "Keep the map and the model on screen together. That pairing is the product.",
+      "Put the print consequence where the model is, not behind a disclosure.",
+      "Give every slider a consequence caption. A number with no unit of cost teaches nothing.",
+      "Use mono + tabular numerals for anything a user will compare between runs.",
+      "Let the drawer batch its edits and say how many are pending. Tray knobs apply on release; drawer edits apply on Apply.",
+      "Re-theme third-party chrome (Leaflet controls, attribution, popups). Default widgets on this ground read as a bug.",
+      "Mark the mesh stale when a geometry knob moves: dim the model, glow Regenerate, grey the ledger figures. Never auto-regenerate - the explicit Generate step is correct."
     ],
     "donts": [
-      "Don't reintroduce translucency, backdrop blur, or alpha surfaces \u2014 the former glass system is an anti-reference now.",
-      "Don't ship the vibe-coded AI aesthetic: big radii, glows, gradient text, pill buttons, cream backgrounds.",
-      "Don't add anything toy-like or gamified: cartoon markers, confetti, badges.",
-      "Don't use orange decoratively, sepia for body text, or radii above 2px (the LED excepted).",
-      "Don't ease bouncily or animate longer than 150ms for state feedback."
+      "Don't flood the accent. If a surface is blurple, it had better be one of the four fills named above.",
+      "Don't add a second action color, and don't use color alone to carry state.",
+      "Don't theme the filament hexes or the poster ink. They are data and print.",
+      "Don't use 999px on a button, or 24px on a card. Those were the old system.",
+      "Don't push Inter into the poster sheet. It prints in serif and Helvetica for a reason.",
+      "Don't stack shadows to fake depth on a dark ground.",
+      "Don't reach for a spinner where a progress line on the thing being rebuilt would do."
     ]
   }
 }

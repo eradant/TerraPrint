@@ -2,89 +2,116 @@
 name: TerraPrint
 description: Client-side terrain-to-3D-print pipeline — map, mesh, multi-color export
 colors:
-  bg: "#F5EAD8"
-  surface: "#EBDDC5"
-  surface-deep: "#E3D4BA"
-  surface-raise: "#F1E7D5"
-  surface-hover: "#E7D8BD"
-  ink-primary: "#201E1D"
-  ink-secondary: "#645C50"
-  ink-muted: "#675D50"
-  accent: "#C67139"
-  accent-hover: "#B2622D"
-  accent-ink: "#8C491A"
-  accent-fill: "#A35726"
-  accent-fill-hover: "#97511F"
-  accent-fill-active: "#8C491A"
-  placeholder: "#645C50"
-  accent-2: "#7A8A5E"
-  sage-100: "#F0FAE1"
-  neutral-100: "#F9F4ED"
-  neutral-200: "#EEE7DB"
-  neutral-400: "#C0B6A5"
-  neutral-800: "#474238"
+  bg: "#161826"
+  bg-deep: "#12141F"
+  bg-well: "#0F1017"
+  surface: "#1A1C28"
+  surface-2: "#232532"
+  surface-hover: "#2A2C3A"
+  line: "#3F424D"
+  line-soft: "#292B31"
+  ink-primary: "#E9E9ED"
+  ink-2: "#B2B6CA"
+  ink-secondary: "#9397AB"
+  ink-muted: "#75798C"
+  ink-disabled: "#595D6C"
+  ink-button: "#CFD3E5"
+  accent: "#9184D9"
+  accent-bright: "#B5ABFC"
+  accent-text: "#D2CEFD"
+  accent-tint: "#2B2741"
+  accent-tint-hover: "#2F2B48"
+  accent-line: "#5D5294"
   topo-water: "#2D6ABF"
   topo-lowland: "#C47F17"
   topo-forest: "#3D8C40"
+  topo-rock: "#8A6E5A"
   topo-alpine: "#C8C8C8"
-  warning: "#C98A2B"
-  danger: "#B3402F"
-  success: "#728157"
+  model-base: "#2B2D38"
+  attribution-bg: "#1B1D29"
+  # Leaflet.Draw ships one dark-ink sprite sheet. `filter` is the only lever that reaches a
+  # background-image, so it hits the whole button — these three are the arithmetic inverses of
+  # surface-2 / line / surface-hover / ink-muted, chosen so the filter lands back on the tokens.
+  draw-btn-preinvert: "#DCDACD"
+  draw-btn-preinvert-line: "#C0BDB2"
+  draw-btn-preinvert-hover: "#D5D3C5"
+  draw-btn-preinvert-hover-line: "#8A8673"
+  attribution-link: "#7972A9"
+  warning: "#D6A24A"
+  danger: "#E5705F"
+  success: "#6FB08A"
 typography:
   wordmark:
-    fontFamily: "'Caprasimo', Georgia, serif"
-    fontSize: "19px"
-    fontWeight: 400
+    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    fontSize: "14px"
+    fontWeight: 500
+    letterSpacing: "-0.01em"
   headline:
-    fontFamily: "'Caprasimo', Georgia, serif"
-    fontSize: "23px"
-    fontWeight: 400
+    fontFamily: "'Inter', -apple-system, sans-serif"
+    fontSize: "18px"
+    fontWeight: 500
+    letterSpacing: "-0.015em"
   heading:
-    fontFamily: "'Caprasimo', Georgia, serif"
-    fontWeight: 400
+    fontFamily: "'Inter', -apple-system, sans-serif"
+    fontSize: "17px"
+    fontWeight: 500
     letterSpacing: "-0.015em"
   title:
-    fontFamily: "'Caprasimo', Georgia, serif"
-    fontSize: "17px"
-    fontWeight: 400
-  subtitle:
-    fontFamily: "'Caprasimo', Georgia, serif"
-    fontSize: "16px"
-    fontWeight: 400
+    fontFamily: "'Inter', -apple-system, sans-serif"
+    fontSize: "15px"
+    fontWeight: 500
+    letterSpacing: "-0.015em"
+  tab:
+    fontFamily: "'Inter', -apple-system, sans-serif"
+    fontSize: "11.5px"
+    fontWeight: 500
   button:
-    fontFamily: "'Caprasimo', Georgia, serif"
-    fontSize: "14px"
-    fontWeight: 400
-  body:
-    fontFamily: "'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-    fontSize: "13px"
-    fontWeight: 400
-    lineHeight: 1.55
-  label:
-    fontFamily: "'Figtree', -apple-system, sans-serif"
+    fontFamily: "'Inter', -apple-system, sans-serif"
     fontSize: "12px"
     fontWeight: 500
+  body:
+    fontFamily: "'Inter', -apple-system, sans-serif"
+    fontSize: "11.5px"
+    fontWeight: 400
+    lineHeight: 1.5
+  label:
+    fontFamily: "'Inter', -apple-system, sans-serif"
+    fontSize: "11px"
+    fontWeight: 500
   kicker:
-    fontFamily: "'Figtree', -apple-system, sans-serif"
-    fontSize: "11px"
-    fontWeight: 700
-    letterSpacing: "0.08em"
-  data:
-    fontFamily: "ui-monospace, 'SF Mono', Menlo, Consolas, monospace"
-    fontSize: "11px"
+    fontFamily: "'Inter', -apple-system, sans-serif"
+    fontSize: "10px"
+    fontWeight: 500
+    letterSpacing: "0.1em"
+  badge:
+    fontFamily: "'Inter', -apple-system, sans-serif"
+    fontSize: "10px"
+    fontWeight: 500
+    letterSpacing: "0.09em"
+  caption:
+    fontFamily: "'Inter', -apple-system, sans-serif"
+    fontSize: "10px"
     fontWeight: 400
   micro:
-    fontFamily: "'Figtree', -apple-system, sans-serif"
-    fontSize: "10px"
-    fontWeight: 600
-    letterSpacing: "0.1em"
-  chevron:
-    fontFamily: "'Figtree', -apple-system, sans-serif"
+    fontFamily: "'Inter', -apple-system, sans-serif"
     fontSize: "9px"
+    fontWeight: 500
+    letterSpacing: "0.05em"
+  data:
+    fontFamily: "ui-monospace, Menlo, Consolas, monospace"
+    fontSize: "11px"
+    fontWeight: 400
+  data-figure:
+    fontFamily: "ui-monospace, Menlo, Consolas, monospace"
+    fontSize: "13px"
+    fontWeight: 400
+  data-instrument:
+    fontFamily: "ui-monospace, Menlo, Consolas, monospace"
+    fontSize: "15px"
     fontWeight: 400
   # The printed poster is a separate artifact from the app chrome. Its stacks are deliberately
   # generic: a downloaded SVG has no webfonts at a print shop, and Georgia/Helvetica/mono all
-  # substitute invisibly, where Caprasimo would substitute loudly. Never used in the UI.
+  # substitute invisibly. Never used in the UI.
   poster-print-display:
     fontFamily: "Georgia, 'Times New Roman', 'Liberation Serif', serif"
     fontWeight: 400
@@ -96,186 +123,253 @@ typography:
     fontFamily: "'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace"
     fontWeight: 400
 rounded:
+  sm: "3px"
+  chip: "6px"
+  md: "8px"
+  lg: "10px"
+  xl: "14px"
   pill: "999px"
-  md: "16px"
-  lg: "24px"
-  xl: "32px"
 spacing:
   xs: "4px"
-  sm: "8px"
-  md: "14px"
+  sm: "9px"
+  md: "16px"
+  lg: "20px"
+  xl: "34px"
 components:
   button:
     backgroundColor: "transparent"
-    borderColor: "{colors.neutral-400}"
-    textColor: "{colors.ink-primary}"
-    rounded: "{rounded.pill}"
-    padding: "8px 16px"
+    borderColor: "{colors.line}"
+    textColor: "{colors.ink-button}"
+    rounded: "{rounded.md}"
+    padding: "7px 13px"
   button-primary:
-    backgroundColor: "{colors.accent-fill}"
-    textColor: "{colors.bg}"
-    rounded: "{rounded.pill}"
-    padding: "8px 16px"
+    backgroundColor: "transparent"
+    borderColor: "{colors.accent}"
+    textColor: "{colors.accent-bright}"
+    rounded: "{rounded.md}"
+    padding: "7px 13px"
   button-primary-hover:
-    backgroundColor: "{colors.accent-fill-hover}"
+    backgroundColor: "rgba(145,132,217,0.12)"
+    textColor: "{colors.accent-text}"
   button-primary-active:
-    backgroundColor: "{colors.accent-fill-active}"
+    backgroundColor: "rgba(145,132,217,0.2)"
   input:
-    backgroundColor: "{colors.neutral-100}"
+    backgroundColor: "{colors.surface-2}"
+    borderColor: "{colors.line}"
     textColor: "{colors.ink-primary}"
-    rounded: "{rounded.pill}"
-    padding: "8px 14px"
+    rounded: "{rounded.md}"
+    padding: "7px 10px"
   card:
-    backgroundColor: "{colors.neutral-100}"
-    rounded: "{rounded.lg}"
+    backgroundColor: "{colors.surface}"
+    rounded: "{rounded.xl}"
 ---
 
 # Design System: TerraPrint
 
 ## 1. Overview
 
-**The Organic Field Guide.** TerraPrint is a client-side pipeline that turns a map selection into a
-print-ready, multi-color 3D terrain model. The interface is a warm paper workbench: a solid cream
-ground, softly rounded surface cards, one earthy terracotta reserved for action, and sage for the
-things that grow or flow. The terrain — the map, the 3D preview, the color bands — carries the
-visual weight; the chrome is quiet, tactile and legible around it.
+**Nocturne.** A dark instrument ground with one blurple accent, carried as line and glow and
+almost never as a flood. The app is a workbench for a machine that makes a physical object, so
+the chrome recedes and two things stay loud: the terrain, and what printing it will cost.
 
-The register is **product**: design serves the task. The user is a maker iterating between browser
-and slicer, often for many rounds. Density and earned familiarity beat novelty. Success is
-*print-ready on first slice*, so every readout that predicts a print's cost (dimensions, triangle
-count, filament estimate, fit warnings) is part of the design, not decoration.
+The layout is a **split bench**. The map half and the model half sit side by side, permanently,
+separated by a single hairline the container paints. Under them, a 186px tabbed tray holds the
+knobs that change the print. Everything else lives behind an **All settings** drawer. The user
+never has to open a panel to find out what their model weighs.
 
-**Key characteristics**
-- Solid warm surfaces at every level — no translucency, no backdrop blur, no glass.
-- Generous pill radii (999px on controls, 16–32px on cards); nothing is hard-cornered.
-- Caprasimo display serif for the wordmark, step headings and buttons; Figtree for everything else.
-- One terracotta for action, one sage for nature/success — and a separate, untouchable
-  filament palette for data.
-- A numbered accordion of step cards that reads as a workflow, not a settings dump.
+Five rules carry the system:
+
+1. **Line, not flood.** The accent is a 1px border, a 4px slider fill, a 2px tab underline, a
+   thumb glow. The only accent *fills* in the whole app are the active segmented option, the
+   selected radio row, the open All-settings button, and a toggle track when it is on.
+2. **The ledger is always on.** Weight, time and AMS changes render in the model half, not in a
+   collapsed card. Every figure comes from one `printEstimate` object, so the ledger and the
+   export dialog can never disagree.
+3. **Every knob states its cost.** A slider is never bare: under it sits what it costs in the
+   units the user cares about — millimetres of bed margin, triangles, megabytes, layers.
+4. **Elevation is an edge plus darkness.** One inset hairline ring and one soft shadow. Never a
+   stack of shadows, never a glow used as depth.
+5. **The data is not the theme.** Filament hexes and poster ink are real-world values. They
+   never take a token and never re-theme.
 
 ## 2. Colors
 
-Strategy: **Restrained.** Warm tinted neutrals carry the surfaces; a single accent carries action.
+### Ground and surface
 
-### Surfaces
-Five warm neutral steps, all fully opaque: `bg` #F5EAD8 (page), `surface` #EBDDC5 (panel),
-`surface-deep` #E3D4BA (footers, map controls, wells), `surface-raise` #F1E7D5 and
-`surface-hover` #E7D8BD (control fills). Depth is a **surface step plus a hairline rule** —
-never a shadow stack, never alpha.
+| Token | Value | Use |
+| --- | --- | --- |
+| `--bg` | `#161826` | App ground; the shell behind everything |
+| `--bg-deep` | `#12141f` | Top bar, poster toolbar, tray-less chrome |
+| `--bg-well` | `#0f1017` | Wells that hold content: 3D viewport, paint canvas, poster desk |
+| `--surface` | `#1a1c28` | Panels, trays, drawers, dialogs |
+| `--surface-2` | `#232532` | Inputs, chips, secondary rows, icon buttons |
+| `--line` | `#3f424d` | Interactive borders (buttons, inputs, tiles) |
+| `--line-soft` | `#292b31` | Structural dividers, panel edges, disabled borders |
 
 ### Action
-**Terracotta** is the one action color. It appears in three roles, and the distinction is
-load-bearing:
-- `accent` #C67139 — accent as a **surface**: toggle tracks, slider fills, focus rings, borders.
-  These owe only 3:1 against the page, which it clears at 4.16:1.
-- `accent-fill` #A35726 — accent **behind text**: filled primary buttons. Cream #FAF6EF on it is
-  4.94:1. `accent` itself is only 3.35:1 with that text, which is why the two are separate tokens.
-  Hover #97511F, active #8C491A.
-- `accent-ink` #8C491A — terracotta **as text** on the page ground (5:1).
 
-**Sage** `accent-2` #7A8A5E is the second voice: the brand mark, completed-step pills, water and
-land-cover contexts. It is never an action color.
+| Token | Value | Use |
+| --- | --- | --- |
+| `--accent` | `#9184d9` | Primary-action borders, slider fills, active tab, brand mark, selection rect |
+| `--accent-bright` | `#b5abfc` | Accent text and labels, slider thumbs, active icons |
+| `--accent-text` | `#d2cefd` | Text on an accent-tinted fill |
+| `--accent-tint` | `#2b2741` | Tinted fills for selected rows / active chips |
+| `--accent-tint-hover` | `#2f2b48` | The same fill one step up, on hover |
+| `--accent-line` | `#5d5294` | Quieter accent border (secondary accent buttons, status pills) |
+| `--danger` | `#e5705f` | Destructive labels; border `rgba(229,112,95,.45)` |
+
+There is one action color. A second accent would make the user ask what the difference means.
 
 ### Data — do not theme
-`topo-water` #2D6ABF, `topo-lowland` #C47F17, `topo-forest` #3D8C40, `topo-alpine` #C8C8C8 are
-**real filament hexes**. They appear in swatches, legends, the 3D preview and the exported 3MF.
-They are data, not palette: they do not shift between light and dark, and they are never
-substituted for aesthetic reasons.
+
+Real filament hexes and real poster ink. They must survive any reskin unchanged.
+
+| Band | Value |
+| --- | --- |
+| Water | `#2d6abf` |
+| Lowland | `#c47f17` |
+| Forest | `#3d8c40` |
+| Rock / mid (5-band only) | `#8a6e5a` |
+| Alpine | `#c8c8c8` |
+| Model base (3D view only) | `#2b2d38` |
+
+The poster sheet renders in literal ink — paper `#f7f3ea`, aperture frame `#cfc7b6`, aperture
+well `#151821`, title `#20211f`, data `#6b6459`, credit `#8c8577`. It is a print artifact, not
+UI: it never inherits the app theme, and Inter never enters it.
 
 ### Ink
-`ink-primary` #201E1D, `ink-secondary` #645C50, `ink-muted` #675D50, plus `placeholder` #645C50.
-Body text clears 4.5:1 on every surface it sits on; placeholders are explicitly tokenized because
-the browser default (#757575) does not.
 
-### Dark theme
-A full parallel ramp under `:root[data-theme="dark"]` and `prefers-color-scheme`. Terracotta is
-replaced by **blue** #3D7FC4 (surface) / #3672B0 (behind text) — warm accents muddy on a dark
-ground. Surfaces invert to #1C1A17 / #201D1A; the filament palette does not move.
+| Token | Value | Use |
+| --- | --- | --- |
+| `--text` | `#e9e9ed` | Primary text, values |
+| `--text-2` | `#b2b6ca` | Control labels |
+| `--text-3` | `#9397ab` | Body copy, secondary labels |
+| `--text-4` | `#75798c` | Captions, units, mono annotations, kickers |
+| `--text-5` | `#595d6c` | Disabled text, empty-state strokes |
+| `--text-btn` | `#cfd3e5` | Secondary button label |
+
+### One theme
+
+Nocturne is a single dark look. The light/dark toggle is gone: a second palette would need a
+second set of contrast decisions for the same screen, and the terrain and filament colors — the
+things that actually matter here — are tuned against this ground.
 
 ## 3. Typography
 
-Two families on a genuine contrast axis — a display serif against a humanist sans.
+**Inter, weights 400 and 500 only.** Headings are 500 and never bolder; hierarchy is size and
+space, not weight. Monospace is `ui-monospace, Menlo, monospace` and always carries
+`font-variant-numeric: tabular-nums`, because these are numbers a user compares across rebuilds.
 
-- **Caprasimo** (display serif, 400): wordmark, step headings, buttons, the intro headline.
-  Used deliberately as brand voice; it is the one place this product register bends its own rule
-  about display faces in controls.
-- **Figtree** (400/500/600/700): every label, control, hint and paragraph.
-- **System mono** (`ui-monospace, SF Mono, Menlo`) with `tabular-nums`: every numeral a user might
-  compare or re-read — dimensions, coordinates, elevations, triangle counts, fit readouts.
-
-Fixed rem/px steps, not fluid clamps: this is dense product UI viewed at a consistent size.
-Scale in use: 23px intro headline · 19px wordmark · 17px step heading · 14px button · 13px body ·
-12px label/mono · 11px hint · 10–11px uppercase sub-head (0.08em tracking).
-
-**The mono numerals rule.** Any value that gets compared renders in the mono face with tabular
-figures, so columns of numbers stay aligned as they change.
+| Role | Spec |
+| --- | --- |
+| Wordmark | 500 / 14px / `-.01em` |
+| Dialog title | 500 / 17–18px / `-.015em` |
+| Panel title | 500 / 15–17px / `-.015em` |
+| Section kicker | 500 / 10px / `.1em` / uppercase / `--text-4` |
+| Viewport badge | 500 / 10px / `.09em` / uppercase / `--text-3` |
+| Tab | 500 / 11.5px |
+| Control label | 500 / 11px / `--text-2` |
+| Body copy | 400 / 11.5–12px / 1.5–1.55 / `--text-3` |
+| Caption | 400 / 10–10.5px / `--text-4` |
+| Micro (tile label, map attribution) | 500 / 9–9.5px / `.05em` |
+| Button | 500 / 12px (small: 11.5px) |
+| Numeric value | mono 400 / 11px, tabular |
+| Ledger figure | mono 400 / 13px, tabular |
+| Instrument value (tray) | mono 400 / 15px, tabular |
 
 ## 4. Elevation
 
-Depth is **physical, not optical**. Surfaces step lighter as they rise (page → panel → card →
-raised control), separated by hairline rules. There is no translucency and no backdrop blur
-anywhere in the app, by policy.
+On a dark ground, elevation is an edge plus ambient darkness — never stacked shadows.
 
-Three shadow tokens exist (`shadow-sm/md/lg`, all `color-mix` on #2E2B25) and are used sparingly:
-the floating 3D preview panel, modals, and the toast. Everything else earns its depth from the
-surface step and a 1px hairline.
+| Level | Value |
+| --- | --- |
+| Frame edge | `0 0 0 1px #3f424d` |
+| Dialog | `0 0 0 1px #595d6c, 0 24px 60px rgba(0,0,0,.6)` |
+| Drawer | `-1px 0 0 #3f424d, -24px 0 60px rgba(0,0,0,.5)` |
+| Floating card | `0 0 0 1px #595d6c, 0 16px 40px rgba(0,0,0,.65)` |
+| Accent glow (slider thumb) | `0 0 8px rgba(145,132,217,.6)` |
+| Swatch ring (`--swatch-ring`) | `inset 0 0 0 1px rgba(0,0,0,.35)` |
 
-Layering follows a semantic ramp rather than arbitrary values:
-map chrome (200–700) → panel (900) → mobile note (950) → preview (1000) → poster overlay (1500) →
-paint modal (2000) → intro modal (3000) → toast (3500).
+The accent glow is the **only** glow in the system, and it is attached to the one control whose
+position is the value: the slider thumb (plus Regenerate, when the mesh has gone stale). A glow
+used anywhere else is decoration. `--swatch-ring` rings a filament hex against whatever surface
+it lands on — it is part of the data device, not the chrome, which is why it is a flat black
+alpha rather than a token color.
+
+### The fading rule
+
+Every divider spanning a full frame fades out at both ends:
+
+```css
+height: 1px;
+background: linear-gradient(90deg, transparent, var(--line) 48px,
+                            var(--line) calc(100% - 48px), transparent);
+```
+
+Inset 48px across the app frame, 16–24px inside a panel (matching its own padding) using
+`--line-soft`. Short *marks* — the 2px active-tab underline, a selected-row bar — stay solid.
+The fade is for rules, not marks.
 
 ## 5. Components
 
-**Buttons.** One pill shape at every size. `.btn` is a transparent outline; `.btn-primary` is the
-filled terracotta (at `accent-fill`); `.btn-ghost` drops the border; `.btn-danger` tints toward
-`danger`. Caprasimo, 14px. Hover lifts the background by a 7% ink mix; active darkens the fill.
+**Radii are 8 / 10 / 14px.** `999px` is now reserved for toggle tracks and slider tracks only —
+it is no longer the button shape. Cards are 14px, not 24px.
 
-**Inputs and selects.** Pill-radius, `neutral-100` fill, hairline border. Focus swaps the border to
-`accent`. Numerals render mono with tabular figures.
+- **Slider.** Header row: label (500 11px `--text-2`) left, value (mono 11px tabular) right.
+  Track `4px`, radius 999, `--line`; fill `--accent` to the value; thumb `12px` circle in
+  `--accent-bright` with the accent glow, scaling to ~14px on hover. Caption below at 10px
+  `--text-4`, stating what the value costs.
+- **Toggle.** Track `32×18`, radius 999 — on `--accent`, off `--line`. Knob `14px` at a 2px
+  inset: on, right, `--bg`; off, left, `--text-2`.
+- **Segmented control.** 1px `--line`, radius 8, `overflow:hidden`. Active option is `--bg` text
+  on an `--accent` fill; inactive `--text-3`.
+- **Buttons.** Primary — transparent, 1px `--accent`, `--accent-bright`. Secondary — transparent,
+  1px `--line`, `--text-btn`. Destructive — 1px `rgba(229,112,95,.45)`, `--danger`. Disabled —
+  1px `--line-soft`, `--text-5`, `cursor:default`, no hover.
+- **Viewport badge.** 10px `.09em` uppercase `--text-3` on `--bg`, 1px `--line`, radius 6, pinned
+  12px/11px inside a half.
+- **Filament ledger.** Kicker, a 10px stacked bar (radius 3, segments sized by mass share in the
+  filament colors), per-band masses in mono 10.5px, and — right-aligned — time and AMS changes in
+  mono 13px over a `watertight · no floating parts` note.
+- **Tray.** 186px: a 38px tab strip, the fading rule, then the controls. The Model tab uses the
+  value-first instrument layout — value (mono 15px, right-aligned, 80px) · unit · label · track ·
+  consequence — with the toggles and Regenerate in a 230px right region.
 
-**Pill toggles.** 38×22 track with a sliding white thumb, terracotta when on. Layered backgrounds
-only — no pseudo-elements — for cross-engine reliability.
+### Interaction states
 
-**Ruler sliders.** A `linear-gradient` fill to the thumb over a sage track, with the numeric value
-in a mono readout to the right.
+Every interactive element gets a themed hover and press. No browser defaults anywhere.
 
-**Step cards.** The panel is a numbered accordion. Each section is a rounded card with a
-counter-driven step dot; a completed section collapses, the dot becomes a sage checkmark, and a
-one-line summary of its settings replaces the body. Headings are `h2` and keyboard-operable
-(`role="button"`, Enter/Space).
-
-**Chip grids.** A hidden input carries the value so settings persistence keeps working, with a row
-of SVG-thumbnail buttons as the interaction surface. Used for frame style, poster paper and poster
-theme.
-
-**Accessible naming.** Every control has a programmatic name — a `<label for>`, a wrapping label, or
-an `aria-label` where the control's meaning lives in an adjacent swatch or row rather than in text.
-
-**Focus.** One rule, everywhere: `:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }`.
-
-**Motion.** 120–250ms, `--ease-mech` (`cubic-bezier(0.22, 1, 0.36, 1)`), transform and opacity only.
-A global `prefers-reduced-motion` block collapses every duration to 0.01ms; no information is ever
-gated on an animation completing. The 3D preview renders on demand — it parks its render loop when
-the camera is still.
+- Secondary button: border → `--text-4`, background → `rgba(255,255,255,.03)`.
+- Primary button: background → `rgba(145,132,217,.12)`, label → `--accent-text`.
+- Pressed: `rgba(145,132,217,.2)`. No transform.
+- Rows and chips: background → `--surface-2`, or `#2f2b48` when already accent-tinted.
+- Focus: `:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }` — never the
+  default blue ring.
+- Transitions: 120ms color/opacity, 140–180ms movement, `cubic-bezier(.2,.8,.2,1)` for the
+  drawer. Nothing above 200ms. `prefers-reduced-motion` makes state changes instant.
 
 ## 6. Do's and Don'ts
 
 ### Do
-- **Do** keep every surface solid and warm; depth is a surface step plus a hairline rule.
-- **Do** reserve terracotta for action, and pick the right accent token for the job — `accent` for
-  surfaces, `accent-fill` behind text, `accent-ink` as text.
-- **Do** keep the filament palette (`topo-*`) untouched across themes. It is data.
-- **Do** set every numeral a user might compare in the mono face with tabular figures.
-- **Do** give every control a programmatic name, and let `:focus-visible` show one consistent ring.
-- **Do** surface the consequences of a setting (size, triangle count, fit, cost) before it costs a print.
+
+- Keep the map and the model on screen together. That pairing is the product.
+- Put the print consequence where the model is, not behind a disclosure.
+- Give every slider a consequence caption. A number with no unit of cost teaches nothing.
+- Use mono + tabular numerals for anything a user will compare between runs.
+- Let the drawer batch its edits and say how many are pending. Tray knobs apply on release;
+  drawer edits apply on Apply.
+- Re-theme third-party chrome (Leaflet controls, attribution, popups). Default widgets on this
+  ground read as a bug.
+- Mark the mesh stale when a geometry knob moves: dim the model, glow Regenerate, grey the
+  ledger figures. Never auto-regenerate — the explicit Generate step is correct.
 
 ### Don't
-- **Don't** reintroduce the retired "Quad Bench" direction: charcoal faceplates, Signal Orange,
-  mono-everything, 2px corners. PRODUCT.md names it an anti-reference.
-- **Don't** add translucency, backdrop blur, or alpha surfaces.
-- **Don't** ship the SaaS-cream slop set: gradient text, glows, hero-metric blocks, or a tracked
-  eyebrow above every section.
-- **Don't** use terracotta decoratively, or sage for actions.
-- **Don't** put accent behind text without using `accent-fill` — plain `accent` fails contrast there.
-- **Don't** let the poster SVG inherit screen theme tokens. It is a print artifact: literal hexes
-  only, so a dark-mode viewer never exports a dark sheet.
+
+- Don't flood the accent. If a surface is blurple, it had better be one of the four fills named
+  above.
+- Don't add a second action color, and don't use color alone to carry state.
+- Don't theme the filament hexes or the poster ink. They are data and print.
+- Don't use 999px on a button, or 24px on a card. Those were the old system.
+- Don't push Inter into the poster sheet. It prints in serif and Helvetica for a reason.
+- Don't stack shadows to fake depth on a dark ground.
+- Don't reach for a spinner where a progress line on the thing being rebuilt would do.
