@@ -8413,6 +8413,9 @@ const Poster = {
     }
     const n = tiles.length;
     const lay = this._layout(tiles, this._sheet());
+    // A sheet the tiles don't fit is NOT a reason to refuse to open: the paper-size control that
+    // fixes it lives inside this view. Say what's wrong, offer the remedy, and open anyway —
+    // _render() paints the same explanation on the desk, beside the Sheet tiles.
     if (!lay.fit.ok) {
       const mp = lay.fit.minPaper, ms = lay.fit.maxScale;
       const what = n === 1
@@ -8428,9 +8431,8 @@ const Poster = {
         ? { duration: 9000, action: `Shrink tiles to ${Math.round(ms * 100)}%`,
             onAction: () => { PosterDoc.scaleAll(ms); this._syncSlots(); this.open(); } }
         : 9000);
-      return;
     }
-    if (!this._warnedBig && n === 1 && lay.ap.w > lay.field.w * 0.75) {
+    if (lay.fit.ok && !this._warnedBig && n === 1 && lay.ap.w > lay.field.w * 0.75) {
       this._warnedBig = true;
       toast('Tile fills most of the sheet — consider a larger paper size.', 5000);
     }
@@ -8461,10 +8463,25 @@ const Poster = {
     const tiles = this._tiles(); if (!tiles.length) return;
     const stage = document.getElementById('poster-stage'); if (!stage) return;
     const lay = this._layout(tiles, this._sheet());
+    // The desk stands in for the sheet when nothing can be drawn on it. This message has to
+    // carry the whole remedy: the toast that fired on open has long since expired, and the
+    // Sheet control that fixes it is one panel to the left.
     if (!lay.fit.ok) {
-      stage.innerHTML = `<p style="color:var(--text-3);font-size:13px;max-width:32ch;text-align:center;">`
-        + `${tiles.length > 1 ? 'These tiles don\'t' : 'The tile doesn\'t'} fit this sheet. `
-        + `Pick a larger paper size or smaller tiles.</p>`;
+      const n = tiles.length, mp = lay.fit.minPaper, ms = lay.fit.maxScale;
+      const what = n > 1
+        ? `${n} tiles need ${lay.fit.needW.toFixed(0)} × ${lay.fit.needH.toFixed(0)} mm`
+        : `This tile is ${lay.ap.w.toFixed(0)} × ${lay.ap.h.toFixed(0)} mm`;
+      const fix = mp
+        ? `Switch to <b style="color:var(--text);font-weight:500;">${mp.label}</b>${mp.landscape ? ' landscape' : ''} under Sheet, on the left.`
+        : ms
+        ? `No stock sheet fits it. Shrink the tiles to about ${Math.round(ms * 100)}% of their printed size, or print smaller.`
+        : `No stock sheet fits it — reduce Print size and regenerate.`;
+      // "…larger than 11 × 14 in leaves…" reads as a verb, so the label always takes an article
+      // and the noun "sheet" after it.
+      stage.innerHTML = `<div style="max-width:34ch;text-align:center;">`
+        + `<p style="color:var(--text-2);font:400 13px/1.5 var(--font-body);">${what}, `
+        + `which is more than the ${this._sheet().label} sheet leaves for the map.</p>`
+        + `<p style="color:var(--text-4);font:400 12px/1.5 var(--font-body);margin-top:9px;">${fix}</p></div>`;
       return;
     }
     const el = this.build(tiles);
@@ -8819,6 +8836,9 @@ const Preview = {
   showMesh(meshData) {
     // The model half stops being an empty state the moment a mesh exists.
     document.body.classList.remove('no-model');
+    // init() is allowed to fail (no WebGL); everything downstream of it — the mesh, the ledger,
+    // STL/3MF export — still works, so a missing renderer must not take the generate with it.
+    if (!this.renderer) return;
 
     // Remove old model group (terrain + any frame objects)
     if (this.modelGroup) {
