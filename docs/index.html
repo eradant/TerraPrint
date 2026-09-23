@@ -1578,6 +1578,10 @@ input[type="color"]::-moz-color-swatch { border: none; border-radius: 3px; box-s
                     <span class="range-val" id="sat-satur-val">0</span>
                   </div>
                 </div>
+                <div class="input-group" style="flex-direction:row;align-items:center;gap:8px;">
+                  <input type="checkbox" id="sat-autolevels" checked style="flex:0 0 auto;margin:0;">
+                  <label for="sat-autolevels" style="margin:0;">Auto levels <span class="hint">(de-haze before the trims below)</span></label>
+                </div>
                 <div class="input-group">
                   <label for="sat-contrast">Contrast</label>
                   <div class="range-row">
@@ -1596,8 +1600,15 @@ input[type="color"]::-moz-color-swatch { border: none; border-radius: 3px; box-s
             </div>
           </div>
           <!-- Satellite-photo-only refinements -->
+          <div id="sat-deshade-group" class="input-group" style="display:none;">
+            <label for="sat-deshade">Flatten shading <span class="hint">(spend colors on ground cover, not sun angle)</span></label>
+            <div class="range-row">
+              <input type="range" id="sat-deshade" min="0" max="100" step="5" value="60" oninput="document.getElementById('sat-deshade-val').textContent=this.value=='0'?'off':this.value+'%'">
+              <span class="range-val" id="sat-deshade-val">60%</span>
+            </div>
+          </div>
           <div id="sat-cap-group" class="input-group" style="display:none;">
-            <label for="sat-cap">Elevation cap <span class="hint">(treeline — pushes shaded high slopes off low colors)</span></label>
+            <label for="sat-cap">Elevation cap <span class="hint">(treeline — usually unnecessary once shading is flattened)</span></label>
             <div class="range-row">
               <input type="range" id="sat-cap" min="0" max="100" step="5" value="0" oninput="document.getElementById('sat-cap-val').textContent=this.value=='0'?'off':this.value+'%'">
               <span class="range-val" id="sat-cap-val">off</span>
@@ -1620,10 +1631,10 @@ input[type="color"]::-moz-color-swatch { border: none; border-radius: 3px; box-s
               </div>
             </div>
             <div class="input-group">
-              <label for="color-overlap">Color overlap (mm) <span class="hint">(fewer sliced gaps ↔ more bleed · 0 = off)</span></label>
+              <label for="color-overlap">Color overlap (mm) <span class="hint">(fewer sliced gaps ↔ more bleed · 0 = off · capped by grid pitch)</span></label>
               <div class="range-row">
-                <input type="range" id="color-overlap" min="0" max="0.6" step="0.05" value="0.15" oninput="document.getElementById('color-overlap-val').textContent=this.value=='0'?'off':this.value+'mm'">
-                <span class="range-val" id="color-overlap-val">0.15mm</span>
+                <input type="range" id="color-overlap" min="0" max="0.8" step="0.05" value="0.4" oninput="document.getElementById('color-overlap-val').textContent=this.value=='0'?'off':this.value+'mm'">
+                <span class="range-val" id="color-overlap-val">0.40mm</span>
               </div>
             </div>
             <div class="threshold-row">
@@ -3096,9 +3107,19 @@ const Satellite = {
   },
 };
 
+// Smallest perceptual gap allowed between two derived band colours, as CIELAB ΔE76. Each band
+// costs a real AMS slot, so two centroids that converge to within a few ΔE spend two filaments
+// on a difference nobody can see. ~12 is well above the ~2.3 just-noticeable threshold — it is
+// roughly the distance between two greens you can actually name apart.
+const MIN_CENTROID_DE = 12;
+
 // K-means on RGB samples (only where mask[i] truthy). Returns { centroids:[[r,g,b],…],
 // assign:Int16Array }. assign[i] = cluster index for masked pixels, -1 otherwise.
-function kmeansRGB(rgb, mask, n, k, iters) {
+// `tintRgb` (optional) — the image each band's PRINTED colour is measured from, when that
+// differs from the image being clustered. Used by the de-shade path: cluster on flattened
+// reflectance so the splits follow land cover, but take the tint from the natural photo so the
+// print keeps its real light.
+function kmeansRGB(rgb, mask, n, k, iters, tintRgb = null) {
   // Collect masked sample indices.
   const idxs = [];
   for (let i = 0; i < n; i++) if (mask[i]) idxs.push(i);
@@ -3136,28 +3157,66 @@ function kmeansRGB(rgb, mask, n, k, iters) {
 
   // Lloyd iterations in LAB.
   const assign = new Int16Array(n).fill(-1);
-  for (let it = 0; it < iters; it++) {
-    for (const i of idxs) {
-      let best = 0, bd = Infinity;
-      for (let c = 0; c < k; c++) { const dd = d2(i, cents[c]); if (dd < bd) { bd = dd; best = c; } }
-      assign[i] = best;
+  const lloyd = (rounds) => {
+    for (let it = 0; it < rounds; it++) {
+      for (const i of idxs) {
+        let best = 0, bd = Infinity;
+        for (let c = 0; c < k; c++) { const dd = d2(i, cents[c]); if (dd < bd) { bd = dd; best = c; } }
+        assign[i] = best;
+      }
+      const sum = Array.from({length:k}, () => [0,0,0,0]); // L,a,b,count
+      for (const i of idxs) { const c = assign[i]; sum[c][0]+=lab[i*3]; sum[c][1]+=lab[i*3+1]; sum[c][2]+=lab[i*3+2]; sum[c][3]++; }
+      for (let c = 0; c < k; c++) if (sum[c][3]) cents[c] = [sum[c][0]/sum[c][3], sum[c][1]/sum[c][3], sum[c][2]/sum[c][3]];
     }
-    const sum = Array.from({length:k}, () => [0,0,0,0]); // L,a,b,count
-    for (const i of idxs) { const c = assign[i]; sum[c][0]+=lab[i*3]; sum[c][1]+=lab[i*3+1]; sum[c][2]+=lab[i*3+2]; sum[c][3]++; }
-    for (let c = 0; c < k; c++) if (sum[c][3]) cents[c] = [sum[c][0]/sum[c][3], sum[c][1]/sum[c][3], sum[c][2]/sum[c][3]];
+  };
+  lloyd(iters);
+
+  // Minimum-separation pass. Lloyd optimises total variance and is perfectly happy to park two
+  // centres a couple of ΔE apart on a broad, smooth region — which costs two filament slots for
+  // one visible colour. Where that happened, recycle the smaller of the pair onto the point
+  // currently worst served by any centre (the same D² criterion the k-means++ seeding uses) and
+  // let a few more Lloyd rounds settle it.
+  for (let round = 0; round < 4 && k > 1; round++) {
+    let ca = 0, cb = 1, closest = Infinity;
+    for (let i = 0; i < k; i++) {
+      for (let j = i + 1; j < k; j++) {
+        const dl = cents[i][0]-cents[j][0], da = cents[i][1]-cents[j][1], db = cents[i][2]-cents[j][2];
+        const d = dl*dl + da*da + db*db;
+        if (d < closest) { closest = d; ca = i; cb = j; }
+      }
+    }
+    if (closest >= MIN_CENTROID_DE * MIN_CENTROID_DE) break;   // all pairs comfortably apart
+    const sizes = new Int32Array(k);
+    for (const i of idxs) if (assign[i] >= 0) sizes[assign[i]]++;
+    const loser = sizes[ca] <= sizes[cb] ? ca : cb;            // keep the one covering more area
+    let pick = -1, far = -1;
+    for (const i of idxs) {
+      let dmin = Infinity;
+      for (let c = 0; c < k; c++) { const d = d2(i, cents[c]); if (d < dmin) dmin = d; }
+      if (dmin > far) { far = dmin; pick = i; }
+    }
+    if (pick < 0 || far <= 0) break;                           // nothing left to separate onto
+    cents[loser] = [lab[pick*3], lab[pick*3+1], lab[pick*3+2]];
+    lloyd(3);
   }
 
-  // The colour we PRINT for each band is the mean *RGB* of its members (the true average
-  // surface colour), accumulated separately from the LAB centres used for clustering.
-  let gr=0, gg=0, gb=0;
-  const rgbSum = Array.from({length:k}, () => [0,0,0,0]);
+  // The colour we PRINT for each band is its mean in LAB, converted back to sRGB. The main
+  // reason this is not just the mean of the members' sRGB bytes (which lands within about a
+  // channel value of it) is `tintRgb`: it lets the tint be measured from a different image
+  // than the one clustered, which is what keeps de-shaded clustering from flattening the
+  // printed colours. Defaults to the clustered image.
+  const tintLab = tintRgb ? rgbToLab(tintRgb, n) : lab;
+  let gL=0, ga=0, gb2=0;
+  const labSum = Array.from({length:k}, () => [0,0,0,0]);
   for (const i of idxs) {
     const c = assign[i];
-    rgbSum[c][0]+=rgb[i*3]; rgbSum[c][1]+=rgb[i*3+1]; rgbSum[c][2]+=rgb[i*3+2]; rgbSum[c][3]++;
-    gr+=rgb[i*3]; gg+=rgb[i*3+1]; gb+=rgb[i*3+2];
+    labSum[c][0]+=tintLab[i*3]; labSum[c][1]+=tintLab[i*3+1]; labSum[c][2]+=tintLab[i*3+2]; labSum[c][3]++;
+    gL+=tintLab[i*3]; ga+=tintLab[i*3+1]; gb2+=tintLab[i*3+2];
   }
-  const gm = [gr/idxs.length, gg/idxs.length, gb/idxs.length]; // fallback for empty clusters
-  const rgbCent = rgbSum.map(s => s[3] ? [s[0]/s[3], s[1]/s[3], s[2]/s[3]] : gm.slice());
+  const gm = labToRgb(gL/idxs.length, ga/idxs.length, gb2/idxs.length); // fallback for empty clusters
+  const rgbCent = labSum.map(s => s[3]
+    ? labToRgb(s[0]/s[3], s[1]/s[3], s[2]/s[3])
+    : gm.slice());
 
   // Sort clusters by luminance (low→high) so band order is stable & shaded.
   const lumOf = c => 0.299*c[0]+0.587*c[1]+0.114*c[2];
@@ -3165,8 +3224,12 @@ function kmeansRGB(rgb, mask, n, k, iters) {
   const remap = new Int16Array(k);
   order.forEach((old, neu) => { remap[old] = neu; });
   const centroids = order.map(old => rgbCent[old].map(v => Math.round(v)));
+  // Clustering-space centres in the same order. Identical to `centroids` unless a separate
+  // tint image was supplied — callers that assign pixels by nearest centre must compare
+  // against these, since the pixels they are comparing live in the clustered image.
+  const refs = order.map(old => labToRgb(cents[old][0], cents[old][1], cents[old][2]));
   for (const i of idxs) assign[i] = remap[assign[i]];
-  return { centroids, assign };
+  return { centroids, refs, assign };
 }
 
 // sRGB bytes → CIELAB (D65), as a Float32Array(3n): [L,a,b, L,a,b, …]. Perceptual
@@ -3187,6 +3250,146 @@ function rgbToLab(rgb, n) {
     out[i*3]   = 116 * y - 16;       // L
     out[i*3+1] = 500 * (x - y);      // a
     out[i*3+2] = 200 * (y - z);      // b
+  }
+  return out;
+}
+
+// CIELAB (D65) → sRGB bytes [r,g,b]. Exact inverse of rgbToLab (verified round-trip over the
+// sRGB cube: 0 channel error). Band colours are averaged in LAB and converted back through
+// this rather than averaged as sRGB bytes. Note this is a small difference in practice —
+// sRGB's gamma already approximates L*, so the two means land within a channel value of each
+// other on real clusters. It is here because it is the principled centre and because it lets
+// the tint be measured from a different image than the one clustered, which the de-shade path
+// requires; it is not on its own a visible improvement.
+function labToRgb(L, a, b) {
+  const fy = (L + 16) / 116, fx = fy + a / 500, fz = fy - b / 200;
+  const fi = t => t > 0.206893 ? t*t*t : (t - 16 / 116) / 7.787;
+  const x = fi(fx) * 0.95047, y = fi(fy) * 1.00000, z = fi(fz) * 1.08883;
+  let r =  x*3.2406 + y*-1.5372 + z*-0.4986;
+  let g =  x*-0.9689 + y*1.8758 + z*0.0415;
+  let bb = x*0.0557 + y*-0.2040 + z*1.0570;
+  const gam = v => {
+    v = v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(Math.max(0, v), 1 / 2.4) - 0.055;
+    return Math.max(0, Math.min(255, Math.round(v * 255)));
+  };
+  return [gam(r), gam(g), gam(bb)];
+}
+
+// Lambertian hillshade of an elevation grid → Float32Array(w*h) of shading terms in [0.15, 1].
+// `azDeg` is the compass bearing the light comes FROM (0 = north, 90 = east); `altDeg` is its
+// height above the horizon. The default is the cartographic north-west convention, which is
+// what a hillshade PREVIEW wants. It is emphatically NOT where the sun was when the imagery
+// was captured, so the de-shade path measures that separately — see estimateSunAzimuth.
+function hillshadeGrid(elevData, azDeg = 315, altDeg = 45) {
+  const w = elevData.width, h = elevData.height, d = elevData.data;
+  // Real horizontal pixel spacing (m) so the surface normal uses true slope.
+  const midLatR = (elevData.bounds.north + elevData.bounds.south) / 2 * Math.PI / 180;
+  const dxM = Math.abs(elevData.bounds.east - elevData.bounds.west) * Math.cos(midLatR) * 111320 / (w - 1) || 1;
+  const dyM = Math.abs(elevData.bounds.north - elevData.bounds.south) * 111320 / (h - 1) || 1;
+  const out = new Float32Array(w * h);
+  const az = azDeg * Math.PI / 180, alt = altDeg * Math.PI / 180;
+  // Grid rows run north→south while the mesh's +y runs north, so the bearing's northward
+  // component is negated here to stay in grid space (az 315 → lx −0.5, ly −0.5, as before).
+  const lx = Math.sin(az) * Math.cos(alt), ly = -Math.cos(az) * Math.cos(alt), lz = Math.sin(alt);
+  const llen = Math.hypot(lx, ly, lz);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const xl = x > 0 ? x-1 : x, xr = x < w-1 ? x+1 : x;
+      const yu = y > 0 ? y-1 : y, yd = y < h-1 ? y+1 : y;
+      const dzdx = (d[y*w + xr] - d[y*w + xl]) / ((xr - xl) * dxM);
+      const dzdy = (d[yd*w + x] - d[yu*w + x]) / ((yd - yu) * dyM);
+      const nlen = Math.hypot(dzdx, dzdy, 1); // surface normal (−dzdx, −dzdy, 1)
+      const s = (-dzdx*lx - dzdy*ly + 1*lz) / (nlen * llen);
+      out[y*w + x] = Math.max(0.15, Math.min(1, s));
+    }
+  }
+  return out;
+}
+
+// Recover the illumination bearing of a photo by correlating its luminance against modelled
+// hillshades, and report how strong that correlation is.
+//
+// Getting this wrong is worse than not de-shading at all: divide by a shading term that runs
+// OPPOSITE the real one and the correction amplifies exactly the variance it was meant to
+// remove. Measured on a synthetic cone, a de-shade aimed 180° off drops ground-cover purity
+// from 98% to 81%. It cannot be assumed either — the cartographic north-west default is close
+// to backwards for Sentinel-2, whose ~10:30 local overpass puts the sun in the south-east.
+//
+// Returns { az, r }. A low r means the tile is too flat, too uniform, or too overcast for the
+// terrain to be driving its brightness, and the caller should leave the image alone.
+function estimateSunAzimuth(elevData, rgb) {
+  const n = elevData.width * elevData.height;
+  const lum = new Float32Array(n);
+  for (let i = 0; i < n; i++) lum[i] = 0.299*rgb[i*3] + 0.587*rgb[i*3+1] + 0.114*rgb[i*3+2];
+  let lm = 0;
+  for (let i = 0; i < n; i++) lm += lum[i];
+  lm /= (n || 1);
+  let lv = 0;
+  for (let i = 0; i < n; i++) { const d = lum[i] - lm; lv += d * d; }
+  if (lv <= 0) return { az: 315, r: 0 };
+
+  let bestAz = 315, bestR = -Infinity;
+  for (let az = 0; az < 360; az += 22.5) {
+    const sh = hillshadeGrid(elevData, az);
+    let sm = 0;
+    for (let i = 0; i < n; i++) sm += sh[i];
+    sm /= n;
+    let cov = 0, sv = 0;
+    for (let i = 0; i < n; i++) {
+      const ds = sh[i] - sm, dl = lum[i] - lm;
+      cov += ds * dl; sv += ds * ds;
+    }
+    const r = sv > 0 ? cov / Math.sqrt(sv * lv) : 0;
+    if (r > bestR) { bestR = r; bestAz = az; }
+  }
+  return { az: bestAz, r: bestR };
+}
+
+// Divide the modelled terrain shading out of a photo, so what remains approximates surface
+// REFLECTANCE. This is the single biggest lever on colour separation: a mountain photo's
+// dominant variance is the sun, not the ground, so k-means spends slots distinguishing a
+// sunlit from a shaded slope of the same forest while forest / rock / scree collapse together.
+// De-shading re-points that variance at land cover. `strength` (0..1) blends toward the fully
+// divided image; the mean shading term is factored back in so overall exposure is unchanged.
+function deshadeRGB(rgb, shade, strength) {
+  if (!(strength > 0)) return rgb;
+  const n = shade.length;
+  let mean = 0;
+  for (let i = 0; i < n; i++) mean += shade[i];
+  mean /= (n || 1);
+  const out = new Uint8Array(rgb.length);
+  for (let i = 0; i < n; i++) {
+    // Blend the gain toward 1 rather than blending the two images: keeps the correction
+    // multiplicative, so a half-strength de-shade is still a plain exposure change per pixel.
+    const gain = 1 + ((mean / Math.max(shade[i], 1e-3)) - 1) * strength;
+    for (let k = 0; k < 3; k++) {
+      const v = rgb[i*3 + k] * gain;
+      out[i*3 + k] = v < 0 ? 0 : (v > 255 ? 255 : v);
+    }
+  }
+  return out;
+}
+
+// Per-channel percentile stretch. Satellite imagery arrives hazy and low-contrast (Sentinel-2
+// carries a blue cast in particular), so the clusters only ever occupy part of the available
+// range. Stretching each channel independently expands the range AND removes the cast, giving
+// k-means more room to separate before any of the manual trims are applied.
+function autoLevels(rgb, n, loPct, hiPct) {
+  const out = new Uint8Array(rgb.length);
+  for (let k = 0; k < 3; k++) {
+    const hist = new Int32Array(256);
+    for (let i = 0; i < n; i++) hist[rgb[i*3 + k]]++;
+    const loN = n * loPct, hiN = n * hiPct;
+    let acc = 0, lo = 0, hi = 255;
+    for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= loN) { lo = v; break; } }
+    acc = 0;
+    for (let v = 255; v >= 0; v--) { acc += hist[v]; if (acc >= n - hiN) { hi = v; break; } }
+    if (hi <= lo) { for (let i = 0; i < n; i++) out[i*3 + k] = rgb[i*3 + k]; continue; }
+    const scale = 255 / (hi - lo);
+    for (let i = 0; i < n; i++) {
+      const v = (rgb[i*3 + k] - lo) * scale;
+      out[i*3 + k] = v < 0 ? 0 : (v > 255 ? 255 : v);
+    }
   }
   return out;
 }
@@ -4714,6 +4917,7 @@ const MeshGen = {
     const pixelBands = new Uint8Array(w * h);
     let satellite = false;        // per-region (top-shell) coloring flag
     let advNames = null;          // class names for the legend (land-cover mode)
+
     const kind = (colorImage && colorImage.width === w && colorImage.height === h)
       ? colorImage.kind : null;
     if (kind === 'photo' || kind === 'landcover' || kind === 'hybrid') {
@@ -4722,24 +4926,45 @@ const MeshGen = {
       const landMask = new Uint8Array(w * h);
       for (let i = 0; i < w * h; i++) landMask[i] = waterMask[i] ? 0 : 1;
       let bandColors = []; // hex per land band 1..numLandTints
-      let srcRgb = null;   // exposure-adjusted source image (photo); set below, used by SLIC
+      let srcRgb = null;   // CLASSIFICATION image: exposure-adjusted, optionally de-shaded
+      let tintRgb = null;  // TINT image: same, minus de-shading — what the bands print as
 
-      if (kind === 'photo') {
-        // Photographic: cluster land satellite colours into the land tints.
-        const toHex = c => '#' + c.map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
-        // Exposure pre-adjust (Fine-tune sliders): contrast/brightness applied to the
-        // source image before colours are derived, so the palette reflects it too.
+      // Shared prep for the two photo-bearing modes. Auto-levels first (so the manual trims
+      // stay relative to a normalised image), then the trims, then de-shading — which is split
+      // off into srcRgb alone, because flattened reflectance is the right thing to CLUSTER on
+      // but the wrong thing to PRINT: it would hand back a model with all the light removed.
+      const preparePhoto = () => {
+        let base = colorImage.rgb;
+        if (document.getElementById('sat-autolevels')?.checked) base = autoLevels(base, w * h, 0.01, 0.99);
         const cF = 1 + (parseFloat(document.getElementById('sat-contrast')?.value) || 0) / 100;
         const bO = parseFloat(document.getElementById('sat-bright')?.value) || 0;
         const sF = 1 + (parseFloat(document.getElementById('sat-satur')?.value) || 0) / 100;
-        srcRgb = adjustExposure(colorImage.rgb, cF, bO, sF);
+        tintRgb = adjustExposure(base, cF, bO, sF);
+        srcRgb = tintRgb;
+        const deshade = (parseFloat(document.getElementById('sat-deshade')?.value) || 0) / 100;
+        if (deshade > 0) {
+          // Measure where the light actually came from rather than assuming it. Below r≈0.15
+          // the terrain is not what is driving the image's brightness (flat ground, cloud, a
+          // uniform canopy), and dividing by a shading term fitted to noise would only add
+          // error — so leave the photo alone in that case.
+          const sun = estimateSunAzimuth(elevData, tintRgb);
+          if (sun.r >= 0.15) {
+            srcRgb = deshadeRGB(tintRgb, hillshadeGrid(elevData, sun.az), deshade);
+          }
+        }
+      };
+
+      if (kind === 'photo') {
+        // Photographic: cluster land satellite colours into the land tints.
+        const toHex = c => '#' + c.map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+        preparePhoto();
         // High-elevation split (8-colour only): rock is a small share of a tile's area,
         // so global k-means leaves it one flat colour. Dedicate kHigh tints to a
         // separately-clustered high-elevation tier so rock carries light/shadow detail.
         const highCount = (numColors === 8)
           ? (parseInt(document.getElementById('sat-high')?.value) || 0) : 0;
         const assignGlobal = () => {
-          const { centroids, assign } = kmeansRGB(srcRgb, landMask, w * h, numLandTints, 12);
+          const { centroids, assign } = kmeansRGB(srcRgb, landMask, w * h, numLandTints, 12, tintRgb);
           for (let i = 0; i < w * h; i++) pixelBands[i] = waterMask[i] ? 0 : (assign[i] >= 0 ? assign[i] + 1 : 1);
           bandColors = centroids.map(toHex);
         };
@@ -4765,18 +4990,20 @@ const MeshGen = {
             // then assigned to their nearest centroid by COLOUR (not by a hard elevation
             // cut), so the rock's light/shadow tints follow real shading instead of
             // ringing the mountain at the cutoff elevation (which read as "banding").
-            const lo = kmeansRGB(srcRgb, lowMask, w * h, kLow, 12);
-            const hi = kmeansRGB(srcRgb, highMask, w * h, kHigh, 12);
-            const cents = [...lo.centroids, ...hi.centroids];
+            const lo = kmeansRGB(srcRgb, lowMask, w * h, kLow, 12, tintRgb);
+            const hi = kmeansRGB(srcRgb, highMask, w * h, kHigh, 12, tintRgb);
+            const cents = [...lo.centroids, ...hi.centroids];   // printed tints
+            const refs  = [...lo.refs,      ...hi.refs];        // clustering-space centres
             const lumOf = c => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
             const ord = cents.map((c, i) => i).sort((a, b) => lumOf(cents[a]) - lumOf(cents[b]));
-            const pal = ord.map(i => cents[i]);             // dark→light, stable palette
+            const pal    = ord.map(i => cents[i]);          // dark→light, stable palette
+            const palRef = ord.map(i => refs[i]);           // same order, matched to srcRgb
             for (let i = 0; i < w * h; i++) {
               if (waterMask[i]) { pixelBands[i] = 0; continue; }
               const r = srcRgb[i*3], g = srcRgb[i*3+1], b = srcRgb[i*3+2];
               let best = 0, bd = Infinity;
-              for (let c = 0; c < pal.length; c++) {
-                const dr = r-pal[c][0], dg = g-pal[c][1], db = b-pal[c][2];
+              for (let c = 0; c < palRef.length; c++) {
+                const dr = r-palRef[c][0], dg = g-palRef[c][1], db = b-palRef[c][2];
                 const d = dr*dr + dg*dg + db*db;
                 if (d < bd) { bd = d; best = c; }
               }
@@ -4840,10 +5067,7 @@ const MeshGen = {
         // dominant forest); the photo supplies each region's TINT and, via SLIC below, its
         // boundaries. The photo also arbitrates snow, the one class the annual land-cover
         // composite is least reliable on over peaks.
-        const cF = 1 + (parseFloat(document.getElementById('sat-contrast')?.value) || 0) / 100;
-        const bO = parseFloat(document.getElementById('sat-bright')?.value) || 0;
-        const sF = 1 + (parseFloat(document.getElementById('sat-satur')?.value) || 0) / 100;
-        srcRgb = adjustExposure(colorImage.rgb, cF, bO, sF);
+        preparePhoto();
 
         const LC_SNOW  = LANDCOVER_CLASSES.findIndex(c => c.name === 'Snow/Ice');
         const LC_BARE  = LANDCOVER_CLASSES.findIndex(c => c.name === 'Bare');
@@ -4859,7 +5083,10 @@ const MeshGen = {
 
         // Snow arbitration thresholds from the photo: a brightness cutoff (snow photographs
         // far brighter than rock/forest) and a treeline elevation (alpine candidate zone).
-        const lumAt = i => 0.299*srcRgb[i*3] + 0.587*srcRgb[i*3+1] + 0.114*srcRgb[i*3+2];
+        // Snow arbitration reads the SHADED image on purpose: brightThr below is clamped to
+        // absolute values (150…235) calibrated against raw photo brightness, and de-shading
+        // rescales what "bright" means, which would drift those clamps off their calibration.
+        const lumAt = i => 0.299*tintRgb[i*3] + 0.587*tintRgb[i*3+1] + 0.114*tintRgb[i*3+2];
         let lsum = 0, lsq = 0, ln = 0; const landElevs = [];
         for (let i = 0; i < w * h; i++) { if (waterMask[i]) continue; const L = lumAt(i); lsum += L; lsq += L*L; ln++; landElevs.push(origData[i]); }
         let treelineElev = Infinity, brightThr = Infinity;
@@ -4936,11 +5163,10 @@ const MeshGen = {
         advNames = ['Water', ...kept.map(c => LANDCOVER_CLASSES[c].name)];
       }
 
-      const detail = parseFloat(document.getElementById('sat-detail')?.value) || 5;
-
       // Island removal: flood-fill each land colour into connected components and merge
       // any below `minIsland` px into its dominant land neighbour. Used as a printability
-      // floor (photo) and as the Detail-scaled cleaner (land cover).
+      // floor (photo), as the Detail-scaled cleaner (land cover), and to clear the speckle
+      // DEM noise leaves along an elevation threshold.
       const removeIslands = (minIsland) => {
         for (let pass = 0; pass < 6 && minIsland > 0; pass++) {
           const lbl = new Int32Array(w * h).fill(-1);
@@ -4979,6 +5205,37 @@ const MeshGen = {
           if (!changedAny) break;
         }
       };
+
+      // 3×3 majority filter over the land bands (water stays authoritative). Unlike island
+      // removal this also straightens a FRAYED boundary — a speckled edge is one large connected
+      // component, not an island, so flood-fill alone can never clear it.
+      const despeckle3x3 = (passes) => {
+        for (let pass = 0; pass < passes; pass++) {
+          const src = pixelBands.slice();
+          for (let r = 0; r < h; r++) {
+            for (let c = 0; c < w; c++) {
+              const i = r * w + c;
+              if (waterMask[i]) continue; // water stays authoritative
+              const cnt = {};
+              for (let dr = -1; dr <= 1; dr++) {
+                for (let dc = -1; dc <= 1; dc++) {
+                  const rr = r + dr, cc = c + dc;
+                  if (rr < 0 || rr >= h || cc < 0 || cc >= w) continue;
+                  const b = src[rr * w + cc];
+                  if (b === 0) continue; // ignore water neighbours
+                  cnt[b] = (cnt[b] || 0) + 1;
+                }
+              }
+              let best = src[i], bn = -1;
+              for (const k in cnt) if (cnt[k] > bn) { bn = cnt[k]; best = +k; }
+              pixelBands[i] = best;
+            }
+          }
+        }
+      };
+
+
+      const detail = parseFloat(document.getElementById('sat-detail')?.value) || 5;
 
       if (kind === 'photo' || kind === 'hybrid') {
         // Snap the per-pixel bands onto SLIC superpixels so colour borders land on real
@@ -5033,47 +5290,28 @@ const MeshGen = {
         const detailIsland = Math.round(Math.pow(Math.max(0, 10 - detail) / 9, 1.3) * 0.011 * w * h);
         removeIslands(Math.max(minPrintPx, detailIsland));
 
-        // Hybrid: now that regions are final, set each band's printed colour to the MEAN
-        // PHOTO colour of its pixels (exposure/saturation-adjusted srcRgb). Land cover chose
-        // the regions; the photo chooses the tints — naturalistic, not the canned LULC hexes.
+        // Hybrid: now that regions are final, set each band's printed colour to the mean PHOTO
+        // colour of its pixels. Land cover chose the regions; the photo chooses the tints —
+        // naturalistic, not the canned LULC hexes. Averaged in LAB and read from tintRgb: the
+        // means have to come out perceptually centred (an sRGB mean drifts grey) and from the
+        // naturally-lit image, since srcRgb may have had its shading divided out.
         if (kind === 'hybrid') {
+          const tintLab = rgbToLab(tintRgb, w * h);
           const sum = Array.from({ length: numLandTints + 1 }, () => [0, 0, 0, 0]);
           for (let i = 0; i < w * h; i++) {
             const b = pixelBands[i];
             if (waterMask[i] || b < 1 || b > numLandTints) continue;
-            sum[b][0] += srcRgb[i*3]; sum[b][1] += srcRgb[i*3+1]; sum[b][2] += srcRgb[i*3+2]; sum[b][3]++;
+            sum[b][0] += tintLab[i*3]; sum[b][1] += tintLab[i*3+1]; sum[b][2] += tintLab[i*3+2]; sum[b][3]++;
           }
           const toHex = c => '#' + c.map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
           for (let b = 1; b <= numLandTints && b - 1 < bandColors.length; b++) {
-            if (sum[b][3]) bandColors[b-1] = toHex([sum[b][0]/sum[b][3], sum[b][1]/sum[b][3], sum[b][2]/sum[b][3]]);
+            if (sum[b][3]) bandColors[b-1] = toHex(labToRgb(sum[b][0]/sum[b][3], sum[b][1]/sum[b][3], sum[b][2]/sum[b][3]));
           }
         }
       } else {
         // Land cover (classified raster, already edge-clean): keep the 3×3 despeckle +
         // Detail-scaled island removal.
-        const despeckPasses = Math.max(0, Math.round((10 - detail) * 0.8)); // 1→7 … 10→0
-        for (let pass = 0; pass < despeckPasses; pass++) {
-          const src = pixelBands.slice();
-          for (let r = 0; r < h; r++) {
-            for (let c = 0; c < w; c++) {
-              const i = r * w + c;
-              if (waterMask[i]) continue; // water stays authoritative
-              const cnt = {};
-              for (let dr = -1; dr <= 1; dr++) {
-                for (let dc = -1; dc <= 1; dc++) {
-                  const rr = r + dr, cc = c + dc;
-                  if (rr < 0 || rr >= h || cc < 0 || cc >= w) continue;
-                  const b = src[rr * w + cc];
-                  if (b === 0) continue; // ignore water neighbours
-                  cnt[b] = (cnt[b] || 0) + 1;
-                }
-              }
-              let best = src[i], bn = -1;
-              for (const k in cnt) if (cnt[k] > bn) { bn = cnt[k]; best = +k; }
-              pixelBands[i] = best;
-            }
-          }
-        }
+        despeckle3x3(Math.max(0, Math.round((10 - detail) * 0.8))); // 1→7 … 10→0
         removeIslands(Math.round(Math.pow(Math.max(0, 10 - detail) / 9, 1.3) * 0.011 * w * h));
       }
 
@@ -5082,8 +5320,34 @@ const MeshGen = {
         const el = document.getElementById('adv-color-' + (c + 1));
         if (el) el.value = bandColors[c];
       }
+
+      // Report when the tile can't fill its colour budget. The separation pass pulls centroids
+      // apart wherever the imagery HAS distinct colours, but a uniform tile (farmland, unbroken
+      // forest) simply does not contain eight distinguishable ones — no clustering can invent
+      // them. Loading eight filaments for four visible colours costs swaps, purge and time, so
+      // say so before the print rather than after.
+      {
+        const kept = [];
+        for (const hex of bandColors) {
+          const l = rgbToLab(new Uint8Array([
+            parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16),
+          ]), 1);
+          if (kept.every(k => Math.hypot(l[0]-k[0], l[1]-k[1], l[2]-k[2]) >= MIN_CENTROID_DE)) {
+            kept.push([l[0], l[1], l[2]]);
+          }
+        }
+        if (bandColors.length && kept.length < bandColors.length) {
+          toast(`This area only yields ${kept.length} clearly distinct land color${kept.length === 1 ? '' : 's'} `
+              + `(${bandColors.length} requested) — the rest will look near-identical in the print.`, 7000);
+        }
+      }
       State.advNames = advNames; // class names for land-cover legend (else null)
     } else {
+      // Deliberately NOT despeckled. In this mode the bands are stacked elevation slabs, and
+      // _buildStackSolid derives their geometry from the thresholds directly rather than from
+      // pixelBands — so there is no speckled colour edge here to clean, and filtering this
+      // array would only desynchronise it from the slabs that actually get built (the flare
+      // and the print estimate both read it back as a description of the shipped mesh).
       for (let i = 0; i < w * h; i++) pixelBands[i] = waterMask[i] ? 0 : bandOf(origData[i]);
       State.advNames = null;
     }
@@ -5203,35 +5467,57 @@ const MeshGen = {
       triColors[i] = counts.indexOf(Math.max(...counts));
     }
 
+    // ── Shared terrain-triangle topology ─────────────────────────────────────
+    // Each quad (r,c) splits into Tri1 = (tl,bl,tr) and Tri2 = (tr,bl,br), so the diagonal
+    // always runs TR–BL. The smoothing, bowtie and vertex-band passes below all walk that
+    // same topology, so the helpers live here rather than being redeclared per block.
+    const QW = w - 1, QH = h - 1;        // quads per row / column
+    const numTerrainTris = 2 * QW * QH;  // terrain tris only (walls/base follow)
+
+    // Edge-adjacent terrain triangle indices for triangle ti.
+    const neighbors = (ti) => {
+      const qi = ti >> 1, which = ti & 1;
+      const r = Math.floor(qi / QW), c = qi % QW;
+      const out = [];
+      if (which === 0) {            // Tri1(r,c): neighbors are Tri2 of same / left / above
+        out.push(ti + 1);
+        if (c > 0)   out.push(2 * (r * QW + c - 1) + 1);
+        if (r > 0)   out.push(2 * ((r - 1) * QW + c) + 1);
+      } else {                      // Tri2(r,c): neighbors are Tri1 of same / below / right
+        out.push(ti - 1);
+        if (r < QH - 1) out.push(2 * ((r + 1) * QW + c));
+        if (c < QW - 1) out.push(2 * (r * QW + c + 1));
+      }
+      return out;
+    };
+
+    // All terrain triangles incident to the terrain vertex at grid position (vr, vc).
+    const getIncident = (vr, vc) => {
+      const out = [];
+      if (vr < QH && vc < QW) out.push(2 * (vr * QW + vc));                // as TL: Tri1
+      if (vr < QH && vc > 0)  out.push(2 * (vr * QW + vc - 1));            // as TR: Tri1
+      if (vr < QH && vc > 0)  out.push(2 * (vr * QW + vc - 1) + 1);        // as TR: Tri2
+      if (vr > 0  && vc < QW) out.push(2 * ((vr - 1) * QW + vc));          // as BL: Tri1
+      if (vr > 0  && vc < QW) out.push(2 * ((vr - 1) * QW + vc) + 1);      // as BL: Tri2
+      if (vr > 0  && vc > 0)  out.push(2 * ((vr - 1) * QW + vc - 1) + 1);  // as BR: Tri2
+      return out;
+    };
+
+    // Smallest colour region worth keeping, as a triangle count. A terrain triangle is half a
+    // grid cell, so ~1.5 mm² of print converts to a resolution-dependent count: the old fixed
+    // 4 is right at res ~256 but is 0.02 mm² at res 1024, far below anything a nozzle can lay.
+    const MIN_TRIS = Math.max(4, Math.round(1.5 / ((meshW / QW) * (meshH / QH) / 2)));
+
     // ── Color smoothing: eliminate isolated noise triangles ──────────────────
     // The slope+elevation classification produces many single-triangle or
     // 2-triangle "islands" (e.g. one locally flat triangle inside a hillside).
     // These create thousands of tiny per-color solids in the 3MF and cause
     // the slicer to report holes at every seam. Up to 5 passes: any
-    // edge-connected component of terrain triangles with fewer than 4 members
+    // edge-connected component of terrain triangles smaller than MIN_TRIS
     // is reassigned to its most common neighboring color.
-    {
-      const QW = w - 1, QH = h - 1;        // quads per row / column
-      const numTerrainTris = 2 * QW * QH;  // terrain tris only (walls/base follow)
-
-      // Return edge-adjacent terrain triangle indices for triangle ti
-      const neighbors = (ti) => {
-        const qi = ti >> 1, which = ti & 1;
-        const r = Math.floor(qi / QW), c = qi % QW;
-        const out = [];
-        if (which === 0) {            // Tri1(r,c): neighbors are Tri2 of same / left / above
-          out.push(ti + 1);
-          if (c > 0)   out.push(2 * (r * QW + c - 1) + 1);
-          if (r > 0)   out.push(2 * ((r - 1) * QW + c) + 1);
-        } else {                      // Tri2(r,c): neighbors are Tri1 of same / below / right
-          out.push(ti - 1);
-          if (r < QH - 1) out.push(2 * ((r + 1) * QW + c));
-          if (c < QW - 1) out.push(2 * (r * QW + c + 1));
-        }
-        return out;
-      };
-
-      const MIN_TRIS = 4;
+    // Returns true if it changed anything (the caller alternates it with the bowtie pass).
+    const smoothSmallRegions = () => {
+      let everChanged = false;
       for (let pass = 0; pass < 5; pass++) {
         const visited = new Uint8Array(numTerrainTris);
         let anyChanged = false;
@@ -5265,13 +5551,14 @@ const MeshGen = {
             if (best === color && nbrCount[0] > 0) best = 0; // only fall back to water if nothing else
             if (best !== color) {
               for (const ti of comp) triColors[ti] = best;
-              anyChanged = true;
+              anyChanged = true; everChanged = true;
             }
           }
         }
         if (!anyChanged) break;
       }
-    }
+      return everChanged;
+    };
 
     // ── Bowtie-vertex elimination ─────────────────────────────────────────────
     // After smoothing, some color regions still have "bowtie" / "figure-8"
@@ -5283,42 +5570,11 @@ const MeshGen = {
     // IMPORTANT: only reassign fans that belong to the SAME edge-connected
     // component. Fans that are already in different components will be separate
     // 3MF objects and don't share a wall vertex, so they are not a problem.
-    {
-      const QW = w - 1, QH = h - 1;
-      const numTerrainTris = 2 * QW * QH;
-
-      const neighbors = (ti) => {
-        const qi = ti >> 1, which = ti & 1;
-        const r = Math.floor(qi / QW), c = qi % QW;
-        const out = [];
-        if (which === 0) {
-          out.push(ti + 1);
-          if (c > 0)      out.push(2 * (r * QW + c - 1) + 1);
-          if (r > 0)      out.push(2 * ((r - 1) * QW + c) + 1);
-        } else {
-          out.push(ti - 1);
-          if (r < QH - 1) out.push(2 * ((r + 1) * QW + c));
-          if (c < QW - 1) out.push(2 * (r * QW + c + 1));
-        }
-        return out;
-      };
-
-      // All terrain triangles incident to terrain vertex at grid position (vr, vc).
-      const getIncident = (vr, vc) => {
-        const out = [];
-        if (vr < QH && vc < QW) out.push(2 * (vr * QW + vc));                // as TL: Tri1
-        if (vr < QH && vc > 0)  out.push(2 * (vr * QW + vc - 1));            // as TR: Tri1
-        if (vr < QH && vc > 0)  out.push(2 * (vr * QW + vc - 1) + 1);        // as TR: Tri2
-        if (vr > 0  && vc < QW) out.push(2 * ((vr - 1) * QW + vc));          // as BL: Tri1
-        if (vr > 0  && vc < QW) out.push(2 * ((vr - 1) * QW + vc) + 1);      // as BL: Tri2
-        if (vr > 0  && vc > 0)  out.push(2 * ((vr - 1) * QW + vc - 1) + 1);  // as BR: Tri2
-        return out;
-      };
-
-      // Detect and fix bowtie vertices. Reassigning a fan can create a new bowtie at
-      // an adjacent vertex, so repeat the sweep until stable (photographic per-region
-      // colouring needs several rounds; elevation banding usually settles in one).
-      let anyBowtieFix = false;
+    // Detect and fix bowtie vertices. Reassigning a fan can create a new bowtie at
+    // an adjacent vertex, so repeat the sweep until stable (photographic per-region
+    // colouring needs several rounds; elevation banding usually settles in one).
+    // Returns the number of fans reassigned.
+    const fixBowties = () => {
       let bowtieFixes = 0;
 
       for (let btSweep = 0; btSweep < 6; btSweep++) {
@@ -5399,7 +5655,6 @@ const MeshGen = {
               }
               if (best !== -1 && best !== color) {
                 for (const ti of fans[f]) triColors[ti] = best;
-                anyBowtieFix = true;
                 bowtieFixes++;
                 sweepFixes++;
               }
@@ -5409,39 +5664,27 @@ const MeshGen = {
        }
        if (sweepFixes === 0) break; // stable — no bowties left
       }
+      return bowtieFixes;
+    };
 
-      if (anyBowtieFix) {
-        console.log(`[TerraPrint] Fixed ${bowtieFixes} bowtie fan(s); running follow-up smoothing.`);
-        for (let pass = 0; pass < 5; pass++) {
-          const visited = new Uint8Array(numTerrainTris);
-          let anyChanged = false;
-          for (let start = 0; start < numTerrainTris; start++) {
-            if (visited[start]) continue;
-            const color = triColors[start];
-            const comp = [], q = [start]; visited[start] = 1;
-            for (let head = 0; head < q.length; head++) {
-              const curr = q[head]; comp.push(curr);
-              for (const nb of neighbors(curr)) {
-                if (!visited[nb] && triColors[nb] === color) { visited[nb] = 1; q.push(nb); }
-              }
-            }
-            if (comp.length < 4) {
-              const nbrCount = new Array(numColors).fill(0);
-              for (const ti of comp) {
-                for (const nb of neighbors(ti)) {
-                  if (triColors[nb] !== color) nbrCount[triColors[nb]]++;
-                }
-              }
-              let best = color, bestN = 0;
-              for (let k = 1; k < numColors; k++) {
-                if (nbrCount[k] > bestN) { bestN = nbrCount[k]; best = k; }
-              }
-              if (best === color && nbrCount[0] > 0) best = 0;
-              if (best !== color) { for (const ti of comp) triColors[ti] = best; anyChanged = true; }
-            }
-          }
-          if (!anyChanged) break;
-        }
+    // Run the two cleanups to a joint fixed point. They feed each other: smoothing merges a
+    // small region into a neighbour and can pinch it into a bowtie, while fixing a bowtie
+    // reassigns a fan and can strand a new small region. The previous order — smooth, fix
+    // bowties, then smooth once more — left that final smoothing pass unchecked, so any
+    // bowtie it created survived into the export as a non-manifold wall edge. On a noisy DEM
+    // in elevation-band mode that was reliably reproducible: 104 open edges at grid 220.
+    // Alternating until both report clean means the last thing to touch triColors is always
+    // a bowtie sweep that found nothing.
+    {
+      let rounds = 0, totalFixes = 0;
+      for (; rounds < 8; rounds++) {
+        const changed = smoothSmallRegions();
+        const fixes = fixBowties();
+        totalFixes += fixes;
+        if (!changed && !fixes) break;
+      }
+      if (totalFixes) {
+        console.log(`[TerraPrint] Fixed ${totalFixes} bowtie fan(s) over ${rounds + 1} smoothing round(s).`);
       }
     }
 
@@ -5464,6 +5707,31 @@ const MeshGen = {
           }
         }
         if (touched) triColors[i] = counts.indexOf(Math.max(...counts));
+      }
+    }
+
+    // ── Post-smoothing vertex bands ──────────────────────────────────────────
+    // `pixelBands` is the classifier's raw output; the smoothing and bowtie passes above then
+    // move colour boundaries in `triColors` without writing back. Anything reasoning about the
+    // SHIPPED geometry has to read the moved boundaries, not the raw ones — notably
+    // ThreeMFExport._flareOffset, which decides where to grow each cap so neighbouring colours
+    // overlap. Reading the stale array there left exactly the boundaries smoothing touched with
+    // no overlap at all, i.e. a visible colour gap. Derive a vertex-level map from triColors
+    // (majority among a vertex's incident terrain triangles) and hand that downstream.
+    const vertexBands = new Uint8Array(w * h);
+    {
+      const counts = new Array(numColors);
+      for (let vr = 0; vr < h; vr++) {
+        for (let vc = 0; vc < w; vc++) {
+          const v = vr * w + vc;
+          const inc = getIncident(vr, vc);
+          if (inc.length === 0) { vertexBands[v] = pixelBands[v]; continue; } // disc-masked corner
+          counts.fill(0);
+          for (const ti of inc) counts[triColors[ti]]++;
+          let best = 0, bn = -1;
+          for (let k = 0; k < numColors; k++) if (counts[k] > bn) { bn = counts[k]; best = k; }
+          vertexBands[v] = best;
+        }
       }
     }
 
@@ -5520,6 +5788,7 @@ const MeshGen = {
       triElevations,
       triSlopes,
       pixelBands,
+      vertexBands,
       waterMask,
       lakeElevMap,
       gridW: w,
@@ -5738,8 +6007,11 @@ const STLExport = {
 // the DOM at the start of each _buildTerrainSolids). A cap grows over its LOWER-index neighbours
 // through the FULL cap height, and caps are emitted in ascending band order, so the higher band
 // wins the overlap strip. Larger = fewer sliced gaps but more colour bleed/artifacting; 0 = off.
-// Default 0.15mm; the outer silhouette is always untouched.
-let COLOR_OVERLAP_MM = 0.15;
+// The outer silhouette is always untouched.
+// Default is one 0.4 mm extrusion. Below that the slicer can decline to lay any bead of the upper colour
+// in the overlap strip, so the boundary still slices as a hairline gap even when the geometry
+// overlaps correctly. _flareOffset caps the effective value at 0.45× the grid pitch.
+let COLOR_OVERLAP_MM = 0.4;
 
 // How far each photo colour cap extends DOWN into the single-colour Base (mm). The cap bottom
 // would otherwise sit exactly on the Base top (a coincident touch), so each cap — a separate 3MF
@@ -5764,7 +6036,10 @@ const PrintEstimate = {
 
   // Heightfield volume + per-band surface-Z ranges, straight from meshData (no solid rebuild).
   _scan(md) {
-    const gw = md.gridW, gh = md.gridH, V = md.vertices, pb = md.pixelBands, sm = md.shapeMask;
+    // Post-smoothing bands, so the mass split and tool-change count describe the mesh that
+    // actually ships rather than the classifier's raw output.
+    const gw = md.gridW, gh = md.gridH, V = md.vertices, sm = md.shapeMask;
+    const pb = md.vertexBands || md.pixelBands;
     const n = getBandConfig().colors.length;
     const cellArea = (md.meshW * md.meshH) / (gw * gh);   // mm² per grid vertex (heightfield)
     let vol = 0;
@@ -5998,7 +6273,11 @@ const ThreeMFExport = {
   // neighbouring colours overlap below the surface (see COLOR_OVERLAP_MM).
   _flareOffset(mesh, gi, bandIdx) {
     if (bandIdx == null || COLOR_OVERLAP_MM <= 0) return null;
-    const gw = mesh.gridW, gh = mesh.gridH, pb = mesh.pixelBands, sm = mesh.shapeMask;
+    // Post-smoothing bands: the caps are selected by triColors, so the flare has to read the
+    // boundaries triColors ended up with. mesh.pixelBands is the pre-smoothing classification
+    // and disagrees at exactly the boundaries the smoothing/bowtie passes moved.
+    const gw = mesh.gridW, gh = mesh.gridH, sm = mesh.shapeMask;
+    const pb = mesh.vertexBands || mesh.pixelBands;
     const r = (gi / gw) | 0, c = gi % gw;
     let dx = 0, dy = 0, hit = false;
     // model XY layout (MeshGen): +col → +x, +row(south) → −y
@@ -6013,8 +6292,14 @@ const ThreeMFExport = {
     look(r, c + 1, 1, 0); look(r, c - 1, -1, 0);
     look(r - 1, c, 0, 1); look(r + 1, c, 0, -1);
     if (!hit) return null;
+    // Clamp to a fraction of the grid pitch. The flare widens a region by moving its boundary
+    // vertices outward, so an offset larger than a cell can push past the neighbouring vertex
+    // and invert a thin region. At res 1024 / 150 mm a cell is only 0.147 mm, so even a modest
+    // overlap setting needs this ceiling.
+    const cellMm = Math.min(mesh.meshW / (gw - 1), mesh.meshH / (gh - 1));
+    const mag = Math.min(COLOR_OVERLAP_MM, cellMm * 0.45);
     const L = Math.hypot(dx, dy) || 1;
-    return [dx / L * COLOR_OVERLAP_MM, dy / L * COLOR_OVERLAP_MM];
+    return [dx / L * mag, dy / L * mag];
   },
 
   // Build the terrain colour-band solids as stacked horizontal slabs, driven by
@@ -6024,7 +6309,7 @@ const ThreeMFExport = {
   _buildTerrainSolids(mesh) {
     // Refresh the colour-overlap amount from the slider (used by _flareOffset below).
     const ov = parseFloat(document.getElementById('color-overlap')?.value);
-    COLOR_OVERLAP_MM = isFinite(ov) ? ov : 0.15;
+    COLOR_OVERLAP_MM = isFinite(ov) ? ov : 0.4;
 
     const cfg = getBandConfig();
     const colors = cfg.colors;
@@ -6131,33 +6416,19 @@ const ThreeMFExport = {
     const gw = mesh.gridW, gh = mesh.gridH, mv = mesh.vertices;
     const sm = mesh.shapeMask; // disc clip (circle selection); null = full rectangle
     const T = (r, c) => r * gw + c;
-    const STRIDE = gw * gh;
+    // Edge-key stride over VERTEX SLOTS. Each grid vertex yields at most 4 slots (one per
+    // incident quad, when every one of them is a separate fan), so this bounds the slot space.
+    const SS = 4 * gw * gh + 8;
 
-    const verts = [], tris = [], vmap = new Map();
-    const addV = (x, y, z) => {
-      const k = `${x.toFixed(3)},${y.toFixed(3)},${z.toFixed(3)}`;
-      let i = vmap.get(k);
-      if (i !== undefined) return i;
-      i = verts.length / 3;
-      verts.push(x, y, z);
-      vmap.set(k, i);
-      return i;
-    };
+    const verts = [], tris = [];
     const addT = (a, b, c) => { if (a !== b && b !== c && a !== c) tris.push(a, b, c); };
-    const top = gi => addV(mv[gi*3], mv[gi*3+1], spec.ceil(gi));
-    // Flare the bottom outward at colour interfaces so neighbouring solids overlap below the
-    // surface (deterministic per gi → walls and bottom cap dedup to the same flared vertex).
-    const bot = gi => {
-      const off = this._flareOffset(mesh, gi, bandIdx);
-      const x = mv[gi*3] + (off ? off[0] : 0), y = mv[gi*3+1] + (off ? off[1] : 0);
-      return addV(x, y, spec.floor(gi));
-    };
 
-    const fwd = new Set(); // directed grid edges of the top surface
+    // ── Pass 1: which quads belong to this band ──────────────────────────────
+    const QW = gw - 1, QH = gh - 1;
+    const active = new Uint8Array(QW * QH);
     let any = false;
-
-    for (let r = 0; r < gh - 1; r++) {
-      for (let c = 0; c < gw - 1; c++) {
+    for (let r = 0; r < QH; r++) {
+      for (let c = 0; c < QW; c++) {
         const TL = T(r,c), TR = T(r,c+1), BL = T(r+1,c), BR = T(r+1,c+1);
         // Disc clip: drop quads not fully inside the circle (directed-edge walls
         // below then wrap the circular boundary as a clean cliff).
@@ -6169,28 +6440,118 @@ const ThreeMFExport = {
           spec.ceil(BL) - spec.floor(BL), spec.ceil(BR) - spec.floor(BR)
         );
         if (thick <= 1e-6) continue;
+        active[r * QW + c] = 1;
         any = true;
-        // Top surface (normal +z)
-        addT(top(TL), top(BL), top(TR));
-        addT(top(TR), top(BL), top(BR));
-        // Bottom surface (normal −z, reversed winding)
-        addT(bot(TL), bot(TR), bot(BL));
-        addT(bot(TR), bot(BR), bot(BL));
-        // Record directed grid edges matching the top winding (for boundary walls)
-        fwd.add(TL*STRIDE + BL); fwd.add(BL*STRIDE + TR); fwd.add(TR*STRIDE + TL);
-        fwd.add(TR*STRIDE + BL); fwd.add(BL*STRIDE + BR); fwd.add(BR*STRIDE + TR);
+      }
+    }
+    if (!any) return null;
+
+    // ── Pass 2: split pinch vertices into fans ───────────────────────────────
+    // A band's quad region can touch itself at a single grid vertex — two blocks meeting
+    // corner-to-corner diagonally, which noisy terrain crossing a threshold produces
+    // constantly. Both blocks then want the same vertical wall edge top(v)↔bot(v), so that
+    // edge is emitted 4× instead of 2× and the solid reads as open (this is the same
+    // "bowtie" failure _buildBandSolid solves with union-find; the elevation-band path had
+    // no equivalent, which left elevation-banded exports non-watertight on rough DEMs).
+    // Give each corner-connected group of quads at a vertex its own vertex instance, so the
+    // two loops wall independently.
+    //
+    // Incident quads at grid vertex (vr,vc), and the grid edge through the vertex that makes
+    // each neighbouring pair genuinely adjacent (diagonal pairs touch only at the point):
+    //   NW=(vr-1,vc-1)  NE=(vr-1,vc)      NW–NE share the edge going up
+    //   SW=(vr,vc-1)    SE=(vr,vc)        SW–SE share the edge going down
+    //                                     NW–SW share the edge going left
+    //                                     NE–SE share the edge going right
+    const qAt = (qr, qc) => (qr >= 0 && qr < QH && qc >= 0 && qc < QW && active[qr * QW + qc])
+      ? qr * QW + qc : -1;
+    // fanOf.get(qi * 4 + corner) → instance index at that corner's grid vertex.
+    // corner order: 0 = TL, 1 = TR, 2 = BL, 3 = BR.
+    const fanOf = new Int32Array(QW * QH * 4).fill(-1);
+    for (let vr = 0; vr < gh; vr++) {
+      for (let vc = 0; vc < gw; vc++) {
+        // (quad, corner index this vertex occupies within it)
+        const NW = qAt(vr-1, vc-1), NE = qAt(vr-1, vc), SW = qAt(vr, vc-1), SE = qAt(vr, vc);
+        const inc = [[NW, 3], [NE, 2], [SW, 1], [SE, 0]];   // NW sees it as BR, NE as BL, …
+        const idx = { NW: 0, NE: 1, SW: 2, SE: 3 };
+        const grp = [-1, -1, -1, -1];
+        let next = 0;
+        const join = (a, b) => {
+          if (inc[a][0] < 0 || inc[b][0] < 0) return;
+          if (grp[a] < 0 && grp[b] < 0) { grp[a] = grp[b] = next++; }
+          else if (grp[a] < 0) grp[a] = grp[b];
+          else if (grp[b] < 0) grp[b] = grp[a];
+          else if (grp[a] !== grp[b]) {
+            const from = grp[b], to = grp[a];
+            for (let k = 0; k < 4; k++) if (grp[k] === from) grp[k] = to;
+          }
+        };
+        join(idx.NW, idx.NE); join(idx.SW, idx.SE);
+        join(idx.NW, idx.SW); join(idx.NE, idx.SE);
+        for (let k = 0; k < 4; k++) {
+          if (inc[k][0] < 0) continue;
+          if (grp[k] < 0) grp[k] = next++;             // isolated quad at this vertex
+          fanOf[inc[k][0] * 4 + inc[k][1]] = grp[k];
+        }
       }
     }
 
-    if (!any) return null;
+    // Vertex slots are keyed by (grid vertex, fan), so two loops meeting at a pinch get
+    // distinct top/bot vertices instead of sharing one.
+    const topSlot = new Map(), botSlot = new Map();
+    const top = (gi, fan) => {
+      const k = gi * 8 + fan;
+      let i = topSlot.get(k);
+      if (i === undefined) { i = verts.length / 3; verts.push(mv[gi*3], mv[gi*3+1], spec.ceil(gi)); topSlot.set(k, i); }
+      return i;
+    };
+    // Flare the bottom outward at colour interfaces so neighbouring solids overlap below the
+    // surface (deterministic per (gi,fan) → walls and bottom cap reuse the same flared vertex).
+    const bot = (gi, fan) => {
+      const k = gi * 8 + fan;
+      let i = botSlot.get(k);
+      if (i === undefined) {
+        const off = this._flareOffset(mesh, gi, bandIdx);
+        i = verts.length / 3;
+        verts.push(mv[gi*3] + (off ? off[0] : 0), mv[gi*3+1] + (off ? off[1] : 0), spec.floor(gi));
+        botSlot.set(k, i);
+      }
+      return i;
+    };
 
-    // Walls along boundary edges (directed grid edge with no reverse partner).
+    // ── Pass 3: emit surfaces, recording directed edges over SLOTS not grid vertices ──
+    const fwd = new Set();
+    for (let r = 0; r < QH; r++) {
+      for (let c = 0; c < QW; c++) {
+        const qi = r * QW + c;
+        if (!active[qi]) continue;
+        const TL = T(r,c), TR = T(r,c+1), BL = T(r+1,c), BR = T(r+1,c+1);
+        const fTL = fanOf[qi*4], fTR = fanOf[qi*4+1], fBL = fanOf[qi*4+2], fBR = fanOf[qi*4+3];
+        const tTL = top(TL,fTL), tTR = top(TR,fTR), tBL = top(BL,fBL), tBR = top(BR,fBR);
+        // Top surface (normal +z)
+        addT(tTL, tBL, tTR);
+        addT(tTR, tBL, tBR);
+        // Bottom surface (normal −z, reversed winding)
+        addT(bot(TL,fTL), bot(TR,fTR), bot(BL,fBL));
+        addT(bot(TR,fTR), bot(BR,fBR), bot(BL,fBL));
+        // Directed top-surface edges, in slot space so adjacent quads cancel and pinched
+        // ones do not. Keyed with SS, not STRIDE: slot indices are not grid indices and can
+        // exceed gw*gh once pinches add instances, which would alias distinct edges together.
+        fwd.add(tTL*SS + tBL); fwd.add(tBL*SS + tTR); fwd.add(tTR*SS + tTL);
+        fwd.add(tTR*SS + tBL); fwd.add(tBL*SS + tBR); fwd.add(tBR*SS + tTR);
+      }
+    }
+
+    // Walls along boundary edges (directed edge with no reverse partner).
+    const slotGi = new Map();
+    for (const [k, i] of topSlot) slotGi.set(i, Math.floor(k / 8));
+    const slotFan = new Map();
+    for (const [k, i] of topSlot) slotFan.set(i, k % 8);
     for (const ab of fwd) {
-      const a = Math.floor(ab / STRIDE), b = ab % STRIDE;
-      if (fwd.has(b*STRIDE + a)) continue; // interior edge — shared by 2 quads
-      const ta = top(a), tb = top(b), ba = bot(a), bb = bot(b);
-      addT(ta, ba, tb);
-      addT(tb, ba, bb);
+      const a = Math.floor(ab / SS), b = ab % SS;
+      if (fwd.has(b*SS + a)) continue; // interior edge — shared by 2 quads
+      const ba = bot(slotGi.get(a), slotFan.get(a)), bb = bot(slotGi.get(b), slotFan.get(b));
+      addT(a, ba, b);
+      addT(b, ba, bb);
     }
 
     return { v: verts, t: tris };
@@ -8315,9 +8676,10 @@ const Poster = {
   // poster never advertises a filament the print doesn't use.
   _presentBands(mesh, n) {
     const out = [];
-    if (mesh.pixelBands) {
+    const pb = mesh.vertexBands || mesh.pixelBands;   // post-smoothing: what actually ships
+    if (pb) {
       const seen = new Set();
-      for (let i = 0; i < mesh.pixelBands.length; i++) seen.add(mesh.pixelBands[i]);
+      for (let i = 0; i < pb.length; i++) seen.add(pb[i]);
       for (let i = 0; i < n; i++) if (seen.has(i)) out.push(i);
     }
     return out.length ? out : Array.from({ length: n }, (_, i) => i);
@@ -8868,8 +9230,9 @@ const Preview = {
       const { built } = ThreeMFExport._buildTerrainSolids(meshData);
       const nColors = getBandConfig().colors.length;
       const seen = new Array(nColors).fill(false);
-      for (let i = 0; i < meshData.pixelBands.length; i++) {
-        if (meshData.pixelBands[i] < nColors) seen[meshData.pixelBands[i]] = true;
+      const pb = meshData.vertexBands || meshData.pixelBands;  // post-smoothing: what ships
+      for (let i = 0; i < pb.length; i++) {
+        if (pb[i] < nColors) seen[pb[i]] = true;
       }
       const presentBands = [];
       for (let b = 0; b < nColors; b++) if (seen[b]) presentBands.push(b);
@@ -10084,32 +10447,16 @@ const Paint = {
 
   // Grayscale Lambertian hillshade of the elevation grid → offscreen canvas.
   _buildHillshade(ed) {
-    const w = ed.width, h = ed.height, d = ed.data;
-    // Real horizontal pixel spacing (m) so the surface normal uses true slope.
-    const midLatR = (ed.bounds.north + ed.bounds.south) / 2 * Math.PI / 180;
-    const dxM = Math.abs(ed.bounds.east - ed.bounds.west) * Math.cos(midLatR) * 111320 / (w - 1) || 1;
-    const dyM = Math.abs(ed.bounds.north - ed.bounds.south) * 111320 / (h - 1) || 1;
-
+    const w = ed.width, h = ed.height;
+    const shade = hillshadeGrid(ed);   // shared with the pre-clustering de-shade step
     const cv = document.createElement('canvas');
     cv.width = w; cv.height = h;
     const ctx = cv.getContext('2d');
     const img = ctx.createImageData(w, h);
-    // Light from the north-west, slightly above.
-    const lx = -0.5, ly = -0.5, lz = 0.7;
-    const llen = Math.hypot(lx, ly, lz);
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const xl = x > 0 ? x-1 : x, xr = x < w-1 ? x+1 : x;
-        const yu = y > 0 ? y-1 : y, yd = y < h-1 ? y+1 : y;
-        const dzdx = (d[y*w + xr] - d[y*w + xl]) / ((xr - xl) * dxM);
-        const dzdy = (d[yd*w + x] - d[yu*w + x]) / ((yd - yu) * dyM);
-        const nlen = Math.hypot(dzdx, dzdy, 1); // surface normal (−dzdx, −dzdy, 1)
-        let s = (-dzdx*lx - dzdy*ly + 1*lz) / (nlen * llen);
-        s = Math.max(0.15, Math.min(1, s));
-        const v = Math.round(40 + s * 175);
-        const o = (y*w + x) * 4;
-        img.data[o] = v; img.data[o+1] = v; img.data[o+2] = v; img.data[o+3] = 255;
-      }
+    for (let i = 0; i < w * h; i++) {
+      const v = Math.round(40 + shade[i] * 175);
+      const o = i * 4;
+      img.data[o] = v; img.data[o+1] = v; img.data[o+2] = v; img.data[o+3] = 255;
     }
     ctx.putImageData(img, 0, 0);
     this.baseCanvas = cv;
@@ -10409,6 +10756,8 @@ const Advanced = {
     const photoMode = (val === 'satellite' || val === 'hybrid');
     document.getElementById('sat-shape-group').style.display = photoMode ? 'block' : 'none';
     document.getElementById('sat-photo-group').style.display = photoMode ? 'block' : 'none';
+    // De-shading works off the photo, so it applies wherever a photo drives the colours.
+    document.getElementById('sat-deshade-group').style.display = photoMode ? 'block' : 'none';
     document.getElementById('sat-cap-group').style.display = (val === 'satellite') ? 'block' : 'none';
     this._updateSatHigh();
     this._syncTopSelect();
