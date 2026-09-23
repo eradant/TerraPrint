@@ -1579,8 +1579,8 @@ input[type="color"]::-moz-color-swatch { border: none; border-radius: 3px; box-s
                   </div>
                 </div>
                 <div class="input-group" style="flex-direction:row;align-items:center;gap:8px;">
-                  <input type="checkbox" id="sat-autolevels" checked style="flex:0 0 auto;margin:0;">
-                  <label for="sat-autolevels" style="margin:0;">Auto levels <span class="hint">(de-haze before the trims below)</span></label>
+                  <input type="checkbox" id="sat-autolevels" style="flex:0 0 auto;margin:0;">
+                  <label for="sat-autolevels" style="margin:0;">Auto levels <span class="hint">(expand contrast on hazy imagery)</span></label>
                 </div>
                 <div class="input-group">
                   <label for="sat-contrast">Contrast</label>
@@ -3119,7 +3119,13 @@ const MIN_CENTROID_DE = 12;
 // differs from the image being clustered. Used by the de-shade path: cluster on flattened
 // reflectance so the splits follow land cover, but take the tint from the natural photo so the
 // print keeps its real light.
-function kmeansRGB(rgb, mask, n, k, iters, tintRgb = null) {
+// `tintWeight` (optional) — per-pixel weight for that tint average. De-shading deliberately
+// merges a cover's sunlit and shaded pixels into ONE cluster, so an unweighted average lands
+// midway down the illumination range and every band prints dark and desaturated (measured:
+// snow averaging to mid-grey). Weighting toward well-lit pixels asks "what colour is this
+// ground in good light", which is the right question for a physical model that will cast its
+// own shadows under room light.
+function kmeansRGB(rgb, mask, n, k, iters, tintRgb = null, tintWeight = null) {
   // Collect masked sample indices.
   const idxs = [];
   for (let i = 0; i < n; i++) if (mask[i]) idxs.push(i);
@@ -3206,14 +3212,17 @@ function kmeansRGB(rgb, mask, n, k, iters, tintRgb = null) {
   // than the one clustered, which is what keeps de-shaded clustering from flattening the
   // printed colours. Defaults to the clustered image.
   const tintLab = tintRgb ? rgbToLab(tintRgb, n) : lab;
-  let gL=0, ga=0, gb2=0;
+  let gL=0, ga=0, gb2=0, gW=0;
   const labSum = Array.from({length:k}, () => [0,0,0,0]);
   for (const i of idxs) {
     const c = assign[i];
-    labSum[c][0]+=tintLab[i*3]; labSum[c][1]+=tintLab[i*3+1]; labSum[c][2]+=tintLab[i*3+2]; labSum[c][3]++;
-    gL+=tintLab[i*3]; ga+=tintLab[i*3+1]; gb2+=tintLab[i*3+2];
+    // Weights are strictly positive where supplied, so a cover that only ever appears in shade
+    // still gets a valid tint — just one dominated by its least-shaded pixels.
+    const wgt = tintWeight ? tintWeight[i] : 1;
+    labSum[c][0]+=tintLab[i*3]*wgt; labSum[c][1]+=tintLab[i*3+1]*wgt; labSum[c][2]+=tintLab[i*3+2]*wgt; labSum[c][3]+=wgt;
+    gL+=tintLab[i*3]*wgt; ga+=tintLab[i*3+1]*wgt; gb2+=tintLab[i*3+2]*wgt; gW+=wgt;
   }
-  const gm = labToRgb(gL/idxs.length, ga/idxs.length, gb2/idxs.length); // fallback for empty clusters
+  const gm = gW > 0 ? labToRgb(gL/gW, ga/gW, gb2/gW) : [128,128,128]; // fallback for empty clusters
   const rgbCent = labSum.map(s => s[3]
     ? labToRgb(s[0]/s[3], s[1]/s[3], s[2]/s[3])
     : gm.slice());
@@ -3370,26 +3379,33 @@ function deshadeRGB(rgb, shade, strength) {
   return out;
 }
 
-// Per-channel percentile stretch. Satellite imagery arrives hazy and low-contrast (Sentinel-2
-// carries a blue cast in particular), so the clusters only ever occupy part of the available
-// range. Stretching each channel independently expands the range AND removes the cast, giving
-// k-means more room to separate before any of the manual trims are applied.
+// Percentile contrast stretch for hazy, low-contrast satellite imagery.
+//
+// ONE offset and gain, shared by all three channels, derived from the pooled histogram — and
+// with headroom left at both ends. Stretching each channel to its own full range instead is
+// gray-world normalisation, and it wrecks the palette three ways: it rotates hues (measured at
+// up to 90° on real ground covers, turning green meadow orange), it equalises the channels so
+// saturation drains out, and it crushes the darkest and lightest covers to flat black and flat
+// white — snow came out as mid-grey with its chroma cut from 10.6 to 3.9, and a tenth of the
+// image went to near-black. Haze is a near-neutral additive veil, so a neutral subtraction is
+// the correct first-order inverse of it; trying to also correct its slight blue bias per
+// channel costs far more than it recovers.
 function autoLevels(rgb, n, loPct, hiPct) {
+  const hist = new Int32Array(256);
+  const total = n * 3;
+  for (let i = 0; i < total; i++) hist[rgb[i]]++;
+  let acc = 0, lo = 0, hi = 255;
+  for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= total * loPct) { lo = v; break; } }
+  acc = 0;
+  for (let v = 255; v >= 0; v--) { acc += hist[v]; if (acc >= total * (1 - hiPct)) { hi = v; break; } }
+  if (hi <= lo) return rgb;
+  // Map into [FLOOR, CEIL] rather than [0, 255]: a ground cover sitting at either end of the
+  // histogram keeps its colour instead of clipping to neutral.
+  const FLOOR = 4, CEIL = 251, gain = (CEIL - FLOOR) / (hi - lo);
   const out = new Uint8Array(rgb.length);
-  for (let k = 0; k < 3; k++) {
-    const hist = new Int32Array(256);
-    for (let i = 0; i < n; i++) hist[rgb[i*3 + k]]++;
-    const loN = n * loPct, hiN = n * hiPct;
-    let acc = 0, lo = 0, hi = 255;
-    for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= loN) { lo = v; break; } }
-    acc = 0;
-    for (let v = 255; v >= 0; v--) { acc += hist[v]; if (acc >= n - hiN) { hi = v; break; } }
-    if (hi <= lo) { for (let i = 0; i < n; i++) out[i*3 + k] = rgb[i*3 + k]; continue; }
-    const scale = 255 / (hi - lo);
-    for (let i = 0; i < n; i++) {
-      const v = (rgb[i*3 + k] - lo) * scale;
-      out[i*3 + k] = v < 0 ? 0 : (v > 255 ? 255 : v);
-    }
+  for (let i = 0; i < total; i++) {
+    const v = FLOOR + (rgb[i] - lo) * gain;
+    out[i] = v < 0 ? 0 : (v > 255 ? 255 : v);
   }
   return out;
 }
@@ -4928,6 +4944,7 @@ const MeshGen = {
       let bandColors = []; // hex per land band 1..numLandTints
       let srcRgb = null;   // CLASSIFICATION image: exposure-adjusted, optionally de-shaded
       let tintRgb = null;  // TINT image: same, minus de-shading — what the bands print as
+      let tintWeight = null; // per-pixel weight for the tint average (set when de-shading)
 
       // Shared prep for the two photo-bearing modes. Auto-levels first (so the manual trims
       // stay relative to a normalised image), then the trims, then de-shading — which is split
@@ -4941,6 +4958,7 @@ const MeshGen = {
         const sF = 1 + (parseFloat(document.getElementById('sat-satur')?.value) || 0) / 100;
         tintRgb = adjustExposure(base, cF, bO, sF);
         srcRgb = tintRgb;
+        tintWeight = null;
         const deshade = (parseFloat(document.getElementById('sat-deshade')?.value) || 0) / 100;
         if (deshade > 0) {
           // Measure where the light actually came from rather than assuming it. Below r≈0.15
@@ -4949,7 +4967,19 @@ const MeshGen = {
           // error — so leave the photo alone in that case.
           const sun = estimateSunAzimuth(elevData, tintRgb);
           if (sun.r >= 0.15) {
-            srcRgb = deshadeRGB(tintRgb, hillshadeGrid(elevData, sun.az), deshade);
+            const shade = hillshadeGrid(elevData, sun.az);
+            srcRgb = deshadeRGB(tintRgb, shade, deshade);
+            // Bias each band's printed colour toward its well-lit pixels. Having merged a
+            // cover's sunlit and shaded pixels into one cluster, a flat average would print
+            // the mid-point of the illumination range — which is why the palette came out
+            // dark and near-neutral (snow averaged to mid-grey). The 4th power is a smooth
+            // stand-in for "only the lit pixels", and stays strictly positive so a cover that
+            // lives entirely in shadow still resolves to a sane colour instead of nothing.
+            tintWeight = new Float32Array(shade.length);
+            for (let i = 0; i < shade.length; i++) {
+              const s2 = shade[i] * shade[i];
+              tintWeight[i] = s2 * s2;
+            }
           }
         }
       };
@@ -4964,7 +4994,7 @@ const MeshGen = {
         const highCount = (numColors === 8)
           ? (parseInt(document.getElementById('sat-high')?.value) || 0) : 0;
         const assignGlobal = () => {
-          const { centroids, assign } = kmeansRGB(srcRgb, landMask, w * h, numLandTints, 12, tintRgb);
+          const { centroids, assign } = kmeansRGB(srcRgb, landMask, w * h, numLandTints, 12, tintRgb, tintWeight);
           for (let i = 0; i < w * h; i++) pixelBands[i] = waterMask[i] ? 0 : (assign[i] >= 0 ? assign[i] + 1 : 1);
           bandColors = centroids.map(toHex);
         };
@@ -4990,8 +5020,8 @@ const MeshGen = {
             // then assigned to their nearest centroid by COLOUR (not by a hard elevation
             // cut), so the rock's light/shadow tints follow real shading instead of
             // ringing the mountain at the cutoff elevation (which read as "banding").
-            const lo = kmeansRGB(srcRgb, lowMask, w * h, kLow, 12, tintRgb);
-            const hi = kmeansRGB(srcRgb, highMask, w * h, kHigh, 12, tintRgb);
+            const lo = kmeansRGB(srcRgb, lowMask, w * h, kLow, 12, tintRgb, tintWeight);
+            const hi = kmeansRGB(srcRgb, highMask, w * h, kHigh, 12, tintRgb, tintWeight);
             const cents = [...lo.centroids, ...hi.centroids];   // printed tints
             const refs  = [...lo.refs,      ...hi.refs];        // clustering-space centres
             const lumOf = c => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
@@ -5301,7 +5331,11 @@ const MeshGen = {
           for (let i = 0; i < w * h; i++) {
             const b = pixelBands[i];
             if (waterMask[i] || b < 1 || b > numLandTints) continue;
-            sum[b][0] += tintLab[i*3]; sum[b][1] += tintLab[i*3+1]; sum[b][2] += tintLab[i*3+2]; sum[b][3]++;
+            // Same illumination weighting as the photo path (see kmeansRGB's tintWeight):
+            // average toward each region's well-lit pixels, not down the middle of its
+            // illumination range.
+            const wgt = tintWeight ? tintWeight[i] : 1;
+            sum[b][0] += tintLab[i*3]*wgt; sum[b][1] += tintLab[i*3+1]*wgt; sum[b][2] += tintLab[i*3+2]*wgt; sum[b][3] += wgt;
           }
           const toHex = c => '#' + c.map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
           for (let b = 1; b <= numLandTints && b - 1 < bandColors.length; b++) {
