@@ -24,11 +24,11 @@ Client-side terrain-to-3D-print pipeline. The entire live app is a single file �
 `docs/index.html` is structured as three contiguous regions (line numbers approximate — grep to
 confirm before editing):
 
-- **CSS** — lines ~14–587 (`<style>…</style>`). All design tokens live in `:root` custom properties
+- **CSS** — lines ~17–1163 (`<style>…</style>`). All design tokens live in `:root` custom properties
   matching DESIGN.md.
-- **HTML body** — lines ~589–1288. Header (LED, wordmark, utility buttons), left faceplate panel
+- **HTML body** — lines ~1167–2319. Header (LED, wordmark, utility buttons), left faceplate panel
   with collapsible sections, full-bleed map, floating 3D preview, modals.
-- **JavaScript** — lines ~1289–6858 (`<script>…</script>`). Organized as namespaced object
+- **JavaScript** — lines ~2320–11160 (`<script>…</script>`). Organized as namespaced object
   literals (`const Foo = { … }`) rather than classes or ES modules — see below.
 
 External libraries are loaded from public CDNs in `<head>`: Leaflet 1.9.4 + leaflet-draw 1.0.4
@@ -44,10 +44,15 @@ Rough pipeline order:
 1. **Data / state**: `State` (selection, elevation grid, mesh, per-pixel overrides), `Settings`
    (persisted UI values), `Intro`, `Led`, `toast`, `showLoading`/`hideLoading`.
 2. **Map + selection**: `MapModule` (Leaflet init, draw controls, imagery-source switching),
-   `Geocode` (place search), `IMAGERY_SOURCES` (EOX Sentinel-2 vs. USGS NAIP), `drawTileGrid`.
+   `Geocode` (place search), `IMAGERY_SOURCES` (EOX Sentinel-2 vs. USGS NAIP), `drawTileGrid`,
+   `Permalink` (URL hash `#r=s,w,n,e` / `#c=lat,lng,radius` mirrors the selection; written from
+   `UI.updateSelectionInfo`, restored in `initApp`).
 3. **Fetching**: `Elevation` (AWS Terrarium PNG tiles → Float32 heightmap; `terrainZoomForBounds`
    picks z11–z15 by selection span), `Satellite` (basemap RGB extraction), `Landcover`
-   (ESA WorldCover classification), `WaterDetection`, `Buildings` (OSM), `Gpx`, `Boundaries`.
+   (Esri/Impact Observatory Sentinel-2 LULC), `WaterDetection`, `Buildings` (OSM), `Gpx`, `Boundaries`.
+   All map tiles load through `loadTileImage` (retry + backoff). All Overpass queries go through
+   `Boundaries._overpass` (mirror fallback, max 2 concurrent). `UI._buildMeshForBounds` starts
+   every layer fetch concurrently; Overpass water detection is usually the slowest by far.
 4. **Color science**: `kmeansRGB`, `rgbToLab`, `adjustExposure`, `bilateralRGB`, `slicLabels`,
    `classifyLandcover`, band config helpers (`getBandConfig`, `ADV_DEFAULT_COLORS`,
    `winterizeBands`, `applyFramePreset`).

@@ -2605,7 +2605,42 @@ function downloadBlob(blob, filename) {
   a.href = URL.createObjectURL(blob);
   a.download = filename;
   a.click();
-  URL.revokeObjectURL(a.href);
+  // Revoking synchronously can cancel the download before the browser has read the blob
+  // (seen in Safari/Firefox with large exports), so release it once the click has settled.
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+
+// Load one CORS image tile, retrying transient failures with backoff (300 ms, 900 ms, …).
+// Resolves with the loaded <img>; rejects with AbortError on `signal`, or with an Error once
+// `attempts` are exhausted. Used by every map-tile fetch (elevation + imagery).
+function loadTileImage(url, signal = null, attempts = 3) {
+  const abortErr = () => new DOMException('Aborted', 'AbortError');
+  const once = () => new Promise((resolve, reject) => {
+    if (signal && signal.aborted) return reject(abortErr());
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    const onAbort = () => { img.src = ''; reject(abortErr()); };
+    if (signal) signal.addEventListener('abort', onAbort, { once: true });
+    img.onload = () => {
+      if (signal) signal.removeEventListener('abort', onAbort);
+      if (signal && signal.aborted) return reject(abortErr());
+      resolve(img);
+    };
+    img.onerror = () => {
+      if (signal) signal.removeEventListener('abort', onAbort);
+      reject(new Error('tile failed to load'));
+    };
+    img.src = url;
+  });
+  return (async () => {
+    for (let a = 0; ; a++) {
+      try { return await once(); }
+      catch (e) {
+        if ((e && e.name === 'AbortError') || a >= attempts - 1) throw e;
+        await new Promise(r => setTimeout(r, 300 * Math.pow(3, a)));
+      }
+    }
+  })();
 }
 
 // Descriptive export filename: <slug>_<printSize>mm_<date>.<ext>. Slug source, in order of
@@ -2708,6 +2743,19 @@ const MapModule = {
       UI.updateSelectionInfo();
       drawTileGrid();
     });
+    // The draw toolbar's Edit tool lets you drag/resize the shape, but selectedBounds is a
+    // snapshot taken on CREATED — without this, Generate kept using the pre-edit area.
+    map.on(L.Draw.Event.EDITED, () => {
+      if (State.selectionShape === 'boundary') {
+        toast('Cutout outlines follow the mapped boundary — shape edits are not applied.');
+        return;
+      }
+      if (!State.customRect) return;
+      State.selectedBounds = State.customRect.getBounds();
+      UI.updateSelectionInfo();
+      drawTileGrid();
+      UI.markStale();
+    });
     map.on(L.Draw.Event.DELETED, () => {
       State.selectedBounds = null;
       State.selectionShape = 'rect';
@@ -2720,6 +2768,58 @@ const MapModule = {
     tileGridLayer = L.layerGroup().addTo(map);
     Boundaries.init();
   }
+};
+
+// Shareable selection links. The URL hash mirrors the current rectangle / circle selection
+// (#r=south,west,north,east or #c=lat,lng,radiusMetres), so the address bar is always a link
+// that reopens the same area — bookmark it, or send it to someone. Settings stay per-browser
+// (localStorage); only the geography travels. Boundary cutouts are not encoded (they depend
+// on a live OSM lookup), so the hash clears for those.
+const Permalink = {
+  _ready: false,   // no writes until restore() has had its chance to read an incoming link
+
+  write() {
+    if (!this._ready) return;
+    let h = '';
+    const b = State.selectedBounds, lyr = State.customRect;
+    if (b && State.selectionShape === 'rect') {
+      h = '#r=' + [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()].map(v => v.toFixed(5)).join(',');
+    } else if (b && State.selectionShape === 'circle' && lyr && lyr.getLatLng) {
+      const c = lyr.getLatLng();
+      h = `#c=${c.lat.toFixed(5)},${c.lng.toFixed(5)},${Math.round(lyr.getRadius())}`;
+    }
+    if (h === location.hash || (!h && !location.hash)) return;
+    try { history.replaceState(null, '', location.pathname + location.search + h); } catch (e) {}
+  },
+
+  // Returns true when a selection was restored from the hash.
+  restore() {
+    this._ready = true;
+    const m = /^#([rc])=([-\d.,]+)$/.exec(location.hash || '');
+    if (!m || !map || !drawnItems) return false;
+    const v = m[2].split(',').map(Number);
+    if (v.some(x => !isFinite(x))) return false;
+    const style = { color: ACCENT_INK, weight: 1.5, fillColor: ACCENT_FILL_INK, fillOpacity: 0.1 };
+    const okLat = x => x > -85.06 && x < 85.06, okLon = x => x >= -180 && x <= 180;
+    let layer = null, shape = 'rect';
+    if (m[1] === 'r' && v.length === 4 && okLat(v[0]) && okLat(v[2]) && okLon(v[1]) && okLon(v[3])
+        && v[0] < v[2] && v[1] < v[3]) {
+      layer = L.rectangle([[v[0], v[1]], [v[2], v[3]]], style);
+    } else if (m[1] === 'c' && v.length === 3 && okLat(v[0]) && okLon(v[1]) && v[2] > 10 && v[2] < 1e6) {
+      layer = L.circle([v[0], v[1]], { ...style, radius: v[2] });
+      shape = 'circle';
+    }
+    if (!layer) return false;
+    drawnItems.clearLayers();
+    drawnItems.addLayer(layer);           // on the map first: L.Circle.getBounds needs projection
+    State.selectedBounds = layer.getBounds();
+    State.selectionShape = shape;
+    State.boundaryPoly = null;
+    State.customRect = layer;
+    map.fitBounds(State.selectedBounds, { padding: [40, 40] });
+    drawTileGrid();
+    return true;
+  },
 };
 
 // Draw the R×C tiling grid inside the current rectangle selection (cleared when tiling is
@@ -2856,33 +2956,23 @@ const Elevation = {
     const total = tilesX * tilesY;
     let loaded = 0;
     let failed = 0;
-    const abortErr = () => new DOMException('Aborted', 'AbortError');
 
-    const loadTile = (tx, ty) => new Promise((resolve, reject) => {
-      if (signal && signal.aborted) return reject(abortErr());
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      const onAbort = () => { img.src = ''; reject(abortErr()); };
-      if (signal) signal.addEventListener('abort', onAbort, { once: true });
-      img.onload = () => {
-        if (signal) signal.removeEventListener('abort', onAbort);
-        if (signal && signal.aborted) return reject(abortErr());
-        const px = (tx - minTX) * tileSize;
-        const py = (ty - minTY) * tileSize;
-        ctx.drawImage(img, px, py);
-        loaded++;
-        showLoading(`Fetching tiles… ${loaded}/${total}`);
-        resolve();
-      };
-      img.onerror = () => {
-        if (signal) signal.removeEventListener('abort', onAbort);
-        loaded++;
+    const url = (tx, ty) => TERRAIN_TILE_URL.replace('{z}', zoom).replace('{x}', tx).replace('{y}', ty);
+    const loadTile = async (tx, ty) => {
+      // Transient S3 errors used to fail the WHOLE model on one tile; retry with backoff first.
+      const img = await loadTileImage(url(tx, ty), signal, 3).catch(e => {
+        if (e && e.name === 'AbortError') throw e;
+        return null;
+      });
+      loaded++;
+      if (!img) {
         failed++;
         showLoading(`Fetching tiles… ${loaded}/${total} (${tx},${ty} failed)`);
-        resolve(); // keep loading the rest; we abort with a count below
-      };
-      img.src = TERRAIN_TILE_URL.replace('{z}', zoom).replace('{x}', tx).replace('{y}', ty);
-    });
+        return; // keep loading the rest; we abort with a count below
+      }
+      ctx.drawImage(img, (tx - minTX) * tileSize, (ty - minTY) * tileSize);
+      showLoading(`Fetching tiles… ${loaded}/${total}`);
+    };
 
     const promises = [];
     for (let ty = minTY; ty <= maxTY; ty++) {
@@ -3022,25 +3112,14 @@ const Satellite = {
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
       const total = tilesX * tilesY; let loaded = 0, failed = 0;
-      const abortErr = () => new DOMException('Aborted', 'AbortError');
-      const loadTile = (tx, ty) => new Promise((resolve, reject) => {
-        if (signal && signal.aborted) return reject(abortErr());
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        const onAbort = () => { img.src = ''; reject(abortErr()); };
-        if (signal) signal.addEventListener('abort', onAbort, { once: true });
-        img.onload = () => {
-          if (signal) signal.removeEventListener('abort', onAbort);
-          if (signal && signal.aborted) return reject(abortErr());
-          ctx.drawImage(img, (tx-minTX)*tileSize, (ty-minTY)*tileSize);
-          loaded++; showLoading(`Fetching imagery… ${loaded}/${total}`); resolve();
-        };
-        img.onerror = () => {
-          if (signal) signal.removeEventListener('abort', onAbort);
-          loaded++; failed++; resolve();
-        };
-        img.src = src.url.replace('{z}', zoom).replace('{y}', ty).replace('{x}', tx);
-      });
+      const loadTile = async (tx, ty) => {
+        const img = await loadTileImage(src.url.replace('{z}', zoom).replace('{y}', ty).replace('{x}', tx), signal, 2)
+          .catch(e => { if (e && e.name === 'AbortError') throw e; return null; });
+        loaded++;
+        if (!img) { failed++; return; }
+        ctx.drawImage(img, (tx-minTX)*tileSize, (ty-minTY)*tileSize);
+        showLoading(`Fetching imagery… ${loaded}/${total}`);
+      };
       const promises = [];
       for (let ty = minTY; ty <= maxTY; ty++)
         for (let tx = minTX; tx <= maxTX; tx++) promises.push(loadTile(tx, ty));
@@ -3611,6 +3690,8 @@ const WaterDetection = {
   // be flattened to one level (flattening a river produces oversized water blobs).
   FLOWING: new Set(['river', 'stream', 'canal', 'ditch', 'stream_pool', 'tidal_channel']),
 
+  _raw: new Map(),   // bounds → raw Overpass JSON (resolution-independent; see overpassDetect)
+
   // Detect water bodies via OSM Overpass API.
   // Returns { lakeMask, flattenMask }:
   //   lakeMask    — every water pixel (still + flowing) → coloured as water
@@ -3637,13 +3718,17 @@ const WaterDetection = {
       relation["natural"="water"](${s},${w},${n},${e});
     );out geom;`;
 
-    const resp = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'data=' + encodeURIComponent(query),
-    });
-    if (!resp.ok) throw new Error('Overpass HTTP ' + resp.status);
-    const data = await resp.json();
+    // Mirror-fallback client (see Boundaries._overpass): a busy canonical instance used to
+    // silently drop every lake to "ocean only". The raw vectors are cached by BOUNDS only —
+    // they don't depend on grid resolution, and this query is routinely the slowest step of a
+    // generate (30 s+ on a busy server), so changing Resolution must not pay for it again.
+    const rk = [s, w, n, e].map(v => v.toFixed(6)).join(',');
+    let data = this._raw.get(rk);
+    if (!data) {
+      data = await Boundaries._overpass(query, 45000);
+      this._raw.set(rk, data);
+      if (this._raw.size > 8) this._raw.delete(this._raw.keys().next().value);
+    }
 
     // Two render targets: still water (flattened) and flowing water (terrain-following).
     const makeCtx = () => {
@@ -3921,13 +4006,7 @@ const Buildings = {
         relation["building"](${s},${w},${n},${e});
       );out geom;`;
 
-      const resp = await fetch('https://overpass-api.de/api/interpreter', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'data=' + encodeURIComponent(query),
-      });
-      if (!resp.ok) throw new Error('Overpass HTTP ' + resp.status);
-      const data = await resp.json();
+      const data = await Boundaries._overpass(query, 45000);   // mirror fallback
 
       const minH = parseFloat(document.getElementById('building-min-height').value) || 6;
       const heightOf = (tags) => {
@@ -4250,16 +4329,30 @@ const Boundaries = {
   // POST an Overpass query, trying each endpoint until one returns parseable JSON. Overpass
   // returns an HTML error page (sometimes with HTTP 200) when overloaded, so a JSON parse
   // failure is treated as endpoint failure and we move on. Throws if all endpoints fail.
-  async _overpass(query) {
+  // Shared by water detection and buildings too (not just the boundary overlay), so every OSM
+  // layer gets mirror fallback. Generate now fetches layers concurrently; public instances
+  // allow roughly two slots per IP, so at most two queries run at once and the rest queue.
+  _slots: 2,
+  _waiters: [],
+  async _overpass(query, timeoutMs = 25000) {
+    if (this._slots > 0) this._slots--;
+    else await new Promise(r => this._waiters.push(r));
+    try { return await this._overpassRun(query, timeoutMs); }
+    finally {
+      const next = this._waiters.shift();
+      if (next) next(); else this._slots++;
+    }
+  },
+  async _overpassRun(query, timeoutMs) {
     const order = this._preferred
       ? [this._preferred, ...this._endpoints.filter(u => u !== this._preferred)]
       : this._endpoints.slice();
     let lastErr = null;
     for (const url of order) {
       // Browser fetch has no timeout — a stalled Overpass host would hang forever and leave
-      // the overlay stuck on "Loading…". Abort after 25s so we fail fast to the next mirror.
+      // the overlay stuck on "Loading…". Abort after the timeout so we fail fast to the next mirror.
       const ctl = new AbortController();
-      const timer = setTimeout(() => ctl.abort(), 25000);
+      const timer = setTimeout(() => ctl.abort(), timeoutMs);
       try {
         const resp = await fetch(url, {
           method: 'POST',
@@ -4912,12 +5005,30 @@ const MeshGen = {
       triangles.push(T(row+1,w-1), B(row+1,w-1), B(row,w-1));   triElevations.push(-1); triSlopes.push(0);
     }
 
-    // Base face (full w×h grid facing down, outward normal -Z)
-    for (let row = 0; row < h - 1; row++) {
-      for (let col = 0; col < w - 1; col++) {
-        triangles.push(B(row,col),   B(row,col+1),   B(row+1,col));   triElevations.push(-1); triSlopes.push(0);
-        triangles.push(B(row,col+1), B(row+1,col+1), B(row+1,col));   triElevations.push(-1); triSlopes.push(0);
+    // Base face (flat, outward normal -Z). The bottom is a plane, so it only needs to honour
+    // the PERIMETER vertices the four walls share with it — triangulating the full w×h grid
+    // there spent half the rectangular STL's triangles (and file size) on a flat sheet. Instead:
+    // a fan over the west edge, one full-height quad per interior column, a fan over the east
+    // edge. Every wall edge is still shared by exactly one base face (watertight; verified
+    // edge-by-edge and by signed volume over 2×2 … 512×300 grids). Interior base-grid vertices
+    // stay in the array, unreferenced — harmless for STL, and B() indexing is unchanged.
+    const baseTri = (a, b, c) => { triangles.push(a, b, c); triElevations.push(-1); triSlopes.push(0); };
+    if (w < 3 || h < 2) {
+      for (let row = 0; row < h - 1; row++) {
+        for (let col = 0; col < w - 1; col++) {
+          baseTri(B(row,col),   B(row,col+1),   B(row+1,col));
+          baseTri(B(row,col+1), B(row+1,col+1), B(row+1,col));
+        }
       }
+    } else {
+      for (let row = 0; row < h - 1; row++) baseTri(B(0,1), B(row+1,0), B(row,0));       // west fan
+      baseTri(B(0,1), B(h-1,1), B(h-1,0));
+      for (let col = 1; col < w - 2; col++) {                                             // interior strips
+        baseTri(B(0,col),   B(0,col+1),   B(h-1,col));
+        baseTri(B(0,col+1), B(h-1,col+1), B(h-1,col));
+      }
+      for (let row = 0; row < h - 1; row++) baseTri(B(h-1,w-2), B(row,w-1), B(row+1,w-1)); // east fan
+      baseTri(B(h-1,w-2), B(0,w-2), B(0,w-1));
     }
 
     // ── Per-pixel band assignment by pure elevation ─────────────────────────
@@ -6034,13 +6145,18 @@ const MeshRepair = {
 const STLExport = {
   // Concatenate {v,t} solids into one {v:Float32Array, t:Uint32Array}.
   _combine(solids) {
-    const V = [], T = []; let off = 0;
+    // Preallocate typed arrays: element-wise push into JS arrays was the slow part of STL
+    // export at high resolution (millions of boxed numbers, repeated array growth).
+    let nv = 0, nt = 0;
+    for (const s of solids) { nv += s.v.length; nt += s.t.length; }
+    const V = new Float32Array(nv), T = new Uint32Array(nt);
+    let vo = 0, to = 0, off = 0;
     for (const s of solids) {
-      for (let i = 0; i < s.v.length; i++) V.push(s.v[i]);
-      for (let i = 0; i < s.t.length; i++) T.push(s.t[i] + off);
+      V.set(s.v, vo); vo += s.v.length;
+      for (let i = 0; i < s.t.length; i++) T[to++] = s.t[i] + off;
       off += s.v.length / 3;
     }
-    return { v: new Float32Array(V), t: new Uint32Array(T) };
+    return { v: V, t: T };
   },
 
   generate(mesh) {
@@ -6337,9 +6453,14 @@ const ThreeMFExport = {
     xmlParts.push('  </build>\n</model>');
 
     zip.file('3D/3dmodel.model', new Blob(xmlParts, { type: 'text/xml' }));
+    // DEFLATE, not JSZip's default STORE. The model is verbose XML (~22 MB per million
+    // triangles uncompressed) and compresses several-fold; every slicer reads deflated 3MF
+    // (it is what they write themselves). Level 3 keeps packaging fast at high resolutions.
     const blob = await zip.generateAsync({
       type: 'blob',
       mimeType: 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml',
+      compression: 'DEFLATE',
+      compressionOptions: { level: 3 },
     });
     return { blob, warnings: [], objects: built.length };
   },
@@ -9481,6 +9602,7 @@ const UI = {
     this._syncEmptyStates();
     this.syncTray();
     Ledger.render();
+    Permalink.write();        // every selection change funnels through here
 
     const mg = document.getElementById('map-marginalia');
     const size = document.getElementById('selection-size');
@@ -9628,135 +9750,136 @@ const UI = {
     const C = this._cache;
     const chk = () => { if (signal && signal.aborted) throw new DOMException('Aborted', 'AbortError'); };
 
+    // Every layer below is an independent network fetch (elevation tiles, Overpass water,
+    // imagery, land cover, buildings, boundaries). They used to run one after another, so a
+    // generate paid the SUM of their latencies — Overpass alone is often several seconds. They
+    // now start together and the run pays roughly the slowest one. The only true dependency,
+    // lake flattening (needs elevation + water), runs after both resolve. Shared fetchers are
+    // memoised so e.g. hybrid colour and the water seed share one land-cover request.
+    chk();
+    showLoading('Fetching elevation, water & imagery…');
+    const memo = fn => { let p = null; return () => (p || (p = fn())); };
+    const waterOn = document.getElementById('water-detect').checked;
+
     // Elevation — cache a PRISTINE copy: flattenLakes mutates the array in place, so each run
     // gets its own clone of the cached original.
-    let elevationData;
-    const ek = C.key(bounds, 'elev', resolution);
-    const ecached = C.get(ek);
-    if (ecached) {
-      elevationData = { ...ecached, data: ecached.data.slice() };
-    } else {
-      chk();
-      showLoading('Fetching elevation data…');
-      elevationData = await Elevation.fetchElevation(bounds, resolution, signal);
-      C.set(ek, { ...elevationData, data: elevationData.data.slice() });
-    }
+    const elevP = (async () => {
+      const ek = C.key(bounds, 'elev', resolution);
+      const ecached = C.get(ek);
+      if (ecached) return { ...ecached, data: ecached.data.slice() };
+      const fresh = await Elevation.fetchElevation(bounds, resolution, signal);
+      C.set(ek, { ...fresh, data: fresh.data.slice() });
+      return fresh;
+    })();
 
-    let lakeMask = null, lakeElevMap = null;
-    if (document.getElementById('water-detect').checked) {
+    const waterP = !waterOn ? Promise.resolve(null) : (async () => {
       const wk = C.key(bounds, 'water', resolution);
       let result = C.get(wk);
       if (!result) {
         result = await WaterDetection.detect(bounds, resolution);
         if (result.lakeMask) C.set(wk, result);   // don't cache failures — retry stays possible
       }
-      lakeMask = result.lakeMask;            // all water → coloured as water
-      if (lakeMask) {
-        // Flatten only still water; rivers/streams keep following the terrain.
-        lakeElevMap = WaterDetection.flattenLakes(elevationData, result.flattenMask);
-      }
-    }
+      return result;
+    })();
 
     // Cached imagery fetchers (rasters are read-only downstream — adjustExposure copies).
-    const satFetch = async () => {
+    const satFetch = memo(async () => {
       const k = C.key(bounds, 'sat', currentImagerySource, resolution);
       let v = C.get(k);
       if (!v) {
-        chk();
-        showLoading('Fetching satellite imagery…');
         v = await Satellite.fetch(bounds, resolution, signal);
         if (v) C.set(k, v);
       }
       return v;
-    };
-    const lcFetch = async () => {
+    });
+    const lcFetch = memo(async () => {
       const k = C.key(bounds, 'lc', resolution);
       let v = C.get(k);
       if (!v) {
-        chk();
         v = await Landcover.fetch(bounds, resolution);
         if (v) C.set(k, v);
       }
       return v;
-    };
+    });
 
     // Per-region colouring source (advanced mode): satellite photo or land cover.
-    let colorImage = null;
     const advOn = document.getElementById('adv-colors-on')?.checked;
     const source = advOn ? (document.getElementById('adv-source')?.value || 'elevation') : 'elevation';
-    if (source === 'satellite') {
-      const img = await satFetch();
-      if (img) colorImage = { kind: 'photo', ...img };
-      else toast('Satellite imagery unavailable — using elevation colors.');
-    } else if (source === 'hybrid') {
-      // Hybrid needs BOTH rasters: land cover defines the regions, the photo colours them.
-      const photo = await satFetch();
-      const lc = photo ? await lcFetch() : null;
-      if (photo && lc) {
-        colorImage = { kind: 'hybrid', width: photo.width, height: photo.height, rgb: photo.rgb, lcRgb: lc.rgb };
-      } else if (photo) {
-        colorImage = { kind: 'photo', ...photo };          // land cover failed → plain satellite
-        toast('Land cover unavailable — using satellite photo only.');
-      } else {
+    const colorP = (async () => {
+      if (source === 'satellite') {
+        const img = await satFetch();
+        if (img) return { kind: 'photo', ...img };
+        toast('Satellite imagery unavailable — using elevation colors.');
+      } else if (source === 'hybrid') {
+        // Hybrid needs BOTH rasters: land cover defines the regions, the photo colours them.
+        const [photo, lc] = await Promise.all([satFetch(), lcFetch()]);
+        if (photo && lc) {
+          return { kind: 'hybrid', width: photo.width, height: photo.height, rgb: photo.rgb, lcRgb: lc.rgb };
+        } else if (photo) {
+          toast('Land cover unavailable — using satellite photo only.');
+          return { kind: 'photo', ...photo };              // land cover failed → plain satellite
+        }
         toast('Imagery unavailable — using elevation colors.');
+      } else if (source === 'landcover') {
+        const img = await lcFetch();
+        if (img) return { kind: 'landcover', ...img };
+        toast('Land cover unavailable — using elevation colors.');
       }
-    } else if (source === 'landcover') {
-      const img = await lcFetch();
-      if (img) colorImage = { kind: 'landcover', ...img };
-      else toast('Land cover unavailable — using elevation colors.');
-    }
+      return null;
+    })();
 
     // Optional OSM buildings (opt-in). Failure is tolerated — never aborts the model.
-    let buildings = null;
-    if (document.getElementById('buildings-enable')?.checked) {
+    const bldP = !document.getElementById('buildings-enable')?.checked ? Promise.resolve(null) : (async () => {
       const bk = C.key(bounds, 'bld');
-      buildings = C.get(bk);
-      if (!buildings) {
-        chk();
-        showLoading('Fetching buildings…');
-        buildings = await Buildings.fetch(bounds);
-        if (buildings.length) C.set(bk, buildings);
+      let b = C.get(bk);
+      if (!b) {
+        b = await Buildings.fetch(bounds);
+        if (b.length) C.set(bk, b);
       }
-      if (!buildings.length) toast('No OSM buildings found in this area.');
-    }
+      if (!b.length) toast('No OSM buildings found in this area.');
+      return b;
+    })();
 
     // Imagery water seed: the Sentinel-2 land-cover Water class. Guarantees water the
     // imagery sees is represented in every colour mode (still subject to the slope gate
-    // in MeshGen). Reuses the raster already fetched for land-cover/hybrid; photo and
-    // standard-elevation modes fetch it once just for this. Failure → null (falls back
-    // to ocean + OSM detection).
-    let lcWaterMask = null;
-    if (document.getElementById('water-detect').checked) {
-      let lcRgb = colorImage?.kind === 'landcover' ? colorImage.rgb
-                : colorImage?.kind === 'hybrid'    ? colorImage.lcRgb : null;
-      if (!lcRgb) {
-        showLoading('Detecting water (land cover)…');
-        const lc = await lcFetch();
-        if (lc) lcRgb = lc.rgb;
-      }
-      if (lcRgb) {
-        const n = resolution * resolution;
-        const cls = classifyLandcover(lcRgb, n);
-        lcWaterMask = new Uint8Array(n);
-        for (let i = 0; i < n; i++) if (cls[i] === LC_WATER) lcWaterMask[i] = 1;
-      }
-    }
+    // in MeshGen). Shares the memoised land-cover raster with land-cover/hybrid colouring;
+    // photo and standard-elevation modes fetch it once just for this. Failure → null (falls
+    // back to ocean + OSM detection).
+    const lcWaterP = !waterOn ? Promise.resolve(null) : (async () => {
+      const lc = await lcFetch();
+      if (!lc) return null;
+      const n = resolution * resolution;
+      const cls = classifyLandcover(lc.rgb, n);
+      const m = new Uint8Array(n);
+      for (let i = 0; i < n; i++) if (cls[i] === LC_WATER) m[i] = 1;
+      return m;
+    })();
 
     // Optional protected-area boundary engraving (opt-in). Fetch the enabled classes'
     // lines over this selection so MeshGen can carve grooves / seat the inlay. Failure is
     // tolerated — never aborts the model. Cutout selections keep their own edge, so the
     // padded-bbox lines aren't re-engraved there.
-    State.engraveBoundaries = [];
-    if (document.getElementById('bnd-engrave')?.checked && State.selectionShape !== 'boundary') {
+    const bndP = (async () => {
+      const out = [];
+      if (!document.getElementById('bnd-engrave')?.checked || State.selectionShape === 'boundary') return out;
       const classes = Boundaries.enabledClasses();
-      if (classes.length) {
-        try {
-          chk();
-          showLoading('Fetching boundaries…');
-          const feats = await Boundaries.fetch(bounds, classes);
-          for (const f of feats) for (const p of f.paths) State.engraveBoundaries.push(p);
-        } catch (e) { console.warn('Boundary engrave fetch failed:', e); }
-      }
+      if (!classes.length) return out;
+      try {
+        const feats = await Boundaries.fetch(bounds, classes);
+        for (const f of feats) for (const p of f.paths) out.push(p);
+      } catch (e) { console.warn('Boundary engrave fetch failed:', e); }
+      return out;
+    })();
+
+    const [elevationData, water, colorImage, buildings, lcWaterMask, engrave] =
+      await Promise.all([elevP, waterP, colorP, bldP, lcWaterP, bndP]);
+    State.engraveBoundaries = engrave;
+
+    let lakeMask = null, lakeElevMap = null;
+    if (water && water.lakeMask) {
+      lakeMask = water.lakeMask;             // all water → coloured as water
+      // Flatten only still water; rivers/streams keep following the terrain.
+      lakeElevMap = WaterDetection.flattenLakes(elevationData, water.flattenMask);
     }
 
     chk();
@@ -11003,8 +11126,10 @@ function initApp() {
   Poster._syncSlots();      // render any captured tiles
   Poster._syncFit();        // fit readout starts as "generate the model to size the aperture"
   Poster._syncTitle();      // show what the title will actually print as
+  const fromLink = Permalink.restore();   // a shared #r= / #c= link reopens its selection
   UI.updateSelectionInfo(); // empty states, tray captions and the ledger start from one pass
-  Intro.maybeShow();        // first-visit how-to (dismissible)
+  if (fromLink) toast('Selection restored from link — press Generate to build it.', 5000);
+  else Intro.maybeShow();   // first-visit how-to (dismissible); skipped when arriving via a link
 
   // Keyboard floor: group + fold headers are real controls, so make them focusable and
   // Enter/Space-operable; Escape backs out of overlays in visual-stack order.
